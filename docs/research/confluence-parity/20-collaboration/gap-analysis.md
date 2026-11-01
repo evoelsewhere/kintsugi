@@ -28,7 +28,7 @@ Smallest step = the least that makes the row true, not the target design (see th
 | COL-01 | None. Review talk happens on the Git server's pull request. | Page-level conversation. | Table `knowledge.wiki_comment` (project, page path, author user id, body Markdown, parent id, timestamps); list and create routes; a thread under the page in the portal. Postgres. |
 | COL-02 | Brain node ids and line ranges at a commit give anchors. | Anchored comments that survive edits. | Add to the comment row: node id, quoted text, commit; on read, re-anchor by the quote, show orphaned comments at the page end (decided). Postgres. |
 | COL-03 | None. | Resolve and reopen. | A `resolved_by`/`resolved_at` pair on the comment and a filter. Postgres. |
-| COL-04 | `AUDIT_ACTIONS` for the delete record. | Edit and delete rules. | Author edits and deletes own comments (delete only without replies); `wiki.moderate` deletes any, audited as `wiki.comment.delete`. Postgres + code. |
+| COL-04 | `AUDIT_ACTIONS` for the delete record. | Edit and delete rules. | Author edits and deletes own comments (delete only without replies); `wiki.manage` deletes any, audited as `wiki.comment.delete`. Postgres + code. |
 | COL-05 | None; needs drafts (authoring area). | Draft-only comments. | A `draft_id` on the comment, hidden from others until publish. Do after drafts exist. Postgres. |
 | COL-06 | None. | Reactions. | A reaction table; skip in the first phase. Postgres. |
 | COL-07 | `_build/review.md` written by the review job; Brain read tools return no conversation. | Agents cannot see open comments. | A separate read tool beside the Brain tools (`comments_list` for a node, with its citation), never inside `brain_read` (decided). Code in the member API and the MCP bridge. |
@@ -48,7 +48,7 @@ Smallest step = the least that makes the row true, not the target design (see th
 | COL-21 | No anonymous route exists. | Public links. | None; decide by ADR if ever wanted. Won't. |
 | COL-22 | Access-role permission codes plus Project Access. | A space level and a content level. | See [permission mapping](#permission-mapping). Postgres + code. |
 | COL-23 | `core.role` and `core.role_permission` model the bundle; `core.user_role` the assignment. | Grants per space. | `knowledge.wiki_space_grant` (project, space folder, subject user or access role, level `view`, `comment`, `edit`, `manage`). A grant never widens Project Access. Postgres. |
-| COL-24 | Flat permission catalog by migration. | Fine-grained operations. | Start with four levels per space (above) and four installation codes (`wiki.comment`, `wiki.edit`, `wiki.moderate`, `wiki.space.manage`); split further only on demand. Migration. |
+| COL-24 | Flat permission catalog by migration. | Fine-grained operations. | Start with four levels per space (above) and three installation codes (`wiki.comment`, `wiki.edit`, `wiki.manage`); split further only on demand. Migration. |
 | COL-25 | `autoCommitPaths` chooses commit or pull request. | Edit restriction. | `knowledge.wiki_restriction` (project, path prefix, mode `edit`, subject), checked by the API on draft and publish (decided); branch protection or CODEOWNERS on the Git server is the Git-level backstop and can be written into the document repo's guidance. Postgres + code. |
 | COL-26 | None, and rejected for Git content (decided). | View restriction. | None for pages in the shared repo. Replacement: COL-27. Won't. |
 | COL-27 | `governance.restricted_record`, `restricted.read`, fail-closed audit. | Authored restricted pages. | Extend restricted records so a person can author one in the portal; never in Git or the Brain. Own ADR; the owner decides whether the need is real. Postgres. |
@@ -71,11 +71,11 @@ Confluence combines three levels. Kintsugi's identity model has two kinds of "ro
 
 | Confluence level | What it decides | Kintsugi concept it maps to | Existing or new |
 |---|---|---|---|
-| Global permission (use the product, create spaces, administer) | What a person may do in the whole installation | **Access role** permission codes (`core.permission`, `core.role_permission`). Create a space: a new code `wiki.space.manage`. | Existing mechanism; new codes by migration. |
+| Global permission (use the product, create spaces, administer) | What a person may do in the whole installation | **Access role** permission codes (`core.permission`, `core.role_permission`). Create a space: a new code `wiki.manage`. | Existing mechanism; new codes by migration. |
 | Site and space *view* | Who can see a space and its pages | **Project Access** (`admin.project_access`): all or nothing for the project's document repo. A space inside the repo (a folder) is visible to every holder of Project Access. | Existing. The portal's document routes do not check it today (`documents.controller.ts` needs a session only): fixing them is a prerequisite. |
 | Space role *Viewer* (read, comment) | Read and comment | Project Access plus the code `wiki.comment` and, where the space has grants, a `comment` grant. | New code and grant table. |
 | Space role *Collaborator* (create and edit) | Add and edit pages | The access role holds `wiki.edit`; the space may narrow editing to a list (grant level `edit`). Publishing still passes through the writer and its pull request. | New code and grant table. |
-| Space role *Manager* and *Admin* | Manage people, content, settings | `wiki.space.manage` (grants, restrictions, space settings); `wiki.moderate` (delete anyone's comment). Installation `admin` already holds every code by seed. | New codes. |
+| Space role *Manager* and *Admin* | Manage people, content, settings | `wiki.manage` (grants, restrictions, space settings and moderation of comments). Installation `admin` already holds every code by seed. | New codes. |
 | Space grant to a *group* | Many people at once | An **access role** (including admin-defined sub-roles such as `ba`, `dev`, `tester`) as the subject of a grant. | Existing roles; new grant table. |
 | Content *edit* restriction (page or subtree; not inherited by children in Confluence) | Who may change this page | A restriction on a path prefix, checked on draft and publish. Kintsugi's version applies to the subtree (a folder), because the unit of a page tree is a path; the difference from Confluence is stated in the stories. | New table; enforced by the API (a real control). |
 | Content *view* restriction (inherits down) | Who may read this page | **Not offered** on Git content (decided): Project Access is the boundary. Authored restricted pages as encrypted records are the replacement, subject to its own ADR. | Gap by decision. |
@@ -123,7 +123,7 @@ What closes most of the need cheaply: an "editing now" marker (a draft row touch
 
 1. **Prerequisite, before any wiki route:** make the portal's document routes check Project Access (today a session is enough), or the first wiki route repeats the hole. Evidence: `apps/api/src/modules/delivery/documents/interface/documents.controller.ts:2-4`.
 2. A **people directory** readable by ordinary members (mentions, sharing) does not exist; `GET /users` needs `members.manage`.
-3. Four **permission codes** (`wiki.comment`, `wiki.edit`, `wiki.moderate`, `wiki.space.manage`) and three **tables** (comment, grant, restriction) are the whole identity delta, plus `core.notification` and `core.watch`. Names are provisional; the data model is owned by the architects.
+3. Three **permission codes** (`wiki.comment`, `wiki.edit`, `wiki.manage`, the last covering spaces, rules and moderation) and three **tables** (comment, grant, restriction) are the whole identity delta, plus `core.notification` and `core.watch`. Names are provisional; the data model is owned by the architects.
 4. The audit needs five **new actions** and nothing else; its missing retention and export are an independent improvement.
 5. **No email** until an ADR accepts an outbound channel; the in-app inbox is the first delivery.
 6. **View restriction** is the one Confluence behaviour that Kintsugi will not match on Git content. The open question for the owner is whether authored restricted pages (COL-27) justify their own ADR.

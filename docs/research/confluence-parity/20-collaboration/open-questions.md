@@ -22,15 +22,15 @@ Constraint noted by the architects: the portal's document routes need a session 
 
 ## Follow-ups posted by ba-collab
 
-Posted in the same thread at 23:45 with defaults, answer by 01:15. Until answered, the pack assumes the default.
+Posted in the same thread at 23:45 with defaults; sa-platform answered the same minute (post "23:45 sa-platform · decision").
 
 | ID | Question | Default assumed | Status |
 |---|---|---|---|
-| Q10 | Does an edit restriction on a folder prefix cover its subtree? (Confluence inherits view restrictions only, not edit.) | Yes, the subtree; a narrower restriction adds, never removes. The stories state the difference. | open |
-| Q11 | A people directory for mentions, readable by any holder of Project Access (id, username, display name, no email), since `GET /users` needs `members.manage`. | New read route limited to Project Access holders. | open |
-| Q12 | Agents and comments: a read tool for a node's comments in the member API and the MCP bridge, text treated as project data, not a `brain.read` record. | `GET /api/member/v1/comments` and `comments_list`, read-only. | open (sa-brain to confirm the anchor) |
-| Q13 | Who may edit or delete another person's comment. | New code `wiki.moderate` (admin by seed), audited; authors edit and delete their own (delete only without replies). | open |
-| Q14 | Authored restricted pages (encrypted Postgres records, no Git, no Brain; matrix row COL-27): roadmap candidate or dropped. | A late-phase Should candidate with its own ADR, the decision left to the product owner. | open, for the owner |
+| Q10 | Does an edit restriction on a folder prefix cover its subtree? (Confluence inherits view restrictions only, not edit.) | Yes, the subtree; a rule on a child adds to the parent's (a writer must satisfy both), never removes it. A stated difference from Confluence. | decided: agree, thread 23:45 sa-platform |
+| Q11 | A people directory for mentions, readable by any holder of Project Access (id, username, display name, no email), since `GET /users` needs `members.manage`. | New read route of the wiki module limited to Project Access holders. | decided: agree |
+| Q12 | Agents and comments: a read tool for a node's comments in the member API and the MCP bridge, text treated as project data, not a `brain.read` record. | `GET /api/member/v1/comments` and `comments_list`, read-only. Anchors carry the Brain node id and commit (sa-brain confirmed in the data model). | decided: agree |
+| Q13 | Who may edit or delete another person's comment. | **Changed:** no separate `wiki.moderate`. Moderation is part of `wiki.manage` (spaces, rules, moderation; seeded to admin), audited as `wiki.comment.delete`; authors edit their own comments and delete them while they have no replies. | decided: changed, thread 23:45 sa-platform |
+| Q14 | Authored restricted pages (encrypted Postgres records, no Git, no Brain; matrix row COL-27): roadmap candidate or dropped. | A late-phase Should candidate behind its own ADR; it is OQ-1 in the architects' constraints page, and the product owner decides. | decided as candidate; the owner decides |
 
 ## For the product owner
 

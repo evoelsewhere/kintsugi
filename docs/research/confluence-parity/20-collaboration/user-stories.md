@@ -26,12 +26,12 @@ As a `manager`, I want to resolve an inline comment thread, so that the open thr
 - Given a resolved thread, When I choose Reopen, Then it returns to the open list.
 - Given a reply to an inline comment, When I look for Resolve on the reply, Then there is none (the thread is resolved as a whole, as Confluence does).
 
-### COL-US-04 Edit and delete comments (COL-04, S; moderation is open question Q13)
+### COL-US-04 Edit and delete comments (COL-04, S)
 As a `member`, I want to correct or delete my own comment, so that a mistake does not stay on the page.
 - Given I wrote a comment with no replies, When I delete it, Then it is gone from the page and one audit entry `wiki.comment.delete` records who deleted which comment, never its text.
 - Given my comment has replies, When I try to delete it, Then I am refused and offered Edit.
-- Given someone else wrote a comment and I do not hold `wiki.moderate`, When I try to edit or delete it, Then I am refused (403) and nothing changes.
-- Given I am an `admin` and hold `wiki.moderate`, When I delete an inappropriate comment, Then it is removed and the audit entry names me as actor.
+- Given someone else wrote a comment and I do not hold `wiki.manage`, When I try to edit or delete it, Then I am refused (403) and nothing changes.
+- Given I am an `admin` and hold `wiki.manage`, When I delete an inappropriate comment, Then it is removed and the audit entry names me as actor.
 
 ### COL-US-07 An agent reads the open comments (COL-07, S; open question Q12)
 As an `agent` acting for a member, I want the open comments on the page I am about to change, so that I do not repeat a question or ignore a decision.
@@ -104,19 +104,19 @@ As an `admin`, I want a stated order of checks, so that I can predict what any u
 
 ### COL-US-23 A space with its own people (COL-23, M)
 As a `manager`, I want a space where only named people publish, so that the standards are not changed by everyone.
-- Given I hold `wiki.space.manage`, When I grant the access role `ba` the level `edit` and the user Dana the level `comment` on the space `01-standards/`, Then the grants are stored and one audit entry per grant (`wiki.space.grant`) names me, the subject and the level.
+- Given I hold `wiki.manage`, When I grant the access role `ba` the level `edit` and the user Dana the level `comment` on the space `01-standards/`, Then the grants are stored and one audit entry per grant (`wiki.space.grant`) names me, the subject and the level.
 - Given Dana holds only `comment` on that space, When she tries to publish a change there, Then she is refused (403) and no draft is published.
 - Given a user holds a grant on the space but has no Project Access to the project, When they open the space, Then they get 403: a grant never widens Project Access.
 - Given I try to grant the project role `pm` as a subject, Then the request is refused: only users and access roles are subjects.
 
 ### COL-US-24 Separate who may comment from who may edit (COL-24, S)
-As an `admin`, I want separate permissions for commenting, editing, moderating and managing, so that I can give a reviewer comment rights only.
-- Given the catalog, When I open Members and permissions, Then `wiki.comment`, `wiki.edit`, `wiki.moderate` and `wiki.space.manage` are listed in their own group with a description, added by migration.
+As an `admin`, I want separate permissions for commenting, editing and managing (which includes moderating), so that I can give a reviewer comment rights only.
+- Given the catalog, When I open Members and permissions, Then `wiki.comment`, `wiki.edit` and `wiki.manage` are listed in their own group with a description, added by migration.
 - Given an access role holds `wiki.comment` but not `wiki.edit`, When a user of that role opens the editor on a page, Then Save and Publish are not offered and the API refuses a publish.
 
 ### COL-US-25 Only the owners may change a rule (COL-25, M; open question Q10)
 As a `manager`, I want an edit restriction on a folder, so that only its owners can publish there.
-- Given I hold `wiki.space.manage`, When I restrict editing of `02-architecture/` to the users Lee and Sam, Then a restriction row for the path prefix and one audit entry (`wiki.restriction.set`) are stored.
+- Given I hold `wiki.manage`, When I restrict editing of `02-architecture/` to the users Lee and Sam, Then a restriction row for the path prefix and one audit entry (`wiki.restriction.set`) are stored.
 - Given the restriction, When a user who is not listed starts a publish of a page below that path, Then the API refuses it (403) at publish and nothing is written to the document repo.
 - Given the restriction, When a listed user publishes, Then the normal write path runs (a pull request unless the path auto-commits).
 - Given the restriction covers the folder, When a user tries to publish a page in a subfolder, Then they are refused as well (assumed answer to Q10: it covers the subtree).
@@ -139,7 +139,7 @@ As an `admin`, I want the system to refuse a restriction that contradicts the re
 As a `manager`, I want a list of every restriction in a space, so that I can clear the stale ones after people leave.
 - Given restrictions exist, When I open the space settings, Then I see each path prefix, its mode, its subjects and who set it and when.
 - Given a listed user was disabled, Then the row shows them as disabled.
-- Given I hold `wiki.space.manage`, When I clear a restriction, Then it is removed and `wiki.restriction.clear` is audited.
+- Given I hold `wiki.manage`, When I clear a restriction, Then it is removed and `wiki.restriction.clear` is audited.
 
 ### COL-US-31 Grant to a role instead of to each person (COL-31, S)
 As an `admin`, I want to grant a space level to an access role, so that new members inherit it.
