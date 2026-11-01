@@ -4,6 +4,8 @@ This changelog records the Kintsugi adaptation; it is not tied to a plugin manif
 
 ## Unreleased — Kintsugi adaptation
 
+- A credential shown by its opening alone is masked too. `reverse_engineering` 2.6.0: `split_findings.py` masks a value whose only visible part is a well-known credential prefix (`sk…`, `gh...`, `xoxb-…`) and a value that looks like a credential followed by a single mask character (`sk-*`, `AKIA*`, `ghp_*`); `x = 2* y`, `skip...` and prose stay. No agent or skill changes.
+
 - A topology whose leaf files lack the repository folder still makes a catalog. `reverse_engineering` 2.6.0: `catalog_from_topology.py` reads a leaf file such as `cobol/X.cbl` as `<repository>/cobol/X.cbl` when exactly one legacy repository holds it, notes each such leaf in the ambiguities, and leaves a path that several repositories hold unclaimed. No agent or skill changes.
 
 - Built-in agents list their tools ([ADR-0092](../../../docs/decisions/0092-least-privilege-for-built-in-agents.md)). `reverse_engineering` 2.6.0: `legacy-analyst` 1.6.0, `business-rules-extractor` 1.5.0, `security-auditor` 1.3.0 and `understand-planner` 1.1.0 list `tools: [read, ls, grep, find, write, edit]` and say they have no `shell` and no `git`. `modernize` 5.4.0: `architecture-critic` 1.4.0, `contract-reviewer` 1.1.0, `design-reviewer` 1.5.0 and `designer` 2.4.0 list the same tools; `code-reviewer` 2.2.0 adds `git`, for the diff and the history of the merge request only. No built-in agent gets `shell` or `codemode`.

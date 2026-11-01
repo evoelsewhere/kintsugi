@@ -246,10 +246,11 @@ class UnderstandToolsTests(unittest.TestCase):
 
     def test_any_value_that_shows_some_of_its_characters_is_masked_whole_in_every_free_text_field(self):
         import split_findings as sf
-        for shown in ('AKIAIOSFODNN****', '****1234', 'ab****yz', 'AKIA••••', 'AKIA...', 'sk-live-…', 'hu**.'):
+        # A short value or a well-known prefix with only one mask character, or next to an ellipsis, is a credential too (P-007).
+        for shown in ('AKIAIOSFODNN****', '****1234', 'ab****yz', 'AKIA••••', 'AKIA...', 'sk-live-…', 'hu**.', 'sk-*', 'AKIA*', 'ghp_*', 'sk…', 'gh...', 'xoxb-…'):
             self.assertEqual(sf.hide_partial_masks(f'key {shown} (8 chars)'), f"key *****{'.' if shown == 'hu**.' else ''} (8 chars)", shown)
         # A whole mask, emphasis, code and plain prose stay as they are.
-        for kept in ('***** (8 chars)', 'password=***** (8 chars)', '**Never** store it', 'call f(**kwargs) and x = a**2', 'and so on...', 'Then...'):
+        for kept in ('***** (8 chars)', 'password=***** (8 chars)', '**Never** store it', 'call f(**kwargs) and x = a**2', 'and so on...', 'Then...', 'x = 2* y', 'skip...', 'ok...'):
             self.assertEqual(sf.hide_partial_masks(kept), kept)
         text = sf.render_findings('billing', 'tax/calc', [{
             'id': 'SEC-TAX01-0001', 'cwe': 'CWE-798', 'severity': 'High', 'source': 'legacy/src/TAX.cbl:2',
