@@ -1,6 +1,6 @@
 # Authoring and structure: feature matrix
 
-> Research page. What a Confluence-like wiki offers for authoring and structure (spaces and the page tree, page operations, the editor, macros and embeds, attachments and images, links, drafts, export and import), what Kintsugi has today, and a MoSCoW proposal for each feature. The product owner sets the final priority in the scope page of the pack. Stories: `user-stories.md`. Gaps: [gap analysis](gap-analysis.md). Open questions: [open questions](open-questions.md).
+> Research page. What a Confluence-like wiki offers for authoring and structure (spaces and the page tree, page operations, the editor, macros and embeds, attachments and images, links, drafts, export and import), what Kintsugi has today, and a MoSCoW proposal for each feature. The product owner sets the final priority in the scope page of the pack. Stories: [user stories](user-stories.md). Gaps: [gap analysis](gap-analysis.md). Open questions: [open questions](open-questions.md).
 
 ## How to read it
 
