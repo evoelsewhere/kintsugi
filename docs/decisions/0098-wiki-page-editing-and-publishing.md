@@ -1,0 +1,44 @@
+# ADR-0098: Wiki pages are edited as Markdown in the portal, kept as drafts in Postgres and published through the document writer
+
+- Status: Proposed
+- Date: 2026-11-02
+- Decision register: D112
+
+## Context
+
+A Confluence-like wiki lets people create, edit, move and delete pages in the browser, save drafts as they type and publish when they are ready ([Confluence-like wiki research](../research/confluence-parity/40-architecture/target-architecture.md)). Kintsugi's pages are Markdown documents in the project's one document repository ([ADR-0007](0007-git-as-source-of-truth.md), [ADR-0028](0028-remove-rulebook-single-document-repo.md), [ADR-0042](0042-markdown-only-document-repo-by-bounded-context.md)), and only the worker's writer commits to it ([ADR-0019](0019-workspace-repo-write-path.md)). The writer handles one write per repository at a time, at most 5 MiB per file and 50 MiB per write; it commits `autoCommitPaths` to the default branch and everything else to a `kintsugi/*` branch with a pull request, pushes fast-forward only and retries a rejected push with a rebase.
+
+Two pieces exist already. A person can propose a corrected document from the portal: a gap answer is one write of the edited Markdown, `reviewAll`, carrying the SHA-256 of the document the person read (`expectedHash`), and the writer refuses it when the file changed since ([ADR-0082](0082-design-readiness-drafts-and-in-place-gap-answers.md), [ADR-0094](0094-one-open-correction-per-specification.md)). The worker's write payload already carries binary files (`encoding: "base64"`). What is missing: a place for text between keystrokes and publication, a policy for direct publication, a way to resolve concurrent edits before the writer refuses them, deletes and moves in the write contract, a macro syntax that stays Markdown, and a safe way to serve images.
+
+Forces: an autosave every few seconds cannot be a commit, both because the history would drown in saves and because the writer's single queue per repository would starve runtime writes. Pages must still read well on the Git server and to members' agents, so the stored form must be plain Markdown that every parser keeps. Direct publication must not let a page grant itself the right to skip review.
+
+## Decision
+
+1. **Markdown source is the editor.** The portal edits a page's Markdown with CodeMirror and a side-by-side preview from the same renderer as the page view. A rich-text mode may be added later only when it round-trips the starter template and a sample document repository byte for byte (front matter, cards, tables, Mermaid); until then there is none.
+2. **Drafts live in Postgres.** A draft is one row per person and page (`knowledge.wiki_draft`) holding the text, the base commit and the SHA-256 of the file at that commit, and a revision for optimistic updates. Autosave updates the row and never reaches the writer. Drafts are not indexed by the Brain and not served to members' agents. A draft is kept until its write is `committed`, `merged` or discarded by its author; a `failed` or `closed` write leaves it in place. Rows touched in the last two minutes are shown as presence ("also editing").
+3. **Publishing is one `document-write` of kind `page`.** The API checks the permission and the space rules ([ADR-0099](0099-wiki-collaboration-and-access.md)), reads the file at the head of the default branch and, when the head moved since the draft started, merges three ways (base, draft, head). A clean merge is published with the head's hash as `expectedHash`; a conflict is returned to the editor with the three texts and nothing is written. The writer's existing checks stay: a file that changed after the merge is refused, a rejected push is rebased and retried, a rebase conflict fails the write. A page has at most one open page write; a second publish while its pull request is open is refused with the pull request's link.
+4. **Review by default, direct publication by path and permission.** A page write goes to a `kintsugi/*` branch and a pull request. It is committed to the default branch only when every path matches the new `kintsugi.yaml` key `directPublishPaths` and the person holds `wiki.publish`. `directPublishPaths` is separate from `autoCommitPaths`: runtime outputs never use it, and page writes never use `autoCommitPaths`. `kintsugi.yaml` is itself reviewed, so widening direct publication is a reviewed change.
+5. **The write contract gains deletes, renames and binaries.** `DocumentWriteFile` in the API carries `encoding: "base64"` like the worker's; a write may carry delete and rename entries, validated like paths and checked against `expectedHash` the same way. A move or rename of a page rewrites the inbound relative links (found from the Brain's links at the base commit and confirmed in the mirror) in the same write, so the move cannot leave broken links on the default branch.
+6. **Pages link and identify by Markdown.** Links in a page are relative Markdown links; the editor's `[[` picker inserts one. The page's stable id is in its front matter (ADR-0096); portal addresses use it.
+7. **Macros are Markdown.** Panels are GitHub alerts (`> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`, `> [!WARNING]`, `> [!CAUTION]`). Dynamic and data macros are fenced blocks whose info string is `kintsugi-<macro>` (`kintsugi-toc`, `kintsugi-children`, `kintsugi-labels`, `kintsugi-recent`) with YAML parameters, stored unexpanded and rendered by the portal, as `mermaid` is. Raw HTML stays unrendered.
+8. **Attachments are served safely.** Files in a page's `_attachments/` folder (ADR-0096) are written through the same write, within the writer's limits and an allowlist of types, and served by a raw route of the documents module with a fixed `Content-Type`, `Content-Disposition`, `X-Content-Type-Options: nosniff` and a content security policy; SVG is sanitized or served as a download.
+9. **Export stays light.** A page or a folder exports as Markdown (a Git archive of the folder at a commit); PDF is the browser's print with a print stylesheet. A server-side PDF or Word converter is a new image dependency and needs its own decision.
+
+## Consequences
+
+- People edit pages in the browser without a Git client, and every published version is a reviewed commit with the person as `Kintsugi-Actor`.
+- Concurrent edits are resolved before the writer, where the person can act; the writer's hash check remains the guard for the seconds between merge and commit.
+- Portal publishes wait behind runtime writes of the same repository. That is acceptable for publication, and the reason autosave stays out of the queue.
+- A page published for review is not in the Brain or the page view until merged; the portal shows it as *pending review* from `workflow.document_write`.
+- New work: the wiki module's drafts and publish service, a three-way merge library in the API, delete and rename in `packages/git` and the writer, the raw attachment route, the `directPublishPaths` key, the renderer's alerts, anchors and fenced macros.
+- Pages rendered on the Git server show alerts natively (GitHub) or as block quotes, and `kintsugi-*` macros as code blocks: readable, not dynamic.
+- Risk: a three-way merge of Markdown tables can produce a valid but wrong table. The merge view always shows the result before a conflict-free publish when the head moved.
+
+## Alternatives considered
+
+- **A draft branch in Git per person, each save a commit.** Rejected: autosave would go through the writer's single queue per repository, flood the history with saves and leave a branch per person and page to clean up.
+- **Drafts in the browser only.** Rejected: a draft is lost with the browser or the device, and no one can see that someone else is editing the page.
+- **Direct publication configured in the space's home page.** Rejected: a page could grant itself direct commits; the policy is in `kintsugi.yaml` (reviewed) and the right is a permission.
+- **Directive syntax (`:::note`) or HTML comments for macros.** Rejected: directives are not CommonMark and show as stray paragraphs on Git servers; HTML comments hide the macro from readers and agents.
+- **A rich-text editor from the start.** Rejected for now: editors normalise Markdown and would rewrite people's files on the first save; the round-trip test is the gate.
+- **Real-time co-editing (a CRDT service over WebSocket).** Rejected for now: a new service that makes the browser hold the truth during a session ([ADR-0010](0010-postgres-only.md), [ADR-0007](0007-git-as-source-of-truth.md)).
