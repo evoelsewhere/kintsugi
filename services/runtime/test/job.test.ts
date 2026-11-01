@@ -147,6 +147,47 @@ describe("activity", () => {
     expect(seen.after).toBeGreaterThanOrEqual(350);
   });
 
+  it("counts the job as working while any of several tool calls is open, until the last one ends (review of 484457c6)", async () => {
+    let clock = 1_000_000;
+    const now = vi.spyOn(Date, "now").mockImplementation(() => clock);
+    try {
+      let listener: ((event: AgentSessionEvent) => void) | undefined;
+      const seen: number[] = [];
+      const job = new KernelJob("job-1", jobSpec(workspace, agent([])), "0.0.0");
+      const end = (id: string): AgentSessionEvent =>
+        ({ type: "tool_execution_end", toolCallId: id, toolName: "shell", result: { content: [{ type: "text", text: "ok" }] }, isError: false }) as unknown as AgentSessionEvent;
+      const session = {
+        subscribe: (next: (event: AgentSessionEvent) => void) => {
+          listener = next;
+          return () => undefined;
+        },
+        prompt: async () => {
+          listener?.({ type: "tool_execution_start", toolCallId: "call-1", toolName: "shell", args: { command: "make" } } as AgentSessionEvent);
+          listener?.({ type: "tool_execution_start", toolCallId: "call-2", toolName: "shell", args: { command: "make test" } } as AgentSessionEvent);
+          clock += 300_000;
+          listener?.(end("call-1"));
+          // One call ended five minutes ago; the other still runs: working now.
+          clock += 300_000;
+          seen.push(clock - job.lastActivityAt);
+          listener?.(end("call-2"));
+          const ended = clock;
+          // None open: idle since the last one ended.
+          clock += 300_000;
+          seen.push(ended - job.lastActivityAt);
+          listener?.({ type: "message_end", message: { role: "assistant", stopReason: "stop" } } as unknown as AgentSessionEvent);
+        },
+        abort: async () => undefined,
+        getContextUsage: () => undefined,
+        dispose: () => undefined,
+      } as unknown as AgentSession;
+      await job.run(session, () => undefined);
+      expect(await job.done).toMatchObject({ type: "job.completed" });
+      expect(seen).toEqual([0, 0]);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it("stops counting a tool call that is still open past OPEN_CALL_ACTIVE_MS, so the idle watchdog can stop a hung job", async () => {
     let clock = 1_000_000;
     const now = vi.spyOn(Date, "now").mockImplementation(() => clock);

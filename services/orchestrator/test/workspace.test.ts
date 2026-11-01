@@ -300,13 +300,14 @@ describe("the sandbox settings reach the job", () => {
     return { spec: agents.specs[0]!, mode, id, store };
   };
 
-  it("gives an agent job the timeouts, the turn and cost limits and the idle limit of the settings", async () => {
-    const { spec } = await runWith({ agentTimeoutSec: 1800, agentIdleTimeoutSec: 120, maxTurns: 40, maxCostUsd: 3 });
-    expect(spec.limits).toEqual({ timeoutSec: 1800, idleTimeoutSec: 120, maxTurns: 40, maxCostUsd: 3 });
+  it("gives an agent job the timeouts, the turn, cost and output limits and the idle limit of the settings", async () => {
+    const { spec } = await runWith({ agentTimeoutSec: 1800, agentIdleTimeoutSec: 120, maxTurns: 40, maxCostUsd: 3, maxOutputBytes: 1024 * 1024 });
+    expect(spec.limits).toEqual({ timeoutSec: 1800, idleTimeoutSec: 120, maxTurns: 40, maxCostUsd: 3, maxOutputBytes: 1024 * 1024 });
     const defaults = (await runWith({})).spec;
-    expect(defaults.limits).toEqual({ timeoutSec: 2700, idleTimeoutSec: 300, maxTurns: 150, maxCostUsd: 10 });
+    expect(defaults.limits).toEqual({ timeoutSec: 2700, idleTimeoutSec: 300, maxTurns: 150, maxCostUsd: 10, maxOutputBytes: 50 * 1024 * 1024 });
     const unlimited = (await runWith({ agentTimeoutSec: 0, maxTurns: 0, maxCostUsd: 0 })).spec;
-    expect(unlimited.limits).toEqual({ timeoutSec: 0, idleTimeoutSec: 300 });
+    // The output limit always applies (T3-006): it protects the worker's disk.
+    expect(unlimited.limits).toEqual({ timeoutSec: 0, idleTimeoutSec: 300, maxOutputBytes: 50 * 1024 * 1024 });
   });
 
   it("marks the checkout read-only unless the settings say not to", async () => {

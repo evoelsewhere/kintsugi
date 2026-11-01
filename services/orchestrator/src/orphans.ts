@@ -5,6 +5,7 @@
 
 import { hostname } from "node:os";
 import type { Pool } from "pg";
+import { attemptsWith } from "./jobs/store.js";
 
 /** A worker not seen for this long is dead (the API reports a worker up within 45 s). */
 const ALIVE_SECONDS = 45;
@@ -29,10 +30,9 @@ async function sweep(pool: Pick<Pool, "query">, log: (message: string) => void, 
   );
   // Another host's worker counts as alive while it beats; on this host its process must exist too.
   if (seen.rows.some((row) => row.host !== hostname() || (row.pid !== process.pid && processExists(row.pid)))) return undefined;
-  const result =
-    before === undefined
-      ? await pool.query("update workflow.job_run set status = 'failed', failure_reason = $1, finished_at = now() where status = 'running'", [INTERRUPTED])
-      : await pool.query("update workflow.job_run set status = 'failed', failure_reason = $1, finished_at = now() where status = 'running' and started_at < $2", [INTERRUPTED, before]);
+  // The interrupted attempt joins the run's history like any other end of an attempt, so a retry does not erase it (T2-012).
+  const fail = `update workflow.job_run set status = 'failed', failure_reason = $1, finished_at = now(), attempts = ${attemptsWith("failed", "$1")} where status = 'running'`;
+  const result = before === undefined ? await pool.query(fail, [INTERRUPTED]) : await pool.query(`${fail} and started_at < $2`, [INTERRUPTED, before]);
   const count = result.rowCount ?? 0;
   if (count > 0) log(`${count} run(s) left running by a stopped worker marked failed`);
   return count;

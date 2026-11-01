@@ -80,9 +80,18 @@ ELLIPSIS = re.compile(r'\.{3,}|…')
 SENTENCE_END = re.compile(r'(?<!\.)[.!?]$')
 
 
+# The well-known opening of a credential (`sk-`, `ghp_`, `AKIA`): shown next to a mask, it tells what the value is and
+# where to look for the rest, even when it is all that is shown (`sk…`, `sk-*`).
+CREDENTIAL_PREFIX = re.compile(r'(sk|pk|rk|gh[pousr]?|github_pat|glpat|xox[abpr]?|akia|asia|aiza)([-_].*)?', re.IGNORECASE)
+
+
 def looks_secret(visible):
     """Characters next to an ellipsis that look like part of a credential rather than a word: digits, symbols or capitals."""
     return len(visible) >= 3 and (re.search(r'[0-9_+/=-]', visible) is not None or sum(ch.isupper() for ch in visible) > 1)
+
+
+def credential_like(visible):
+    return looks_secret(visible) or CREDENTIAL_PREFIX.fullmatch(visible) is not None
 
 
 def partly_masked(value):
@@ -91,11 +100,18 @@ def partly_masked(value):
     runs = list(MASK_RUN.finditer(value))
     visible = MASK_RUN.sub('', value)
     if runs:
-        # A run at the end is a mask from two characters on (`hu**`); one at the start or in the middle from three, so
-        # `**kwargs` and `a**2` stay. Bullets are never code.
-        return visible != '' and any(len(run.group()) >= (2 if run.end() == len(value) or '*' not in run.group() else 3) for run in runs)
+        # A run at the end is a mask from two characters on (`hu**`), and from one after what looks like a credential
+        # (`sk-*`, `AKIA*`); one at the start or in the middle from three, so `**kwargs`, `a**2` and `2*` stay. Bullets are
+        # never code.
+        def masks(run):
+            if '*' not in run.group():
+                return True
+            if run.end() == len(value):
+                return len(run.group()) >= 2 or credential_like(visible)
+            return len(run.group()) >= 3
+        return visible != '' and any(masks(run) for run in runs)
     parts = ELLIPSIS.split(value)
-    return len(parts) > 1 and looks_secret(''.join(parts))
+    return len(parts) > 1 and credential_like(''.join(parts))
 
 
 def hide_partial_masks(text):
