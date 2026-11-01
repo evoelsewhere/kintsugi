@@ -262,6 +262,7 @@ export * from "./manifest.js";
 
 // Application and per-unit document-repo paths (ADR-0038), with catalog vocabulary (ADR-0033).
 export * from "./document-layout.js";
+export * from "./heading-slug.js";
 export * from "./document-write.js";
 export * from "./catalog.js";
 export * from "./document-identifiers.js";
