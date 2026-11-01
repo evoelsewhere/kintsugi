@@ -413,3 +413,30 @@ describe("kintsugi CLI", () => {
     expect(state.credentials.set).not.toHaveBeenCalled();
   });
 });
+
+describe("member CLI reference (T4-009)", () => {
+  it("doctor checks the API with a one-shot token from stdin, without storing it", async () => {
+    const seen: string[] = [];
+    const state = harness(async (_url, init) => {
+      seen.push(new Headers(init?.headers).get("authorization") ?? "");
+      return ok({ schemaVersion: "1", items: [], limit: 1 });
+    }, { profile: true });
+    expect(await runCli(["--token-stdin", "--json", "doctor"], state.deps as never)).toBe(0);
+    expect(JSON.parse(state.output().stdout)).toMatchObject({ credentialStore: "one-shot token from stdin", api: "reachable and authorized" });
+    expect(seen).toEqual(["Bearer TEST-piped-token"]);
+    expect(state.credentials.set).not.toHaveBeenCalled();
+  });
+
+  it("login without a project signs the active profile in again, and never invents a profile", async () => {
+    const none = harness(async () => ok({ schemaVersion: "1", items: [], limit: 25 }));
+    expect(await runCli(["auth", "login", "--url", "https://kintsugi.example", "--token-stdin"], none.deps as never)).toBe(2);
+    expect(none.output().stderr).toContain("PROJECT_REQUIRED");
+    expect(none.profiles.value.profiles).toEqual({});
+
+    const active = harness(async () => ok({ schemaVersion: "1", items: [], limit: 25 }), { profile: true });
+    expect(await runCli(["auth", "login", "--url", "https://kintsugi.example", "--token-stdin"], active.deps as never)).toBe(0);
+    expect(Object.keys(active.profiles.value.profiles)).toEqual(["work"]);
+    expect(active.credentials.values.get("work")).toBe("TEST-piped-token");
+  });
+});
+

@@ -1,7 +1,7 @@
 import type { Command } from "commander";
 import type { CliDeps } from "../cli.js";
 import { CliError } from "../profile.js";
-import { emit, selectedProfile } from "./shared.js";
+import { type CommandOptions, emit, selectedProfile } from "./shared.js";
 
 export function registerDoctorCommand(program: Command, deps: CliDeps): void {
   program.command("doctor").description("Check local CLI, profile, credential, and API access").action(async function(this: Command) {
@@ -11,9 +11,11 @@ export function registerDoctorCommand(program: Command, deps: CliDeps): void {
     try {
       const { profile } = await selectedProfile(deps, this);
       report.profile = { id: profile.id, baseUrl: profile.baseUrl, projectId: profile.projectId ?? null, privateCaConfigured: profile.caFile !== undefined };
-      const token = await deps.credentials.get(profile.id);
-      report.credentialStore = token === undefined ? "no credential" : "available";
-      if (token !== undefined) {
+      // A one-shot token from stdin is checked like a stored one (never persisted).
+      const oneShot = (this.optsWithGlobals() as CommandOptions).tokenStdin === true;
+      const token = oneShot ? undefined : await deps.credentials.get(profile.id);
+      report.credentialStore = oneShot ? "one-shot token from stdin" : token === undefined ? "no credential" : "available";
+      if (oneShot || token !== undefined) {
         const { apiFor } = await import("./shared.js");
         const { client } = await apiFor(deps, this);
         await client.listProjects({ limit: 1 });
