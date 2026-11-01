@@ -23,7 +23,7 @@ curl -fL "https://raw.githubusercontent.com/evoelsewhere/kintsugi/$KINTSUGI_COMM
 chmod 600 .env
 ```
 
-The package starts three services: the app (API and portal), the worker (runtime, orchestration and Git writes), and PostgreSQL with pgvector. PostgreSQL is the only datastore; documents stay in Git.
+The package starts three services: the app (API and portal), the worker (runtime, orchestration and Git writes), and PostgreSQL (its image ships pgvector, which Kintsugi does not use). PostgreSQL is the only datastore; documents stay in Git.
 
 ## 2. Set your installation values
 
