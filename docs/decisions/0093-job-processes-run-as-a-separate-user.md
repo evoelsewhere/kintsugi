@@ -34,11 +34,13 @@ credentials out of spawn environments. Per-job containers stay rejected (ADR-002
    environment carries only the cleared job environment and the non-secret cache setting. The kernel's own processes
    get the cleared job environment, never these.
 4. **Running the worker so it can switch users.** Starting a process as another user needs `CAP_SETUID` and
-   `CAP_SETGID`, which a non-root container user does not get from Docker. The Compose package therefore offers a block
-   that runs the worker as root with `cap_drop: [ALL]` and only `SETUID`, `SETGID`, `CHOWN`, `FOWNER`, `DAC_OVERRIDE` and
+   `CAP_SETGID`, which a non-root container user does not get from Docker. The Compose package therefore offers an
+   override, `docker-compose.isolated.yml`, that runs the worker as root with `cap_drop: [ALL]` and only `SETUID`, `SETGID`, `CHOWN`, `FOWNER`, `DAC_OVERRIDE` and
    `KILL` (switch user, hand over and clean up workspaces, stop a job's process tree), `no-new-privileges`, the job user
-   ids, and `safe.directory` for git in the worker and the app (the mirrors then have two owners). The block is
-   commented out until it has been tried on a Linux host; turning it on by default is the follow-up.
+   ids, and `safe.directory` for git in the worker and the app (the mirrors then have two owners). The operator turns it
+   on and runs `probe-job-isolation.sh`, which proves on that host that a script step and a shell child running as the
+   job user cannot read the worker's environment; the boundary counts as verified on a host only once the probe has
+   passed there. Making the override the default is the follow-up, after it has passed on a Linux host.
 5. **Platforms.** The boundary is the Linux image. On Windows the setting is refused; on Windows, macOS and development
    machines job processes run as the worker's user and are not isolated from its secrets.
 
@@ -51,6 +53,6 @@ credentials out of spawn environments. Per-job containers stay rejected (ADR-002
   and the agent child's memory from its own `shell`), and its own workspace, and send it out: there is no network egress
   filtering, so restrict the worker's network where the legacy code is not trusted. A compromised worker is root in
   its container with the capabilities above.
-- Not done here (follow-ups): the Compose default (item 4) after a probe on Linux (`services/runtime/test/secret-isolation.test.ts`
-  holds the probe; it runs as root in the image with the ids set); a non-superuser Postgres role for the API and the
+- Not done here (follow-ups): the Compose default (item 4) once `deploy/compose/probe-job-isolation.sh` has passed on a
+  Linux host; a non-superuser Postgres role for the API and the
   worker (`POSTGRES_USER` stays the database owner today); an Agent Builder warning for `shell` and `git`.
