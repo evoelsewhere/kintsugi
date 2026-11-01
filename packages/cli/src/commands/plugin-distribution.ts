@@ -300,9 +300,9 @@ export function registerInstallCommands(program: Command, deps: CliDeps): void {
     .option(ALL_OPTION, ALL_HELP)
     .option("--project <id>", "Project id")
     .action(async function(this: Command, name: string) { await installAction(deps, this, [name], "install"); });
-  updateCommand(install.command("fetch [name]").description("Alias of kintsugi update"), deps);
+  updateCommand(install.command("fetch [name]").description("Alias of kintsugi update: bring an installed plugin up to date"), deps);
   updateCommand(
-    program.command("update [plugin]").description("Bring an installed plugin up to date (every installed plugin when no name is given)"),
+    program.command("update [plugin]").description("Bring an installed plugin up to date (every installed plugin when no name is given; alias: kintsugi install fetch)"),
     deps,
   );
 }
