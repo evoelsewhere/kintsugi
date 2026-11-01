@@ -7,7 +7,8 @@
  * called to build the tree: titles and summaries come from the documents themselves (front matter, the first
  * paragraph, a table's columns, the layout). The text stays in Git; the tree holds line ranges into it.
  */
-import { describeDocumentFolder } from "./document-layout.js";
+import { DOCUMENT_EXCLUDED_FOLDERS, DOCUMENT_EXCLUDED_ROOTS, describeDocumentFolder } from "./document-layout.js";
+import { createHeadingSlugger, headingSlug, plainInlineText } from "./heading-slug.js";
 
 export const BRAIN_NODE_KINDS = ["root", "folder", "document", "section", "card"] as const;
 export type BrainNodeKind = (typeof BRAIN_NODE_KINDS)[number];
@@ -112,12 +113,6 @@ export interface BrainSourceDocument {
   changed?: BrainChange;
 }
 
-const EXCLUDED_ROOTS = new Set(["plugins", "scratch"]);
-/**
- * Restricted records, at any depth and in any case, as the documents API keeps them; allocation ledgers
- * (ADR-0075) are machine-maintained history, not knowledge.
- */
-const EXCLUDED_FOLDERS = new Set(["restricted", "identifiers"]);
 const README_FILES = ["readme.md", "index.md"];
 
 /**
@@ -129,9 +124,9 @@ export function isBrainIndexedPath(path: string): boolean {
   const segments = path.split("/");
   // An empty segment, `.`, `..` and hidden names all fail here.
   if (segments.some((segment) => segment === "" || segment.startsWith("."))) return false;
-  if (EXCLUDED_ROOTS.has(segments[0] ?? "")) return false;
+  if (DOCUMENT_EXCLUDED_ROOTS.includes(segments[0] ?? "")) return false;
   // The file's own name ends in `.md`, so only folders can match.
-  return !segments.some((segment) => EXCLUDED_FOLDERS.has(segment.toLowerCase()));
+  return !segments.some((segment) => DOCUMENT_EXCLUDED_FOLDERS.includes(segment.toLowerCase()));
 }
 
 /** A document's lines as Git counts them: a newline ends a line, and a carriage return before it is dropped. */
@@ -220,30 +215,10 @@ function clip(text: string, max: number): string {
 }
 
 /**
- * Plain text of inline Markdown: links keep their text, emphasis and code marks go. No part of a link or a tag runs past
- * the start of the next one, so a paragraph of `[`, `[a](` or `<` is read in linear time (T3-016).
+ * The anchor of a heading, kept for callers that still import it; the one implementation is `headingSlug`
+ * (`heading-slug.ts`).
  */
-function plain(text: string): string {
-  return text
-    .replace(/!\[[^[\]]*\]\([^)[]*\)/g, "")
-    .replace(/\[([^[\]]*)\]\([^)[]*\)/g, "$1")
-    .replace(/<[^<>]+>/g, "")
-    .replace(/(\*\*|__)(.+?)\1/g, "$2")
-    .replace(/`([^`]*)`/g, "$1")
-    .replace(/\\([\\`*_{}[\]()#+\-.!|])/g, "$1")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/** GitHub-style heading anchor; letters of any script are kept. */
-export function brainAnchor(heading: string): string {
-  const slug = plain(heading)
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s_-]/gu, "")
-    .trim()
-    .replace(/\s/g, "-");
-  return slug === "" ? "section" : slug;
-}
+export const brainAnchor = headingSlug;
 
 interface FrontMatter {
   fields: Map<string, string>;
@@ -355,7 +330,7 @@ function cellsOf(row: string): string[] {
     .trim()
     .replace(/^\||\|$/g, "")
     .split(/(?<!\\)\|/)
-    .map((cell) => plain(cell));
+    .map((cell) => plainInlineText(cell));
 }
 
 /**
@@ -396,18 +371,18 @@ function summaryOfBlock(block: readonly string[]): Summary | undefined {
       .map((line) => FIELD.exec(line))
       .filter((match): match is RegExpExecArray => match !== null)
       .slice(0, 6)
-      .map((match) => `${plain(match[1] ?? "")}: ${plain(match[2] ?? "")}`);
+      .map((match) => `${plainInlineText(match[1] ?? "")}: ${plainInlineText(match[2] ?? "")}`);
     return { summary: clip(fields.join(" · "), BRAIN_SUMMARY_MAX), source: "fields" };
   }
   if (LIST_ITEM.test(block[0] ?? "")) {
     const items = block
       .map((line) => LIST_ITEM.exec(line)?.[1])
       .filter((item): item is string => item !== undefined)
-      .map(plain);
+      .map(plainInlineText);
     return { summary: clip(items.join("; "), BRAIN_SUMMARY_MAX), source: "list" };
   }
-  if (/^(>|\s*<)/.test(first) && plain(block.join(" ").replace(/^>\s?/gm, "")) === "") return undefined;
-  const text = plain(block.map((line) => line.replace(/^>\s?/, "")).join(" "));
+  if (/^(>|\s*<)/.test(first) && plainInlineText(block.join(" ").replace(/^>\s?/gm, "")) === "") return undefined;
+  const text = plainInlineText(block.map((line) => line.replace(/^>\s?/, "")).join(" "));
   return text === "" ? undefined : { summary: clip(text, BRAIN_SUMMARY_MAX), source: "paragraph" };
 }
 
@@ -421,7 +396,7 @@ function summaryOfText(lines: readonly string[]): Summary | undefined {
   const proseAt = found.slice(0, PROSE_LOOKAHEAD).findIndex((summary) => summary?.source === "paragraph");
   const prose = proseAt < 0 ? undefined : found[proseAt];
   if (prose !== undefined) {
-    if (blocks.length === 1 && plain(lines.join(" ")).length <= BRAIN_SUMMARY_MAX) return { summary: prose.summary, source: "text" };
+    if (blocks.length === 1 && plainInlineText(lines.join(" ")).length <= BRAIN_SUMMARY_MAX) return { summary: prose.summary, source: "text" };
     // A sentence that ends on a colon introduces the list after it: the list is what it says.
     const next = found[proseAt + 1];
     if (prose.summary.endsWith(":") && next !== undefined && (next.source === "list" || next.source === "fields")) {
@@ -549,7 +524,7 @@ export function buildBrainDocument(path: string, text: string): DocumentNodes {
   const sections = titleHeading === undefined ? headings : headings.slice(1);
   const fileName = path.split("/").pop() ?? path;
   const title = clip(
-    front.fields.get("title") ?? (titleHeading !== undefined ? plain(titleHeading.text) : (front.fields.get("name") ?? fileName.replace(/\.md$/i, ""))),
+    front.fields.get("title") ?? (titleHeading !== undefined ? plainInlineText(titleHeading.text) : (front.fields.get("name") ?? fileName.replace(/\.md$/i, ""))),
     BRAIN_TITLE_MAX,
   );
 
@@ -580,21 +555,15 @@ export function buildBrainDocument(path: string, text: string): DocumentNodes {
   const nodes: BrainNode[] = [document];
   const links: PendingLink[] = linksOf(path, path, ownLines);
 
-  const used = new Set<string>();
-  const unique = (anchor: string): string => {
-    let candidate = anchor;
-    for (let suffix = 1; used.has(candidate); suffix += 1) candidate = `${anchor}-${suffix}`;
-    used.add(candidate);
-    return candidate;
-  };
+  const slugger = createHeadingSlugger();
   const stack: Array<{ level: number; node: BrainNode }> = [];
   const childCount = new Map<string, number>();
   const childTitles = new Map<string, string[]>();
   for (const [index, heading] of sections.entries()) {
-    const headingText = plain(heading.text);
+    const headingText = plainInlineText(heading.text);
     const card = CARD_HEADING.exec(headingText.replace(/`/g, ""));
     const id = card?.[1];
-    const anchor = unique(id ?? brainAnchor(heading.text));
+    const anchor = id !== undefined ? slugger.reserve(id) : slugger.slug(heading.text);
     while (stack.length > 0 && (stack[stack.length - 1]?.level ?? 0) >= heading.level) stack.pop();
     const parent = stack[stack.length - 1]?.node ?? document;
     const next = sections[index + 1];
@@ -815,7 +784,7 @@ export function buildBrainTree(sources: readonly BrainSourceDocument[], rootTitl
   // (`#rule-inv01-0001-late-fee`) rather than by its id.
   const headingAnchors = new Map<string, BrainNode>();
   for (const node of nodes) {
-    const key = node.kind === "card" ? brainSectionId(node.path, brainAnchor(node.title)) : undefined;
+    const key = node.kind === "card" ? brainSectionId(node.path, headingSlug(node.title)) : undefined;
     if (key !== undefined && !headingAnchors.has(key)) headingAnchors.set(key, node);
   }
   const anchored = (path: string, anchor: string): BrainNode | undefined =>

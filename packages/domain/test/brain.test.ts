@@ -1,15 +1,16 @@
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   atxHeading,
   BRAIN_MAX_LINKS_PER_NODE,
   BRAIN_ROOT_ID,
-  brainAnchor,
   buildBrainDocument,
   buildBrainTree,
   isBrainIndexedPath,
   parseBrainNodeId,
 } from "../src/brain.js";
 import { describeDocumentFolder } from "../src/document-layout.js";
+import { headingSlug } from "../src/heading-slug.js";
 
 const SPEC = [
   "---",
@@ -294,8 +295,8 @@ describe("helpers", () => {
   });
 
   it("keeps letters of any script in anchors", () => {
-    expect(brainAnchor("Quy tắc làm tròn (v2)")).toBe("quy-tắc-làm-tròn-v2");
-    expect(brainAnchor("`code` **bold**")).toBe("code-bold");
+    expect(headingSlug("Quy tắc làm tròn (v2)")).toBe("quy-tắc-làm-tròn-v2");
+    expect(headingSlug("`code` **bold**")).toBe("code-bold");
   });
 
   it("describes the folders of the layout", () => {
@@ -347,5 +348,64 @@ describe("links (T3-016)", () => {
     const { links } = buildBrainDocument("10-applications/billing/02-modern/a/README.md", text);
     const paths = links.flatMap((link) => ("path" in link ? [`${link.path}${link.anchor === undefined ? "" : `#${link.anchor}`}`] : []));
     expect(paths).toEqual(["10-applications/billing/02-modern/x/README.md", "10-applications/billing/02-modern/a/sp ace.md", "10-applications/billing/02-modern/y/README.md#part"]);
+  });
+});
+
+// The one heading slug (P2-006): the anchors the builder gives now are the ones it gave before it shared `headingSlug`.
+// The reference below is that code as it was, frozen; every section and card of the repository's own documents, its
+// templates and the eval fixtures must get the anchor it computes.
+const legacyPlain = (text: string): string =>
+  text
+    .replace(/!\[[^[\]]*\]\([^)[]*\)/g, "")
+    .replace(/\[([^[\]]*)\]\([^)[]*\)/g, "$1")
+    .replace(/<[^<>]+>/g, "")
+    .replace(/(\*\*|__)(.+?)\1/g, "$2")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/\\([\\`*_{}[\]()#+\-.!|])/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+const legacyAnchor = (heading: string): string => {
+  const slug = legacyPlain(heading)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s_-]/gu, "")
+    .trim()
+    .replace(/\s/g, "-");
+  return slug === "" ? "section" : slug;
+};
+
+describe("the anchors of sections and cards", () => {
+  const corpora = ["docs", "templates", "packages/agents/evals/brain/fixture/shop-docs", "packages/agents/evals/brain/fixture/wiki-docs"];
+
+  /** The Markdown files under a folder, by path from it. */
+  const markdownUnder = (dir: URL, prefix = ""): string[] =>
+    readdirSync(dir).flatMap((name: string): string[] => {
+      const entry = new URL(name, dir);
+      if (statSync(entry).isDirectory()) return name === "node_modules" ? [] : markdownUnder(new URL(`${name}/`, dir), `${prefix}${name}/`);
+      return name.toLowerCase().endsWith(".md") ? [`${prefix}${name}`] : [];
+    });
+
+  it("are those the frozen reference computes, numbered the same way", () => {
+    let checked = 0;
+    for (const corpus of corpora) {
+      const root = new URL(`../../../${corpus}/`, import.meta.url);
+      for (const path of markdownUnder(root)) {
+        const text = readFileSync(new URL(path, root), "utf8");
+        const lines = text.split("\n");
+        const used = new Set<string>();
+        const unique = (anchor: string): string => {
+          let candidate = anchor;
+          for (let suffix = 1; used.has(candidate); suffix += 1) candidate = `${anchor}-${suffix}`;
+          used.add(candidate);
+          return candidate;
+        };
+        for (const node of buildBrainDocument(path, text).nodes.slice(1)) {
+          const heading = atxHeading(lines[(node.lineStart ?? 1) - 1] ?? "");
+          const expected = unique(node.kind === "card" ? (node.ids[0] ?? "") : legacyAnchor(heading?.text ?? ""));
+          expect(node.anchor, `${corpus}/${path}:${node.lineStart}`).toBe(expected);
+          checked += 1;
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(500);
   });
 });
