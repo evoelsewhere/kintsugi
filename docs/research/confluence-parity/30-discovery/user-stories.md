@@ -30,10 +30,11 @@ As a **Member** I want a page whose title holds my words to come before one that
 - Given a ranked search and the Brain's exact search, When I run both on the same words, Then every line the exact search finds is also found by the ranked one, except lines of archived pages when archived pages are hidden (DIS-US-16).
 
 ### DIS-US-04: Search shows only what I may read (M; DIS-14)
-As an **Admin** I want search, lists and recent pages to follow Project Access, so that a search never leaks a page.
-- Given a person without Project Access to project A, When they search, Then no page of A is returned, counted or suggested.
+As an **Admin** I want search, lists and recent pages to follow Project Access, so that a search never leaks a page of a project the person does not belong to.
+- Given a person without Project Access to project A, When they search in the portal, Then no page of A is returned, counted or suggested ([question 8](open-questions.md#q8-portal-reads-and-project-access) decides whether the existing portal reads follow the same rule).
 - Given a page under `restricted/`, `plugins/`, `scratch/` or a hidden folder, Then it is never listed, in the portal or by a member's agent ([Brain, left out](../../../reference/brain.md#left-out)).
-- Given a page restriction defined by the collaboration track, When a person who may not read it searches, Then the page is absent from results and from counts ([question 7](open-questions.md#q7-access-in-search)).
+- Given a person who loses Project Access while a search page is open, When they load the next page of results or open a hit, Then the request is refused.
+- Given the index rows, Then they carry no access list: the check happens on each request ([question 7](open-questions.md#q7-access-in-search)); a page that must be hidden inside a project is out of scope until restricted pages exist as their own decision.
 
 ### DIS-US-05: Search comments with the page (S; DIS-12)
 As a **Member** I want a search to find a comment that holds my words, so that a decision made in a discussion is not lost.
