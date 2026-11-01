@@ -1,6 +1,6 @@
 # Constraints and fit
 
-> Research page. The architecture constraints a Confluence-like wiki in Kintsugi must respect, the rules the architects derived from them, and a verdict for every Must and Should feature of the three area matrices: **fits**, **fits with a change**, **needs an ADR** or **conflicts**. The target building blocks are in [target architecture](target-architecture.md); the decisions are proposed in ADR-0096 to [ADR-0099](../../../decisions/0099-wiki-collaboration-and-access.md).
+> Research page. The architecture constraints a Confluence-like wiki in Kintsugi must respect, the rules the architects derived from them, and a verdict for every Must and Should feature of the three area matrices: **fits**, **fits with a change**, **needs an ADR** or **conflicts**. The target building blocks are in [target architecture](target-architecture.md); the decisions are proposed in [ADR-0096](../../../decisions/0096-wiki-pages-in-the-document-repo.md) to [ADR-0099](../../../decisions/0099-wiki-collaboration-and-access.md).
 
 ## Constraints
 
@@ -25,7 +25,7 @@ Each constraint links the decision that sets it and says in one line what it req
 
 ## Rules derived for the wiki
 
-The three constraint threads of the research (authoring, collaboration, discovery) were decided on these rules. The decisions they lead to are proposed in ADR-0096 (spaces and pages), ADR-0097 (Brain), [ADR-0098](../../../decisions/0098-wiki-page-editing-and-publishing.md) (editing and publishing) and [ADR-0099](../../../decisions/0099-wiki-collaboration-and-access.md) (collaboration and access).
+The three constraint threads of the research (authoring, collaboration, discovery) were decided on these rules. The decisions they lead to are proposed in [ADR-0096](../../../decisions/0096-wiki-pages-in-the-document-repo.md) (spaces and pages), [ADR-0097](../../../decisions/0097-brain-indexes-wiki-pages.md) (Brain), [ADR-0098](../../../decisions/0098-wiki-page-editing-and-publishing.md) (editing and publishing) and [ADR-0099](../../../decisions/0099-wiki-collaboration-and-access.md) (collaboration and access).
 
 | Id | Rule | From | Why |
 |---|---|---|---|
@@ -52,7 +52,7 @@ Verdicts: **fits** (works with what exists, perhaps with portal or API work that
 
 ### Authoring
 
-From the authoring matrix (`10-authoring/feature-matrix.md`).
+From the [authoring matrix](../10-authoring/feature-matrix.md).
 
 | Id | Feature | MoSCoW | Verdict | Change or ADR |
 |---|---|---|---|---|
@@ -69,6 +69,7 @@ From the authoring matrix (`10-authoring/feature-matrix.md`).
 | AUT-15 | Copy a page | S | fits with a change | A new draft from the page's text with a new page id |
 | AUT-16 | Delete a page | M | fits with a change | The write contract gains file deletion; the writer validates the path like a write; inbound links are reported, not silently broken |
 | AUT-17 | Restore or purge | S | fits with a change | Restore = a new write with the text from Git (R-12); purge from history is never offered (C-01) |
+| AUT-19 | Page properties | S | fits with a change | Title, status and owner from front matter; last change, date and message from the Brain node's last commit; the editor's name from `workflow.document_write.actor` (R-12) |
 | AUT-20 | Markdown source with preview | M | fits | CodeMirror is in the portal (`apps/portal/src/components/code/code-editor.tsx`); side-by-side preview with the existing renderer |
 | AUT-21 | Rich-text editing | S | needs an ADR | ADR-0098 allows it only after a byte-for-byte round-trip test over the starter template and a sample repository; until then Markdown source only |
 | AUT-24 | Tables | S | fits | GitHub-flavoured tables; a table helper in the editor |
@@ -100,7 +101,7 @@ From the authoring matrix (`10-authoring/feature-matrix.md`).
 
 ### Collaboration and access
 
-From the collaboration matrix (`20-collaboration/feature-matrix.md`).
+From the [collaboration matrix](../20-collaboration/feature-matrix.md).
 
 | Id | Feature | MoSCoW | Verdict | Change or ADR |
 |---|---|---|---|---|
@@ -135,7 +136,7 @@ From the collaboration matrix (`20-collaboration/feature-matrix.md`).
 
 ### Discovery and lifecycle
 
-From the discovery matrix (`30-discovery/feature-matrix.md`).
+From the [discovery matrix](../30-discovery/feature-matrix.md).
 
 | Id | Feature | MoSCoW | Verdict | Change or ADR |
 |---|---|---|---|---|
