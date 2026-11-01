@@ -18,10 +18,35 @@ export interface TestApp {
   close(): Promise<void>;
 }
 
-export async function startTestApp(extraModules: import("@nestjs/common").Type[] = []): Promise<TestApp> {
-  const db = await createTestDatabase();
+/**
+ * How long starting a test app may take, all steps together. It stays inside the integration hooks' timeout
+ * (vitest.config.ts), so a slow start fails with the step and the database, not only "Hook timed out".
+ */
+const START_BUDGET_MS = 170_000;
+
+/** Runs one step of starting a test app before the deadline; a step that fails or is too slow names itself and the database. */
+export async function startStep<T>(name: string, database: string, deadline: number, work: () => Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`Test app on ${database}: ${name} did not finish within ${Math.round(START_BUDGET_MS / 1000)} s of starting (machine loaded? lower --maxWorkers)`)), Math.max(0, deadline - Date.now()));
+  });
   try {
-    return await bootTestApp(db, extraModules, true);
+    return await Promise.race([work(), late]);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Test app on ")) throw error;
+    throw new Error(`Test app on ${database}: ${name} failed: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const databaseOf = (db: TestDatabase): string => new URL(db.url).pathname.slice(1);
+
+export async function startTestApp(extraModules: import("@nestjs/common").Type[] = []): Promise<TestApp> {
+  const deadline = Date.now() + START_BUDGET_MS;
+  const db = await startStep("creating the database", "a new test database", deadline, createTestDatabase);
+  try {
+    return await bootTestApp(db, extraModules, true, deadline);
   } catch (error) {
     await db.drop();
     throw error;
@@ -33,14 +58,16 @@ export async function startTestAppWithDatabase(
   db: TestDatabase,
   extraModules: import("@nestjs/common").Type[] = [],
 ): Promise<TestApp> {
-  return bootTestApp(db, extraModules, false);
+  return bootTestApp(db, extraModules, false, Date.now() + START_BUDGET_MS);
 }
 
 async function bootTestApp(
   db: TestDatabase,
   extraModules: import("@nestjs/common").Type[],
   dropDatabaseOnClose: boolean,
+  deadline: number,
 ): Promise<TestApp> {
+  const database = databaseOf(db);
   // Configuration is read when modules load: set it before importing the app.
   process.env["DATABASE_URL"] = db.url;
   process.env["KINTSUGI_SECRET_KEY"] = randomBytes(32).toString("base64");
@@ -51,7 +78,8 @@ async function bootTestApp(
   try {
     const { Logger, Module, StandardSchemaValidationPipe } = await import("@nestjs/common");
     const { NestFactory } = await import("@nestjs/core");
-    const { AppModule } = await import("../../src/app.module.js");
+    // Loading the API's modules is most of a start: ~10 s of module evaluation per test file, more on a loaded machine.
+    const { AppModule } = await startStep("loading the API modules", database, deadline, () => import("../../src/app.module.js"));
     @Module({ imports: [AppModule, ...extraModules] })
     class TestRootModule {}
     const { ensureSchema } = await import("#common/db/pool.js");
@@ -59,13 +87,15 @@ async function bootTestApp(
     const { ResponseInterceptor } = await import("#common/interface/response.js");
 
     Logger.overrideLogger(false);
-    const nest = await NestFactory.create<import("@nestjs/platform-express").NestExpressApplication>(TestRootModule, { logger: false, bodyParser: false });
+    const nest = await startStep("creating the Nest application", database, deadline, () =>
+      NestFactory.create<import("@nestjs/platform-express").NestExpressApplication>(TestRootModule, { logger: false, bodyParser: false }),
+    );
     const { configureApiBodyParser } = await import("../../src/common/interface/body-parser.js");
     configureApiBodyParser(nest);
     const { configureSecurityHeaders } = await import("../../src/common/interface/security-headers.js");
     configureSecurityHeaders(nest);
     app = nest;
-    await ensureSchema();
+    await startStep("migrating", database, deadline, ensureSchema);
     app.setGlobalPrefix("api");
     app.useGlobalFilters(new HttpExceptionFilter());
     app.useGlobalInterceptors(new ResponseInterceptor());
@@ -74,7 +104,8 @@ async function bootTestApp(
     const { AuthService } = await import("#modules/core/auth/index.js");
     const auth = nest.get(AuthService);
     configureApiDocs(nest, (token) => auth.authenticate(token));
-    await app.listen(0, "127.0.0.1");
+    const booted = app;
+    await startStep("listening", database, deadline, () => booted.listen(0, "127.0.0.1"));
   } catch (error) {
     await app?.close();
     const { closePool } = await import("#common/db/pool.js");

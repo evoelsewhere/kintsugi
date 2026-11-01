@@ -35,7 +35,7 @@ describe.skipIf(!hasDatabase)("procedural stage decisions (integration)", () => 
     const viewerUser = await memberClient(app, admin, "stage-viewer", ["user"]);
     viewer = viewerUser.client;
     viewerId = viewerUser.id;
-  }, 30_000);
+  });
 
   afterAll(async () => {
     await app?.close();
