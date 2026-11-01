@@ -69,7 +69,7 @@
 | AUT-28 | Section anchors in the Brain (`brain.ts:239`) | Heading ids in the portal view from the same function (`brainAnchor`, exported as `headingSlug`; duplicates are numbered by the Brain builder at `brain.ts:597`); a table of contents source | Q12, ADR-0091 | S |
 | AUT-29 | none | none (Won't) | none | none |
 | AUT-30 | none | An emoji and status syntax if wanted | Q4 | S |
-| AUT-31 | none | `delivery.wiki_draft`, autosave endpoint, debounce in the editor | Q1, ADR-0010 | M |
+| AUT-31 | none | `knowledge.wiki_draft`, autosave endpoint, debounce in the editor | Q1, ADR-0010 | M |
 | AUT-32 | none | A drafts list per user | Q1 | S |
 | AUT-33 | PR flow and auto-commit paths | `directPublishPaths`, `wiki.publish`, pending-review state from `workflow.document_write`, the Brain showing a page after merge | Q2, ADR-0008 | M |
 | AUT-34 | `expectedHash` | A 3-way merge in the API; the editor's conflict view with the three texts | Q1 | M |
