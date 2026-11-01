@@ -264,7 +264,8 @@ export function applicationDesignFilePath(app: string, set: string, file: string
 
 /** The scope of page ids: an uppercase short name of a space, written in its home page's `key` (2 to 10 characters). */
 const PAGE_KEY_PATTERN = /^[A-Z][A-Z0-9]{1,9}$/;
-const PAGE_ID_PATTERN = /^PAGE-([A-Z][A-Z0-9]{1,9})-([0-9]{4,9})$/;
+/** The number is what `pageId` writes: from 1, padded to four digits, no leading zero beyond that. */
+const PAGE_ID_PATTERN = /^PAGE-([A-Z][A-Z0-9]{1,9})-((?!0000$)[0-9]{4}|[1-9][0-9]{4,8})$/;
 const PAGE_NUMBER_MAX = 999_999_999;
 const ATTACHMENT_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
@@ -281,6 +282,15 @@ export const DOCUMENT_EXCLUDED_FOLDERS: readonly string[] = ["restricted", "iden
 /** Whether every segment of a repository-relative folder path is plain: not empty, not `.`, `..` or hidden. */
 function isPlainFolder(path: string): boolean {
   return path !== "" && !path.includes("\\") && path.split("/").every((segment) => segment !== "" && !segment.startsWith("."));
+}
+
+/**
+ * Whether a folder segment path leaves the wiki's pages: it starts in an excluded root (a checkout on Windows or macOS
+ * is case-insensitive, so `Plugins/` is `plugins/`), holds an excluded folder, or is `_generated/`.
+ */
+function isExcludedFolder(segments: readonly string[]): boolean {
+  if (DOCUMENT_EXCLUDED_ROOTS.includes((segments[0] ?? "").toLowerCase())) return true;
+  return segments.some((segment) => DOCUMENT_EXCLUDED_FOLDERS.includes(segment.toLowerCase()) || segment.toLowerCase() === GENERATED);
 }
 
 function requireSpace(space: string): string {
@@ -351,9 +361,15 @@ export function isAttachmentType(file: string): boolean {
   return dot > 0 && ATTACHMENT_EXTENSIONS.includes(file.slice(dot + 1).toLowerCase());
 }
 
-/** The folder of the files that belong to the pages of `pageDir` (files beside the page, ADR-0096 decision 6). */
+/**
+ * The folder of the files that belong to the pages of `pageDir` (files beside the page, ADR-0096 decision 6). Callers
+ * pass the folder of a page (`pageFolder`), which is a plain folder of the wiki: never an `_attachments/` folder, and
+ * never under an excluded root or folder.
+ */
 export function pageAttachmentsDir(pageDir: string): string {
-  if (!isPlainFolder(pageDir)) throw new Error(`"${pageDir}" cannot hold attachments`);
+  if (!isPlainFolder(pageDir) || isExcludedFolder(pageDir.split("/")) || pageDir.split("/").includes(ATTACHMENTS)) {
+    throw new Error(`"${pageDir}" cannot hold attachments`);
+  }
   return `${pageDir}/${ATTACHMENTS}`;
 }
 
@@ -383,8 +399,7 @@ export function isWikiEditablePath(path: string): boolean {
   const attachment = segments.length > 1 && segments[segments.length - 2] === ATTACHMENTS && isAttachmentName(file) && isAttachmentType(file);
   if (!attachment && !path.toLowerCase().endsWith(".md")) return false;
   if (path.includes("\\") || segments.some((segment) => segment === "" || segment.startsWith("."))) return false;
-  if (DOCUMENT_EXCLUDED_ROOTS.includes(segments[0] ?? "")) return false;
-  if (segments.some((segment) => DOCUMENT_EXCLUDED_FOLDERS.includes(segment.toLowerCase()) || segment.toLowerCase() === GENERATED)) return false;
+  if (isExcludedFolder(segments)) return false;
   return !isStageWrittenPath(path);
 }
 
