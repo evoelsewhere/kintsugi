@@ -5,7 +5,7 @@
 import { parseKintsugiYaml } from "@kintsugi/manifest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { hasDatabase } from "../support/database.js";
-import { type Client, adminClient, memberClient, startTestApp, type TestApp } from "../support/app.js";
+import { type Client, adminClient, memberClient, startTestApp, type TestApp, currentUserId, grantProjectAccess } from "../support/app.js";
 
 interface WriteView {
   id: string;
@@ -29,15 +29,18 @@ describe.skipIf(!hasDatabase)("document writes (integration)", () => {
     await app.db.query("insert into admin.git_repository (id, server_id, url) values ('billing-docs', 'github', 'https://github.example.invalid/org/billing-docs.git')");
     const created = await admin.request("POST", "/admin/projects", { body: { id: "billing", name: "Billing", documentRepositoryId: "billing-docs" } });
     expect(created.status).toBe(201);
+    await grantProjectAccess(admin, "billing", await currentUserId(admin));
   });
   afterAll(async () => {
     await app?.close();
   });
 
-  it("publishing needs projects.manage; reading needs a session", async () => {
+  it("publishing needs projects.manage; reading needs Project Access", async () => {
     const { client } = await memberClient(app, admin, "reader", ["user"]);
     expect((await client.request("POST", "/admin/projects/billing/kintsugi.yaml/publish")).status).toBe(403);
-    expect((await client.get("/admin/projects/billing/document-writes")).status).toBe(200);
+    expect((await client.get("/admin/projects/billing/document-writes")).status).toBe(403);
+    const { client: granted } = await memberClient(app, admin, "granted-reader", ["user"], ["billing"]);
+    expect((await granted.get("/admin/projects/billing/document-writes")).status).toBe(200);
   });
 
   it("enqueues the rendered kintsugi.yaml alone, as a write keyed by the document repository, when the starter structure is off", async () => {
@@ -73,7 +76,7 @@ describe.skipIf(!hasDatabase)("document writes (integration)", () => {
 
   it("answers 404 for an unknown project", async () => {
     expect((await admin.request("POST", "/admin/projects/missing/kintsugi.yaml/publish")).status).toBe(404);
-    expect((await admin.get("/admin/projects/missing/document-writes")).status).toBe(404);
+    expect((await admin.get("/admin/projects/missing/document-writes")).status).toBe(403); // no grant can exist on a project that does not
   });
 
   it("publishes the starter structure with the manifest: one pull request, create-only files, one skeleton per application", async () => {

@@ -1,11 +1,12 @@
 // Interface layer: document writes of a project (ADR-0019). Publishing needs projects.manage;
-// the list needs a session, like the project itself.
+// the list needs Project Access on the project (ADR-0099 decision 4).
 
-import { Body, Controller, Get, HttpCode, Param, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { ApiAcceptedResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Page, PageQuery } from "#common/application/pagination.js";
 import { type Actor, CurrentActor, RequirePermission } from "#common/auth/decorators.js";
 import { pageQuerySchema } from "#common/interface/pagination.js";
+import { ProjectAccessGuard } from "#modules/admin/project-access/index.js";
 import { DocumentWritesService } from "../application/document-writes.service.js";
 import type { DocumentWriteRecord } from "../domain/document-write.js";
 import { type PublishManifestInput, publishManifestSchema } from "./document-write.dto.js";
@@ -25,6 +26,7 @@ export class DocumentWritesController {
   }
 
   @Get(":id/document-writes")
+  @UseGuards(ProjectAccessGuard)
   @ApiOperation({ summary: "List the project's document writes, newest first: status, branch, commit and pull request" })
   @ApiOkResponse({ description: "A page of document writes." })
   list(@Param("id") id: string, @Query({ schema: pageQuerySchema }) query: PageQuery): Promise<Page<DocumentWriteRecord>> {

@@ -7,7 +7,7 @@ import { EMPTY_REPOSITORY_MESSAGE } from "@kintsugi/domain";
 import { encryptSecret } from "@kintsugi/secrets";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { hasDatabase } from "../support/database.js";
-import { Client, adminClient, memberClient, startTestApp, type TestApp } from "../support/app.js";
+import { Client, adminClient, memberClient, startTestApp, type TestApp, currentUserId, grantProjectAccess } from "../support/app.js";
 
 interface Page<T> {
   items: T[];
@@ -72,6 +72,7 @@ describe.skipIf(!hasDatabase)("monitoring and cross-project reads (integration)"
     }
     expect((await admin.request("POST", "/admin/projects", { body: { id: "alpha", name: "Alpha", documentRepositoryId: "alpha-docs" } })).status).toBe(201);
     expect((await admin.request("POST", "/admin/projects", { body: { id: "beta", name: "Beta", documentRepositoryId: "beta-docs" } })).status).toBe(201);
+    for (const project of ["alpha", "beta"]) await grantProjectAccess(admin, project, await currentUserId(admin));
     expect((await admin.request("POST", "/admin/projects/alpha/applications", { body: { id: "web", name: "Web" } })).status).toBe(201);
     expect((await admin.request("POST", "/admin/projects/alpha/applications/web/repositories", { body: { repositoryId: "alpha-legacy", role: "legacy" } })).status).toBe(201);
 
