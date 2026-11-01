@@ -1,12 +1,13 @@
 // Interface layer: read-only document repo content from Kintsugi's mirror (ADR-0025, ADR-0028)
-// and the results of a stage built from it. A session is enough (no permission): the documents
-// are what the project shares; restricted records are never committed and never served here.
-// The bounded answer route needs documents.resolve and proposes its correction through the writer.
+// and the results of a stage built from it. Every route needs Project Access on the project (ADR-0099 decision 4)
+// and no permission: the documents are what the project shares; restricted records are never committed and never
+// served here. The bounded answer route needs documents.resolve too and proposes its correction through the writer.
 
-import { Body, Controller, Get, HttpCode, Param, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { type Actor, CurrentActor, RequirePermission } from "#common/auth/decorators.js";
 import type { DocumentWriteRecord } from "#modules/admin/document-writes/index.js";
+import { ProjectAccessGuard } from "#modules/admin/project-access/index.js";
 import { GapAnswersService } from "../application/gap-answers.service.js";
 import type { GapAnswer } from "../domain/gap-answer.js";
 import { gapAnswerSchema } from "./document.dto.js";
@@ -17,6 +18,7 @@ import { type FileQuery, type ResultsQuery, type TreeQuery, type UnderstandResul
 
 @ApiTags("delivery · documents")
 @Controller("projects/:id")
+@UseGuards(ProjectAccessGuard)
 export class DocumentsController {
   constructor(
     private readonly documents: DocumentsService,
