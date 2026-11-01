@@ -163,7 +163,7 @@ Rows that more than one track lists describe one feature; the track named owns t
 | Feature | Owner of the row | Other track's row | Split |
 |---|---|---|---|
 | Archive a page | authoring `AUT-18` owns the action (menu, confirmation, children) | DIS-50, DIS-51 | this track owns the archived state: `status: archived`, hiding it from tree and search, the archived list and the restore into a chosen parent |
-| Delete, trash, restore | authoring `AUT-16`, `AUT-17` own the delete and the confirmation | DIS-46 | this track owns finding the deleted page in Git history and restoring it as a new write |
+| Delete, trash, restore | authoring `AUT-16`, `AUT-17` own the delete and the confirmation | DIS-46 | authoring owns the restore flow; this track supplies how it is found: the deleting commit and the text before it in Git history ([gap analysis](gap-analysis.md#version-history)) |
 | Version history, who changed what | this track (DIS-40 to DIS-45) | collaboration `COL-36` | `COL-36` points here; authorship in history depends on the write record |
 | Page analytics | this track (DIS-60 to DIS-63) | collaboration `COL-39` | `COL-39` points here; one report, one privacy default |
 | Content by label, recently updated macros | authoring `AUT-41` owns the macro | DIS-23 | this track owns the label data and the node query the macro reads |
