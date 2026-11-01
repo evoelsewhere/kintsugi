@@ -1,3 +1,4 @@
+import { availableParallelism } from "node:os";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
@@ -13,6 +14,10 @@ export default defineConfig({
     include: ["test/**/*.test.ts"],
     globalSetup: ["test/support/global-setup.ts"],
     testTimeout: 30_000,
-    hookTimeout: 60_000,
+    // Every integration file starts the whole API on a database of its own: ~10 s of module evaluation each, more when
+    // the machine is busy. A third of the cores keeps those starts from starving each other into hook timeouts, and
+    // the hooks get room for a slow start (test/support/app.ts fails earlier, naming the step).
+    maxWorkers: Math.max(2, Math.floor(availableParallelism() / 3)),
+    hookTimeout: 180_000,
   },
 });
