@@ -1,6 +1,6 @@
 # Authoring and structure: feature matrix
 
-> Research page. What a Confluence-like wiki offers for authoring and structure (spaces and the page tree, page operations, the editor, macros and embeds, attachments and images, links, drafts, export and import), what Kintsugi has today, and a MoSCoW proposal for each feature. The product owner sets the final priority in the scope page of the pack. Stories: `user-stories.md`. Gaps: `gap-analysis.md`. Open questions: `open-questions.md`.
+> Research page. What a Confluence-like wiki offers for authoring and structure (spaces and the page tree, page operations, the editor, macros and embeds, attachments and images, links, drafts, export and import), what Kintsugi has today, and a MoSCoW proposal for each feature. The product owner sets the final priority in the scope page of the pack. Stories: `user-stories.md`. Gaps: [gap analysis](gap-analysis.md). Open questions: [open questions](open-questions.md).
 
 ## How to read it
 
@@ -8,10 +8,10 @@
 - **Confluence behaviour** and **Source**: one sentence taken from the public documentation linked in Source. Only public pages were read; nothing was signed into. Where the documentation could not be found the row says so. The full list is under [Source index](#source-index).
 - **Kintsugi today**: what exists, with the code path or the page that shows it (paths are relative to the repository root). **Gap**: `none` (works as the feature needs), `partial` (a part exists) or `missing`.
 - **Priority**: a proposal for the first release of a Confluence-like wiki on top of the document repo. **M** Must, **S** Should, **C** Could, **W** Won't (this time). The product owner sets the final priority in the scope page of the pack.
-- **Notes**: the persona the feature serves (member, manager, admin, viewer, agent) and why; where a constraint question applies, the decision the architects took in `open-questions.md` (Q1 to Q7).
+- **Notes**: the persona the feature serves (member, manager, admin, viewer, agent) and why; where a constraint question applies, the decision the architects took in [open questions](open-questions.md) (Q1 to Q7).
 - Version history, comments, mentions, notifications, permissions, search, labels and templates belong to the collaboration and discovery areas of the pack. Rows here only point at them.
 
-The constraints that shape the proposals are ADR-0042 (Markdown only), ADR-0007 and ADR-0028 (Git is the source of truth, one document repo per project) and ADR-0010 (Postgres is the only datastore). The architects decided the questions these raise (see `open-questions.md`); the Notes column quotes the outcome.
+The constraints that shape the proposals are ADR-0042 (Markdown only), ADR-0007 and ADR-0028 (Git is the source of truth, one document repo per project) and ADR-0010 (Postgres is the only datastore). The architects decided the questions these raise (see [open questions](open-questions.md)); the Notes column quotes the outcome.
 
 ## Spaces and the page tree
 
@@ -78,7 +78,7 @@ The constraints that shape the proposals are ADR-0042 (Markdown only), ADR-0007 
 | AUT-39 | Expand section | A collapsible block | [Atlassian, Keyboard shortcuts, markdown and autocomplete](https://confluence.atlassian.com/confcloud/keyboard-shortcuts-724764740.html) | none | missing | C | viewer: folds a long section |
 | AUT-40 | Excerpt and include page | A block of another page is shown inside this one, respecting the viewer's permissions | [Atlassian, Add excerpts with the excerpt macro](https://support.atlassian.com/confluence-cloud/docs/insert-the-excerpt-include-macro/) · [Atlassian, Include Page macro (older documentation)](https://confluence.atlassian.com/doc/include-page-macro-139514.html) | The Brain would see an included text only in its source page | missing | C | member: reuses a block; costs Brain complexity |
 | AUT-41 | Listing macros | Children display, content by label, recently updated, attachments | [Atlassian, Use macros to show Confluence content on pages and live docs](https://support.atlassian.com/confluence-cloud/docs/use-macros-to-show-confluence-content-on-pages/) | The Brain lists children with summaries | missing | S | viewer: lists children without a hand-kept list |
-| AUT-42 | Data macros | Page properties and a report of them across pages | [Atlassian, Use macros to show Confluence content on pages and live docs](https://support.atlassian.com/confluence-cloud/docs/use-macros-to-show-confluence-content-on-pages/) | Front matter is read by the readers (`hooks/reader/document.ts`, [document formats](../../../reference/document-formats.md)); no page reports it | partial | C | manager: a report across page properties |
+| AUT-42 | Data macros | Page properties and a report of them across pages | [Atlassian, Use macros to show Confluence content on pages and live docs](https://support.atlassian.com/confluence-cloud/docs/use-macros-to-show-confluence-content-on-pages/) | Front matter is read by the readers (`packages/agents/builtin/plugins/reverse_engineering/hooks/reader/document.ts`, [document formats](../../../reference/document-formats.md)); no page reports it | partial | C | manager: a report across page properties |
 | AUT-43 | Third-party macros | A marketplace of apps adds macros | [draw.io, Insert a diagram in Confluence Cloud (Mermaid import)](https://www.drawio.com/docs/tutorials/install-insert-diagram-confluence-cloud/) | none | missing | W | admin: extension is by plugins, not a marketplace; extension is by plugins, ADR-0015 |
 
 ## Attachments and images
