@@ -13,7 +13,7 @@ import { PgBoss } from "pg-boss";
 import type { Pool } from "pg";
 import { DocumentWriteStore } from "./document-write/store.js";
 import { startHeartbeat } from "./heartbeat.js";
-import { sweepOrphanedRuns } from "./orphans.js";
+import { failOrphanedQueueJobs, sweepOrphanedRuns } from "./orphans.js";
 import { watchPullRequests } from "./document-write/watch.js";
 import { writeDocument } from "./document-write/writer.js";
 import { RepositoryStore } from "./git-sync/repositories.js";
@@ -181,6 +181,8 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
   let runner: JobRunner | undefined;
   let syncJobConcurrency: () => Promise<void> = async () => undefined;
   await ensureJobRunQueue(boss);
+  // The queue jobs of the runs the start-up sweep failed (T2-022), before this worker takes any job.
+  await failOrphanedQueueJobs(options.pool, boss, log).catch((error: unknown) => log(`could not clear the queue jobs of stopped runs: ${error instanceof Error ? error.message : String(error)}`));
   if (options.jobs !== undefined) {
     const agentDefinitions = installedAgents({ pool: options.pool });
     runner = new JobRunner({

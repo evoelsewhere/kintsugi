@@ -1,8 +1,12 @@
 // Runs left `running` by a dead worker are failed when a worker starts, unless another worker is alive.
 
+import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
-import { describe, expect, it } from "vitest";
-import { INTERRUPTED, failOrphanedRuns, sweepOrphanedRuns } from "../src/orphans.js";
+import { PgBoss } from "pg-boss";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { INTERRUPTED, failOrphanedQueueJobs, failOrphanedRuns, sweepOrphanedRuns } from "../src/orphans.js";
+import { JOB_RUN_QUEUE, QUEUE_SCHEMA, ensureJobRunQueue, sendJobRun } from "../src/queues.js";
+import { createTestDatabase, hasDatabase, type TestDatabase } from "./support/database.js";
 
 function fakePool(alive: boolean, updated: number) {
   const row = { host: alive ? "another-host" : hostname(), pid: 999_999_999 };
@@ -82,5 +86,43 @@ describe("orphaned runs after a recreate (T3-009)", () => {
     cancel();
     await wait(150);
     expect(updates).toHaveLength(0);
+  });
+});
+
+describe.skipIf(!hasDatabase)("queue jobs of runs a stopped worker left (integration, T2-022)", () => {
+  let db: TestDatabase;
+  let boss: PgBoss;
+
+  beforeAll(async () => {
+    db = await createTestDatabase();
+    await db.pool.query("insert into admin.project (id, name) values ('demo', 'Demo')");
+    boss = new PgBoss({ connectionString: db.url, schema: QUEUE_SCHEMA });
+    await boss.start();
+    await ensureJobRunQueue(boss);
+  });
+  afterAll(async () => {
+    await boss?.stop({ graceful: false });
+    await db?.drop();
+  });
+
+  it("fails an active queue job whose run is no longer running, and leaves a live run's job active", async () => {
+    const [stopped, live] = [randomUUID(), randomUUID()];
+    await db.pool.query(
+      "insert into workflow.job_run (id, project_id, kind, name, status) values ($1, 'demo', 'stage', 'assess', 'failed'), ($2, 'demo', 'stage', 'assess', 'running')",
+      [stopped, live],
+    );
+    for (const id of [stopped, live]) await sendJobRun(boss, { jobRunId: id });
+    // What a worker does when it takes them: both are active now.
+    const taken = await boss.fetch<{ jobRunId: string }>(JOB_RUN_QUEUE, { batchSize: 2 });
+    expect(taken).toHaveLength(2);
+    const logs: string[] = [];
+    expect(await failOrphanedQueueJobs(db.pool, boss, (message) => logs.push(message))).toBe(1);
+    const state = async (runId: string): Promise<string | undefined> => {
+      const job = taken.find((entry) => entry.data.jobRunId === runId)!;
+      return (await boss.getJobById(JOB_RUN_QUEUE, job.id))?.state;
+    };
+    expect(await state(stopped)).toBe("failed");
+    expect(await state(live)).toBe("active");
+    expect(logs).toHaveLength(1);
   });
 });
