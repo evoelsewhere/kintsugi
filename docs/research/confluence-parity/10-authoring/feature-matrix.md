@@ -1,6 +1,6 @@
 # Authoring and structure: feature matrix
 
-> Research page. What a Confluence-like wiki offers for authoring and structure (spaces and the page tree, page operations, the editor, macros and embeds, attachments and images, links, drafts, export and import), what Kintsugi has today, and a MoSCoW proposal for each feature. The product owner sets the final priority in the scope page of the pack. Stories: `user-stories.md`. Gaps: [gap analysis](gap-analysis.md). Open questions: [open questions](open-questions.md).
+> Research page. What a Confluence-like wiki offers for authoring and structure (spaces and the page tree, page operations, the editor, macros and embeds, attachments and images, links, drafts, export and import), what Kintsugi has today, and a MoSCoW proposal for each feature. The product owner sets the final priority in the scope page of the pack. Stories: [user stories](user-stories.md). Gaps: [gap analysis](gap-analysis.md). Open questions: [open questions](open-questions.md).
 
 ## How to read it
 
@@ -125,6 +125,10 @@ The constraints that shape the proposals are ADR-0042 (Markdown only), ADR-0007 
 | All | 61 |
 
 A row counts once, by its first priority letter.
+
+## Boundaries with the other areas
+
+Agreed with the discovery track (message of 23:43): this area owns the page actions (create, delete, restore from deleted, the listing macros of AUT-41) and the editor; discovery owns the archived state, the page history and search. Where a feature needs the other's, the row says so, and the pages are read together: discovery's history features (`DIS-40` to `DIS-45`, `DIS-60` to `DIS-63`) and its label macro (`DIS-23`) sit next to AUT-17, AUT-18 and AUT-41. Collaboration owns comments, mentions, notifications and permissions; an authoring row that names a permission (`wiki.publish`) only names it.
 
 ## Source index
 

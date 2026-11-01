@@ -15,7 +15,7 @@
 | Editor component | `apps/portal/src/components/code/code-editor.tsx:48` (CodeMirror 6, Markdown mode, editable when given `onChange`) | A source editor; today no page edits a project document |
 | Markdown view | `apps/portal/src/components/results/markdown.tsx` (GFM tables, Mermaid fences as diagrams, relative links followed in the portal, raw HTML dropped) and `file-browser.tsx` (Preview/Raw) | Reading, diagrams, links |
 | Link resolution | `apps/portal/src/lib/document-links.ts:41` (`resolveDocumentLink`), `components/results/document-links.tsx` | A relative link opens in a drawer at the same commit; links that leave the repo or reach `restricted/` are blocked |
-| The Brain | [Brain](../../../reference/brain.md); `packages/domain/src/brain.ts` (sections by heading, GitHub-style anchors at line 238, reference ids at line 181, links both ways); portal `apps/portal/src/pages/brain/brain-node-view.tsx:248-273` ("Links to" and what links to a node) | A tree of pages with summaries and citations, backlinks, `brain_changes`; the read side of the wiki |
+| The Brain | [Brain](../../../reference/brain.md); `packages/domain/src/brain.ts` (sections by heading, `brainAnchor`, a GitHub-style anchor, at line 239, reference ids at line 181, links both ways); portal `apps/portal/src/pages/brain/brain-node-view.tsx:248-273` ("Links to" and what links to a node) | A tree of pages with summaries and citations, backlinks, `brain_changes`; the read side of the wiki |
 | Paths in one place | `packages/domain/src/document-layout.ts`; [layout ADR](../../../decisions/0051-document-repo-layout-legacy-and-modern.md) | Where a space can live |
 | Stable ids | [ADR-0075](../../../decisions/0075-compact-stable-document-reference-ids.md), `isBrainReferenceId` | The id family a page id can join |
 
@@ -66,10 +66,10 @@
 | AUT-25 | Fenced code renders (`markdown.tsx:33-38`); the code view highlights some languages | Highlighting in the Markdown view | none | S |
 | AUT-26 | Mermaid fences render (`markdown.tsx:34`) | An error message in the preview when a diagram does not parse | none | S |
 | AUT-27 | none | none (Won't) | none | none |
-| AUT-28 | Section anchors in the Brain (`brain.ts:238`) | Heading ids in the portal view from the same function; a table of contents source | Q12, ADR-0091 | S |
+| AUT-28 | Section anchors in the Brain (`brain.ts:239`) | Heading ids in the portal view from the same function (`brainAnchor`, exported as `headingSlug`; duplicates are numbered by the Brain builder at `brain.ts:597`); a table of contents source | Q12, ADR-0091 | S |
 | AUT-29 | none | none (Won't) | none | none |
 | AUT-30 | none | An emoji and status syntax if wanted | Q4 | S |
-| AUT-31 | none | `delivery.wiki_draft`, autosave endpoint, debounce in the editor | Q1, ADR-0010 | M |
+| AUT-31 | none | `knowledge.wiki_draft`, autosave endpoint, debounce in the editor | Q1, ADR-0010 | M |
 | AUT-32 | none | A drafts list per user | Q1 | S |
 | AUT-33 | PR flow and auto-commit paths | `directPublishPaths`, `wiki.publish`, pending-review state from `workflow.document_write`, the Brain showing a page after merge | Q2, ADR-0008 | M |
 | AUT-34 | `expectedHash` | A 3-way merge in the API; the editor's conflict view with the three texts | Q1 | M |
@@ -91,7 +91,7 @@
 | AUT-50 | Anchors in links | Heading ids (AUT-28) | Q12 | S |
 | AUT-51 | none | Links to `_attachments/` resolved by the raw route | Q3 | S |
 | AUT-52 | `knowledge.brain_link`, the Brain node view's links | The same panel on a page of the wiki | none | S |
-| AUT-53 | Brain drops links it cannot follow (`brain.md:19`) | A list of dropped links per document, shown as broken links | ADR-0091 | M |
+| AUT-53 | Brain drops links it cannot follow (`brain.md:19`) | A list of unresolved links per document, shown as broken links. The Brain architect's proposal keeps every reference, resolved or not (`knowledge.brain_ref` in `40-architecture/brain-integration.md`), which would feed it | ADR-0091 | M |
 | AUT-54 | ADR-0075 for cards | Page ids, inbound-link rewrite in the same write, a scan of the mirror to confirm | Q5, Q8 | L |
 | AUT-55 | none | A print stylesheet for the page view | Q7 | S |
 | AUT-56 | none | Deferred with server PDF | Q7 | L |
