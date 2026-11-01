@@ -4,6 +4,7 @@ import {
   memberAuthorizationPayload,
   parseMemberAuthorizationRequest,
   safeMemberReturnTo,
+  safeReturnTo,
   validatedAuthorizationRedirect,
 } from "./install-model";
 
@@ -67,6 +68,16 @@ describe("member consent handoff", () => {
     expect(safeMemberReturnTo(`/member/authorize${expiringRequest}`)).toBe(`/member/authorize${expiringRequest}`);
     for (const unsafe of ["https://evil.example", "//evil.example/member/authorize", "/\\evil.example/member/authorize", "/projects?next=https://evil.example", null]) {
       expect(safeMemberReturnTo(unsafe)).toBe("/");
+    }
+  });
+
+  it("returns to any page of the portal after sign-in, and to nowhere else", () => {
+    expect(safeReturnTo("/monitoring?tab=runtime")).toBe("/monitoring?tab=runtime");
+    expect(safeReturnTo("/delivery/assess?project=billing-qa&run=4619bf84#log")).toBe("/delivery/assess?project=billing-qa&run=4619bf84");
+    const expiringRequest = `${request}&expiresAt=${Date.now() + 90_000}`;
+    expect(safeReturnTo(`/member/authorize${expiringRequest}`)).toBe(`/member/authorize${expiringRequest}`);
+    for (const unsafe of ["//evil.example", "https://evil.example", "/\\evil", "javascript:alert(1)", "/projects\u0000", "/projects\nx", "evil", "/login?returnTo=/x", "/member/authorize?x=1", null]) {
+      expect(safeReturnTo(unsafe), String(unsafe)).toBe("/");
     }
   });
 

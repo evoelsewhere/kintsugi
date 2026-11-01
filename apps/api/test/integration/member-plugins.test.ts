@@ -125,4 +125,21 @@ describe.skipIf(!hasDatabase)("member plugins (integration)", () => {
     const after = await admin.get<{ items: unknown[] }>("/admin/plugin-access/plug-one");
     expect(after.body.data?.items).toEqual([]);
   });
+
+  it("bounds what a member's connection writes, not the reads Kintsugi records itself", async () => {
+    const flood = (kind: string, count: number) =>
+      app.db.query(
+        "insert into monitoring.member_activity (id, at, user_id, project_id, kind) select gen_random_uuid()::text, now() - make_interval(secs => n), $1, 'plug-one', $2 from generate_series(1, $3::int) as n",
+        [adminId, kind, count],
+      );
+    const post = () => new Client(app).request("POST", "/member/v1/activity", { ...bearer(token), body: { projectId: "plug-one", kind: "note", summary: "after many reads" } });
+    // 600 reads and downloads Kintsugi observed in the hour leave the member's own budget untouched.
+    await flood("document.read", 300);
+    await flood("brain.read", 200);
+    await flood("plugin.download", 100);
+    expect((await post()).status).toBe(201);
+    // 600 records the connection wrote itself still use it up.
+    await flood("command.run", 600);
+    expect((await post()).status).toBe(429);
+  });
 });

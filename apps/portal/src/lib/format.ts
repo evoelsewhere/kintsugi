@@ -71,3 +71,11 @@ export function shortSha(sha: string | undefined): string {
 export function errorText(failure: unknown): string {
   return failure instanceof Error ? failure.message : String(failure);
 }
+
+/** An ISO-8601 instant in UTC, as the API writes one into a sentence ("Last seen 2026-10-31T19:03:37.949Z on …"). */
+const ISO_INSTANT = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z/g;
+
+/** A sentence with each UTC instant in it said relative to now ("Last seen 1 minute ago on …"). */
+export function localizeInstants(text: string, now: number = Date.now()): string {
+  return text.replace(ISO_INSTANT, (instant) => formatRelative(instant, now));
+}

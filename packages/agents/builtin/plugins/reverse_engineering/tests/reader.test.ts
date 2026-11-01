@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 
 import { mergeLedgers, parseLedger, renderLedger } from '../hooks/reader/ledger.js'
+import { citationsIn } from '../hooks/reader/rules.js'
 
 describe('review ledger', () => {
   test('merges the verdicts of every unit into one, the newest per rule winning', () => {
@@ -40,5 +41,18 @@ describe('review ledger', () => {
       'RULE-1': { verdict: 'confirmed', at: '2026-10-15' },
       'RULE-2': { verdict: 'refuted', at: '2026-10-16', title: 'lee', note: 'a | b' },
     })
+  })
+})
+
+describe('citations', () => {
+  test('are found as before, and in linear time in a long word (T3-010)', () => {
+    expect(citationsIn('see billing/src/Invoice.java:12-20, (core/x.cbl:7) and a.b.c/d.py:3').map(({ path, from, to }) => [path, from, to])).toEqual([
+      ['billing/src/Invoice.java', 12, 20],
+      ['core/x.cbl', 7, 7],
+      ['a.b.c/d.py', 3, 3],
+    ])
+    const started = performance.now()
+    expect(citationsIn('a'.repeat(200_000) + '. see core/x.cbl:7').map((citation) => citation.path)).toEqual(['core/x.cbl'])
+    expect(performance.now() - started).toBeLessThan(500)
   })
 })

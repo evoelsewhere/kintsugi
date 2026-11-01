@@ -222,13 +222,14 @@ Local username/password sessions first (Entra ID later behind `AuthProvider`):
   (required, at least 8 characters — there is no default; startup fails without it).
   Change the password after first sign-in.
 - **Guard rails** (members & access-role use cases):
-  - you can only assign access roles, grant permissions, and manage members whose permissions
-    you hold yourself — `members.manage` / `roles.manage` do not allow self-escalation or
-    taking over a stronger account;
+  - you can only assign access roles, grant or take away permissions, delete access sub-roles and
+    manage members whose permissions you hold yourself — `members.manage` / `roles.manage` do not
+    allow self-escalation, taking over a stronger account or stripping a stronger role;
   - the installation keeps at least one enabled `admin` access role, which keeps
     `members.manage` and `roles.manage`, and nobody removes or disables themselves;
   - a member holds exactly one primary access role;
-  - resetting a password or disabling a member ends their sessions.
+  - resetting a password or disabling a member ends every credential they hold: sessions, member
+    tokens and AI-client connections with their refresh tokens (audited with the counts).
 - **Password hashing**: argon2id (`@node-rs/argon2`, 19 MiB / 2 passes / 1 lane) stored as a
   PHC string. Older scrypt hashes, or argon2id hashes with other parameters, are re-hashed
   at the next successful sign-in.

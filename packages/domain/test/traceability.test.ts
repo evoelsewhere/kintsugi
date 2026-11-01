@@ -126,3 +126,14 @@ describe("rule, requirement, and unit traceability", () => {
     });
   });
 });
+
+describe("derivedFrom lines (T3-011)", () => {
+  it("are read in linear time with a long run of spaces, and as before otherwise", () => {
+    const spaces = " ".repeat(200_000);
+    const started = performance.now();
+    const [requirement] = parseRequirementsMarkdown(`## REQ-INV-001: Gross amount\n\n**derivedFrom:** RULE-a-001,${spaces}RULE-b-002${spaces}x\n`);
+    expect(performance.now() - started).toBeLessThan(500);
+    expect(requirement?.derivedFrom).toEqual(["RULE-a-001", `RULE-b-002${spaces}x`]);
+    expect(parseRequirementsMarkdown("## REQ-INV-001: Gross amount\n\n- derived from:   RULE-a-001; RULE-b-002   \n")[0]?.derivedFrom).toEqual(["RULE-a-001", "RULE-b-002"]);
+  });
+});

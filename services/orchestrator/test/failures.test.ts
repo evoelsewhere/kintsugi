@@ -21,6 +21,8 @@ describe("known failures", () => {
 
   it("says that a repository without commits has none", () => {
     expect(explainFailure(EMPTY_REPOSITORY)).toBe(`The repository has no commits yet. Push a first commit to its default branch, then sync it again. Detail: ${EMPTY_REPOSITORY}`);
+    const ambiguous = "git rev-parse HEAD failed (exit 128): fatal: ambiguous argument 'HEAD': unknown revision or path not in the working tree.";
+    expect(explainFailure(ambiguous)).toMatch(/^The repository has no commits yet\./);
   });
 
   it("explains a failure once, also when a stage repeats the reason of its step", () => {
@@ -43,6 +45,7 @@ describe("transient provider failures", () => {
       "Agent x failed (error): 429 Too Many Requests",
       "Agent x failed (error): 503 Service Unavailable",
       "Agent x failed (error): the model is overloaded",
+      "Agent x failed (error): Request timed out.",
     ]) {
       expect(isTransientFailure(reason), reason).toBe(true);
     }
@@ -50,6 +53,11 @@ describe("transient provider failures", () => {
 
   it("are not a limit the job hit or a known failure of the settings", () => {
     expect(isTransientFailure("Agent x failed (turns): the job reached its turn limit")).toBe(false);
+    // A loop is never tried again, also when the tool it names reads like a provider failure.
+    expect(isTransientFailure("Agent x failed (loop): stopped: mcp__provider-docs__search was called with the same arguments 12 times")).toBe(false);
+    expect(isTransientFailure("Agent provider-mapper failed (max-turns): stopped after 150 turn(s)")).toBe(false);
+    // The kernel's own wall-clock limit is not a dropped request.
+    expect(isTransientFailure("Agent x failed (timeout): timed out after 2700s")).toBe(false);
     expect(isTransientFailure(explainFailure(BYTE_STRING))).toBe(false);
     expect(isTransientFailure(BYTE_STRING)).toBe(false);
   });

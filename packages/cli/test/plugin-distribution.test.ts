@@ -2,7 +2,9 @@ import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import type { HarnessClient } from "@kintsugi/harness-hub";
 import { runCli } from "../src/cli.js";
+import { getNativeClientVersion } from "../src/client-version.js";
 import { FILES, artifactRoot, bundleOf, createState, exists, temp } from "./support/distribution.js";
 import { writeFile } from "node:fs/promises";
 
@@ -66,6 +68,24 @@ describe("member plugin distribution", () => {
     expect(JSON.parse(await readFile(join(artifactRoot(state.root, "claude-code", "work"), ".kintsugi-plugins.json"), "utf8")).plugins).toEqual({});
     expect(await runCli(["plugins", "remove", "modernize", "--harness", "claude-code"], state.deps)).toBe(2);
     expect(state.stderr.join("")).toContain("PLUGIN_NOT_INSTALLED");
+  });
+
+  it("waits for a Windows client that takes 6 s to start through PowerShell, and says so when one does not answer at all", async () => {
+    const state = await createState({ "/api/member/v1/plugins/modernize": bundleOf("modernize", "1.0.0", FILES) });
+    const missing = Object.assign(new Error("spawn claude ENOENT"), { code: "ENOENT" });
+    const killed = Object.assign(new Error("Command failed"), { killed: true, signal: "SIGTERM", code: null });
+    const slow = async (command: string, _args: string[], options: { timeout: number }) => {
+      if (command === "claude") throw missing;
+      if (options.timeout < 6_000) throw killed;
+      return { stdout: "2.1.278 (Claude Code)\n", stderr: "" };
+    };
+    (state.deps as { getClientVersion: (target: HarnessClient) => Promise<string> }).getClientVersion = (target) => getNativeClientVersion(target, "win32", slow as never);
+    expect(await runCli(["plugins", "install", "modernize", "--harness", "claude-code", "--token-stdin"], state.deps), state.stderr.join("")).toBe(0);
+
+    (state.deps as { getClientVersion: (target: HarnessClient) => Promise<string> }).getClientVersion = (target) => getNativeClientVersion(target, "win32", (async () => { throw killed; }) as never);
+    expect(await runCli(["update", "modernize", "--harness", "claude-code", "--token-stdin"], state.deps)).toBe(2);
+    expect(state.stderr.join("")).toMatch(/did not answer its version check within 5 s/);
+    expect(state.stderr.join("")).not.toMatch(/install it or make it available on PATH/);
   });
 
   it("gives Codex skills only: the command becomes a skill, the agent is left out, and the member is told to trust the hook", async () => {

@@ -165,10 +165,13 @@ const ID_SOURCE = String.raw`[A-Z][A-Z0-9]{1,15}(?:-[A-Z0-9]{1,16})*-[0-9]{2,}[A
 const ID_PATTERN = new RegExp(`^${ID_SOURCE}$`);
 const ID_MENTIONS = new RegExp(`(?<![A-Za-z0-9-])${ID_SOURCE}(?![A-Za-z0-9-])`, "g");
 const CARD_HEADING = new RegExp(`^(${ID_SOURCE})(?:\\s*:\\s*(.*))?$`);
-const HEADING = /^(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$/;
 const FENCE = /^[ \t]{0,3}(`{3,}|~{3,})/;
 /** A Markdown link; its target is written bare or in angle brackets, which allow spaces (`[x](<my notes.md>)`). */
-const LINK = /(?<!!)\[([^\]]*)\]\((?:<([^>\n]+)>|([^)\s]+))(?:\s+"[^"]*")?\)/g;
+// Neither part runs past the start of another link (`[` in the text and a bare target, `<` in an angle target), so each
+// line is read in linear time.
+const LINK = /(?<!!)\[([^[\]\n]{0,1000})\]\((?:<([^<>\n]{1,2048})>|([^)\s[]{1,2048}))(?:[ \t]+"[^"\n]{0,300}")?\)/g;
+/** The characters of a line the link pattern reads, as the reader's line cap. */
+const LINK_LINE = 4_000;
 
 export function isBrainReferenceId(value: string): boolean {
   return ID_PATTERN.test(value);
@@ -178,6 +181,31 @@ export function isBrainReferenceId(value: string): boolean {
 // Text helpers
 // ---------------------------------------------------------------------------
 
+const blank = (char: string | undefined): boolean => char === " " || char === "\t";
+
+/**
+ * The level and text of an ATX heading line (`## Title ##`), or undefined. Linear: the regex it replaces,
+ * `^(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$`, backtracked cubically on a long run of spaces, so one line of a document
+ * stopped the worker for minutes (T3-011). The results are the same, a closing run of `#` included.
+ */
+export function atxHeading(line: string): { level: number; text: string } | undefined {
+  let level = 0;
+  while (line[level] === "#") level += 1;
+  // `.` and `[ \t]` match no line terminator, so a line holding one after the marker was no heading.
+  if (level < 1 || level > 6 || !blank(line[level]) || /[\n\r\u2028\u2029]/.test(line.slice(level))) return undefined;
+  let start = level;
+  while (blank(line[start])) start += 1;
+  let end = line.length;
+  while (end > start && blank(line[end - 1])) end -= 1;
+  // Only blanks after the marker: the regex took the last as the text when there were two or more.
+  if (end === start) return line.length - level >= 2 ? { level, text: line.slice(-1) } : undefined;
+  let close = end;
+  while (close > start && line[close - 1] === "#") close -= 1;
+  while (close > start && blank(line[close - 1])) close -= 1;
+  // Only `#` after the marker (`# #`): the regex kept the first.
+  return { level, text: close === start ? line.slice(start, start + 1) : line.slice(start, close) };
+}
+
 function clip(text: string, max: number): string {
   const flat = text.replace(/\s+/g, " ").trim();
   if (flat.length <= max) return flat;
@@ -186,12 +214,15 @@ function clip(text: string, max: number): string {
   return `${(space > max * 0.6 ? cut.slice(0, space) : cut).replace(/[\s,;:.–-]+$/, "")}…`;
 }
 
-/** Plain text of inline Markdown: links keep their text, emphasis and code marks go. */
+/**
+ * Plain text of inline Markdown: links keep their text, emphasis and code marks go. No part of a link or a tag runs past
+ * the start of the next one, so a paragraph of `[`, `[a](` or `<` is read in linear time (T3-016).
+ */
 function plain(text: string): string {
   return text
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/<[^>]+>/g, "")
+    .replace(/!\[[^[\]]*\]\([^)[]*\)/g, "")
+    .replace(/\[([^[\]]*)\]\([^)[]*\)/g, "$1")
+    .replace(/<[^<>]+>/g, "")
     .replace(/(\*\*|__)(.+?)\1/g, "$2")
     .replace(/`([^`]*)`/g, "$1")
     .replace(/\\([\\`*_{}[\]()#+\-.!|])/g, "$1")
@@ -446,10 +477,8 @@ function headingsOf(lines: readonly string[], from: number): Heading[] {
       fence = open[1];
       continue;
     }
-    const match = HEADING.exec(line);
-    if (match?.[1] !== undefined && match[2] !== undefined && headings.length < BRAIN_MAX_NODES_PER_DOCUMENT) {
-      headings.push({ line: index, level: match[1].length, text: match[2] });
-    }
+    const heading = atxHeading(line);
+    if (heading !== undefined && headings.length < BRAIN_MAX_NODES_PER_DOCUMENT) headings.push({ line: index, ...heading });
   }
   return headings;
 }
@@ -482,11 +511,15 @@ function resolveTarget(fromPath: string, target: string): { path: string; anchor
 
 function linksOf(fromId: string, fromPath: string, lines: readonly string[]): PendingLink[] {
   const found: PendingLink[] = [];
-  const text = lines.join("\n");
-  for (const match of text.matchAll(LINK)) {
-    const target = resolveTarget(fromPath, match[2] ?? match[3] ?? "");
-    if (target !== undefined) found.push({ fromId, ...target });
+  // Line by line, at most LINK_LINE characters of each, with a bounded pattern: over a whole document a run of `[` or
+  // of `[a](` made the link pattern quadratic and held the worker (T3-016).
+  for (const line of lines) {
+    for (const match of line.slice(0, LINK_LINE).matchAll(LINK)) {
+      const target = resolveTarget(fromPath, match[2] ?? match[3] ?? "");
+      if (target !== undefined) found.push({ fromId, ...target });
+    }
   }
+  const text = lines.join("\n");
   for (const match of text.matchAll(ID_MENTIONS)) found.push({ fromId, id: match[0] });
   return found;
 }

@@ -13,7 +13,8 @@
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { runProcess } from "../launcher/process.js";
 import { jobEnvironment } from "../launcher/script.js";
 import { boundOutput } from "./output.js";
@@ -45,10 +46,30 @@ const FORBIDDEN_OPTIONS = [
   "-c", "-C", "-u",
   "--git-dir", "--work-tree", "--exec-path", "--namespace", "--config-env", "--config",
   "--upload-pack", "--receive-pack", "--ext-diff", "--textconv", "--output", "--exec",
+  // Another repository or a template from anywhere on disk, a git directory outside, a command that opens files (T3-003).
+  "--reference", "--reference-if-able", "--separate-git-dir", "--template", "--open-files-in-pager",
 ];
 
-/** Subcommands that accept `--no-textconv` to keep repository-configured converters (which are
- * commands) out of diff rendering. */
+/**
+ * Short options that start a command, by subcommand. git also takes them bundled (`-qu <cmd>`) or with the value
+ * attached (`-u<cmd>`), so any single-dash argument that holds the letter before a value starts is refused. Long
+ * options cannot be abbreviated (`--upload=<cmd>`): the environment tells git to refuse abbreviations.
+ */
+const COMMAND_SHORT_OPTIONS: Readonly<Record<string, string>> = { clone: "u", rebase: "x", grep: "O" };
+
+/** `git config` only reads: one of these forms, and no file of its own choosing. */
+const CONFIG_READS = new Set(["--get", "--get-all", "--get-regexp", "--list", "-l", "get", "list"]);
+const CONFIG_REFUSED = new Set([
+  "--add", "--unset", "--unset-all", "--replace-all", "--rename-section", "--remove-section", "--edit", "-e",
+  "set", "unset", "rename-section", "remove-section", "edit", "--file", "--blob",
+]);
+
+/** Options of clone whose value is the next argument, so it is not taken for the source or the target. */
+const CLONE_VALUE_OPTIONS = new Set(["--depth", "--branch", "-b", "--origin", "-o", "--jobs", "-j", "--filter", "--shallow-since", "--shallow-exclude", "--bundle-uri", "--server-option", "--revision"]);
+
+/** Subcommands that accept `--no-ext-diff` and `--no-textconv`, to keep repository-configured diff drivers and
+ * converters (which are commands) out of diff rendering. An empty GIT_EXTERNAL_DIFF or `diff.external` does not
+ * switch them off: git takes it as an external diff command named "" and every patch fails (T3-002). */
 const TEXTCONV_SUBCOMMANDS = new Set(["diff", "log", "show"]);
 
 const parameters = Type.Object({
@@ -66,12 +87,126 @@ function clampTimeoutSec(timeout: number | undefined): number {
   return Math.min(Math.max(Math.round(timeout), 1), MAX_TIMEOUT_SEC);
 }
 
-function findForbiddenOption(args: readonly string[]): string | undefined {
+/**
+ * `git diff` with a path outside the repository (or run outside one) compares the two paths as files anywhere on disk,
+ * as `--no-index` does: every argument that is not an option must stay in the workspace. A revision resolves to a
+ * path inside the directory, so it passes.
+ */
+function checkDiffPaths(args: readonly string[], dir: string, guard: PathGuard): void {
+  let paths = false;
+  for (const arg of args) {
+    if (!paths && arg === "--") paths = true;
+    else if (paths || !arg.startsWith("-")) guard.check(resolve(dir, arg));
+  }
+}
+
+function findForbiddenOption(subcommand: string, args: readonly string[]): string | undefined {
+  const short = COMMAND_SHORT_OPTIONS[subcommand];
   for (const arg of args) {
     const name = arg.includes("=") ? arg.slice(0, arg.indexOf("=")) : arg;
     if (FORBIDDEN_OPTIONS.includes(name)) return arg;
+    if (short === undefined || !/^-[^-]/.test(arg)) continue;
+    for (const letter of arg.slice(1)) {
+      if (letter === short) return arg;
+      if (!/[A-Za-z]/.test(letter)) break;
+    }
   }
   return undefined;
+}
+
+/** A clone source or remote given as a local path (or a file: URL), as the path; undefined for a network URL. */
+function localPath(arg: string): string | undefined {
+  if (/^file:/i.test(arg)) {
+    try {
+      return fileURLToPath(arg);
+    } catch {
+      return arg;
+    }
+  }
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(arg) || /^[^/\\@]+@[^/\\]+:/.test(arg)) return undefined;
+  return arg;
+}
+
+/**
+ * The paths a subcommand makes or reads a repository at stay in the workspace (T3-003): what init and worktree make,
+ * and the target of a clone, where the job may write; the source of a local clone, where it may read.
+ */
+function checkRepositoryPaths(subcommand: string, args: readonly string[], dir: string, guard: PathGuard, writeGuard: PathGuard): void {
+  const outside = (path: string, where: string): Error => new Error(`git "${subcommand}" may not use ${path}: ${where}`);
+  const positional: string[] = [];
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index]!;
+    if (subcommand === "clone" && CLONE_VALUE_OPTIONS.has(arg)) index += 1;
+    else if (!arg.startsWith("-")) positional.push(arg);
+  }
+  const writable = (path: string): void => {
+    try {
+      writeGuard.check(resolve(dir, path));
+    } catch {
+      throw outside(path, "a repository is made only in the job's writable area (the output directory or scratch)");
+    }
+  };
+  if (subcommand === "init") positional.forEach(writable);
+  // After the action (add, move, remove, ...): the worktree's path, and names that resolve inside the cwd.
+  if (subcommand === "worktree") positional.slice(1).forEach(writable);
+  if (subcommand === "clone") {
+    const [source, ...targets] = positional;
+    const local = source === undefined ? undefined : localPath(source);
+    if (local !== undefined) {
+      try {
+        guard.check(resolve(dir, local));
+      } catch {
+        throw outside(source!, "a local repository is cloned only from inside the job workspace");
+      }
+    }
+    targets.forEach(writable);
+  }
+}
+
+/** Subcommands that move objects between repositories, and where a local repository they reach must be. */
+const TRANSPORTS: Readonly<Record<string, "read" | "write">> = { fetch: "read", pull: "read", push: "write", remote: "read", submodule: "read" };
+
+/**
+ * A local repository that fetch, pull, push, remote or submodule reach stays in the workspace (T3-012): a path or `file:`
+ * URL outside it would read another project's repositories or write refs into them (the worker's mirrors, other jobs).
+ * A remote named by the command, or every remote when none is named, is read from the repository's configuration, and
+ * for submodules the URLs of `.gitmodules` too. What push reaches must be writable; the rest readable.
+ */
+async function checkTransportPaths(subcommand: string, args: readonly string[], dir: string, env: Record<string, string>, guard: PathGuard, writeGuard: PathGuard): Promise<void> {
+  const mode = TRANSPORTS[subcommand];
+  if (mode === undefined) return;
+  const configured = async (file?: string): Promise<{ key: string; url: string }[]> => {
+    const result = await runProcess({ command: "git", args: ["config", ...(file === undefined ? [] : ["-f", file]), "--get-regexp", "url$"], cwd: dir, env, timeoutMs: 30_000 });
+    return result.stdout.split(/\r?\n/).flatMap((line) => {
+      const space = line.indexOf(" ");
+      return space < 0 ? [] : [{ key: line.slice(0, space), url: line.slice(space + 1) }];
+    });
+  };
+  const remotes = (await configured()).filter((entry) => /^(remote\..+\.(push)?url|submodule\..+\.url)$/i.test(entry.key));
+  const targets: string[] = [];
+  if (subcommand === "submodule") targets.push(...remotes.map((entry) => entry.url), ...(await configured(".gitmodules")).map((entry) => entry.url));
+  const positional: string[] = [];
+  for (const [index, arg] of args.entries()) {
+    if (arg === "--repo") positional.push(args[index + 1] ?? "");
+    else if (arg.startsWith("--repo=")) positional.push(arg.slice("--repo=".length));
+    else if (!arg.startsWith("-")) positional.push(arg);
+  }
+  // A remote's name stands for its URLs; with no name, fetch, pull and push may use any configured remote.
+  const named = (name: string): string[] => remotes.filter((entry) => entry.key.toLowerCase().startsWith(`remote.${name.toLowerCase()}.`)).map((entry) => entry.url);
+  if ((subcommand === "fetch" || subcommand === "pull" || subcommand === "push") && positional.length === 0) targets.push(...remotes.map((entry) => entry.url));
+  for (const arg of positional) {
+    const urls = named(arg);
+    targets.push(...(urls.length > 0 ? urls : [arg]));
+  }
+  for (const target of targets) {
+    const local = localPath(target);
+    if (local === undefined) continue;
+    try {
+      (mode === "write" ? writeGuard : guard).check(resolve(dir, local));
+    } catch {
+      throw new Error(`git "${subcommand}" may not reach ${target}: a local repository is ${mode === "write" ? "pushed to only in the job's writable area" : "read only inside the job workspace"}`);
+    }
+  }
 }
 
 export function createKernelGitTool(cwd: string, guard: PathGuard, writeGuard: PathGuard, tmp: string): ToolDefinition {
@@ -87,14 +222,22 @@ export function createKernelGitTool(cwd: string, guard: PathGuard, writeGuard: P
           `unknown git subcommand "${subcommand ?? ""}": the first argument must be a git command name (git aliases are not expanded)`,
         );
       }
-      const forbidden = findForbiddenOption(rest);
+      const forbidden = findForbiddenOption(subcommand, rest);
       if (forbidden !== undefined) {
-        throw new Error(`git option "${forbidden}" is not allowed: it redirects the repository or starts an external helper`);
+        throw new Error(`git option "${forbidden}" is not allowed: it redirects the repository, reaches outside the workspace or starts an external helper (give an option's value as a separate argument)`);
+      }
+      if (subcommand === "config" && (!rest.some((arg) => CONFIG_READS.has(arg)) || rest.some((arg) => CONFIG_REFUSED.has(arg.split("=")[0]!) || /^-f/.test(arg)))) {
+        throw new Error('git "config" only reads here (--get, --get-all, --get-regexp, --list): configuration can make git run commands, so a job does not set it');
+      }
+      if (subcommand === "diff" && rest.includes("--no-index")) {
+        throw new Error('git "diff --no-index" is not allowed: it compares files outside a repository, anywhere on disk; diff commits or the working tree of a repository instead');
       }
       if (subcommand === "submodule" && rest[0] === "foreach") {
         throw new Error('git "submodule foreach" is not allowed: it runs a shell command');
       }
       const dir = params.cwd === undefined ? cwd : guard.check(params.cwd);
+      if (subcommand === "diff") checkDiffPaths(rest, dir, guard);
+      checkRepositoryPaths(subcommand, rest, dir, guard, writeGuard);
       if (!READ_ONLY_SUBCOMMANDS.has(subcommand)) {
         try {
           writeGuard.check(dir);
@@ -112,8 +255,9 @@ export function createKernelGitTool(cwd: string, guard: PathGuard, writeGuard: P
         GIT_PAGER: "cat",
         GIT_EDITOR: "true",
         GIT_SEQUENCE_EDITOR: "true",
-        GIT_EXTERNAL_DIFF: "",
         GIT_OPTIONAL_LOCKS: "0",
+        // A long option abbreviated (`--upload=<cmd>` for --upload-pack) would pass the option checks above.
+        GIT_TEST_DISALLOW_ABBREVIATED_OPTIONS: "1",
         // `ext::` and `fd::` transports execute commands; the rest are ordinary remotes.
         // The list is colon-separated (git's GIT_ALLOW_PROTOCOL format).
         GIT_ALLOW_PROTOCOL: "file:git:http:https:ssh",
@@ -122,24 +266,23 @@ export function createKernelGitTool(cwd: string, guard: PathGuard, writeGuard: P
         GIT_COMMITTER_NAME: "Kintsugi Job",
         GIT_COMMITTER_EMAIL: "job@kintsugi.invalid",
         // Command-line-style configuration beats the repository's own config, which is untrusted.
-        GIT_CONFIG_COUNT: "6",
+        GIT_CONFIG_COUNT: "5",
         GIT_CONFIG_KEY_0: "core.hooksPath",
         GIT_CONFIG_VALUE_0: join(tmp, "no-hooks"),
         GIT_CONFIG_KEY_1: "core.fsmonitor",
         GIT_CONFIG_VALUE_1: "",
-        GIT_CONFIG_KEY_2: "diff.external",
-        GIT_CONFIG_VALUE_2: "",
-        GIT_CONFIG_KEY_3: "core.pager",
-        GIT_CONFIG_VALUE_3: "cat",
-        GIT_CONFIG_KEY_4: "core.askpass",
+        GIT_CONFIG_KEY_2: "core.pager",
+        GIT_CONFIG_VALUE_2: "cat",
+        GIT_CONFIG_KEY_3: "core.askpass",
+        GIT_CONFIG_VALUE_3: "",
+        GIT_CONFIG_KEY_4: "credential.helper",
         GIT_CONFIG_VALUE_4: "",
-        GIT_CONFIG_KEY_5: "credential.helper",
-        GIT_CONFIG_VALUE_5: "",
       };
+      await checkTransportPaths(subcommand, rest, dir, env, guard, writeGuard);
       const timeoutSec = clampTimeoutSec(params.timeout);
       const result = await runProcess({
         command: "git",
-        args: TEXTCONV_SUBCOMMANDS.has(subcommand) ? [subcommand, "--no-textconv", ...rest] : params.args,
+        args: TEXTCONV_SUBCOMMANDS.has(subcommand) ? [subcommand, "--no-ext-diff", "--no-textconv", ...rest] : params.args,
         cwd: dir,
         env,
         timeoutMs: timeoutSec * 1000,
@@ -156,6 +299,7 @@ export function createKernelGitTool(cwd: string, guard: PathGuard, writeGuard: P
       else if (result.stopped === "output-limit") notices.push("git output exceeded the capture limit");
       else if (result.exitCode !== 0) notices.push(`git exited with code ${result.exitCode}`);
       if (result.truncated) notices.push("output truncated");
+      if (result.outlived === true) notices.push("A process it started was still running when it ended; its output was cut there");
       if (notices.length > 0) text = `${text}\n\n[${notices.join(". ")}]`;
       return { details: undefined, content: [{ type: "text", text }] };
     },

@@ -1,6 +1,7 @@
 // Aggregation and formatting for the telemetry views (Governance → Telemetry, ADR-0048): pure
 // functions, tested in telemetry.test.ts (the portal has no component tests).
 
+import { explainFailure } from "@kintsugi/domain";
 import type { SpanAttributes, TelemetryDay, TraceSpan } from "./api/telemetry";
 
 export const WINDOWS = [
@@ -205,8 +206,15 @@ export function spanDetail(span: TraceSpan): string {
     default:
       break;
   }
-  if (span.status === "error" && span.error !== null) parts.push(span.error);
+  if (span.status === "error" && span.error !== null) parts.push(span.name === "kintsugi.job" && typeof a["outcome"] === "string" ? jobError(a["outcome"], span.error) : span.error);
   return parts.join(" · ");
+}
+
+/** The error of an agent job in plain words when it is a limit the job reached (`outcome` is its stop reason), else as it is. */
+export function jobError(outcome: string, error: string): string {
+  const reasoned = `${outcome}: ${error}`;
+  const plain = explainFailure(reasoned);
+  return plain === reasoned ? error : plain;
 }
 
 // ---------------------------------------------------------------------------
@@ -243,6 +251,16 @@ export const isRunFilter = (value: string | null): value is RunFilter => RUN_FIL
 
 /** The key of one attempt in a list and in a link. */
 export const runKey = (run: { runId: string; stepRunId: string | null; attempt: number }): string => `${run.runId}/${run.stepRunId ?? ""}/${run.attempt}`;
+
+/**
+ * Where to look when a tool fails often: an MCP tool (`mcp__<server>__<tool>`) at its server and the tools allowed on it;
+ * a kernel tool (read, ls, grep, find, shell, git, …) in the run, where the workspace guard refuses what lies outside
+ * the job's workspace.
+ */
+export function toolAdvice(tool: string): string {
+  if (tool.startsWith("mcp__")) return `Check the MCP server ${tool.split("__")[1] ?? ""}, or the tools allowed on it (Settings → MCP servers).`;
+  return "It is a kernel tool: most failures are calls the workspace guard refused (paths outside the job's workspace) or commands that failed inside the job. Open a failed attempt's run and read its console.";
+}
 
 export interface Attention {
   id: string;
@@ -290,7 +308,7 @@ export function attentionOf(summary: SummaryLike): Attention[] {
   }
   for (const tool of summary.tools) {
     if (tool.calls >= 5 && tool.errors / tool.calls >= 0.2) {
-      items.push({ id: `tool:${tool.tool}`, tone: "orange", title: `${tool.tool} fails in ${Math.round((tool.errors / tool.calls) * 100)}% of its calls`, detail: `${tool.errors} of ${tool.calls} calls failed. Check the server, or the allowed tools of an MCP server.` });
+      items.push({ id: `tool:${tool.tool}`, tone: "orange", title: `${tool.tool} fails in ${Math.round((tool.errors / tool.calls) * 100)}% of its calls`, detail: `${tool.errors} of ${tool.calls} calls failed. ${toolAdvice(tool.tool)}` });
     }
   }
   if (totals.jobs >= 5 && totals.compactions / totals.jobs >= 0.5) {

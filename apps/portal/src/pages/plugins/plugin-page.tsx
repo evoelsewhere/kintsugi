@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs } from "@/components/ui/tabs";
 import { COMPONENT_KINDS, type PluginDetail, pluginsApi } from "@/lib/api/plugins";
 import { CommandBoard, PipelineBoard, WorkflowLegend } from "./workflow-board";
+import { stageCommand } from "@/lib/stage-command";
 import { useLoader } from "@/lib/use-loader";
 
 type Tab = "overview" | "files";
@@ -80,13 +81,13 @@ function Overview({ plugin, onOpenFile }: { plugin: PluginDetail; onOpenFile: (p
             <h2 className="text-[14px] font-medium text-text">How it works</h2>
             <p className="text-[12px] text-text-muted">The commands in order, linked where one writes what the next reads. Pick a command to see it end to end; click a box to open its file.</p>
           </div>
-          <PipelineBoard flows={plugin.flows} pipeline={plugin.pipeline} selected={command} onSelect={setCommand} />
+          <PipelineBoard flows={plugin.flows} pipeline={plugin.pipeline} selected={command} onSelect={setCommand} plugin={plugin.name} />
           {flow === undefined ? null : (
             <div className="flex flex-col gap-2">
               <p className="text-[13px] text-text-secondary">
-                <span className="font-mono text-text">/{flow.command}</span> — {flow.description}
+                <span className="font-mono text-text">/{stageCommand({ audience: flow.audience, command: flow.command, plugin: plugin.name })}</span> — {flow.description}
               </p>
-              <CommandBoard flow={flow} onOpenFile={onOpenFile} />
+              <CommandBoard flow={flow} onOpenFile={onOpenFile} plugin={plugin.name} />
               <WorkflowLegend />
             </div>
           )}

@@ -7,6 +7,7 @@ import { describeSyncError, type GitServerKind } from "@kintsugi/domain";
 import type { Pool } from "pg";
 import { getPool, type Queryable, withTransaction } from "#common/db/pool.js";
 import { readSecret, type SecretTable, secretExists, storeSecret } from "#common/db/secret-store.js";
+import { shownSyncStatus } from "#common/domain/repository-sync.js";
 import type {
   GitAccess,
   GitAuthType,
@@ -197,7 +198,8 @@ function toRepository(row: RepositoryRow): GitRepositoryRecord {
     serverId: row.server_id,
     url: row.url,
     ...(row.default_branch === null ? {} : { defaultBranch: row.default_branch }),
-    syncStatus: row.sync_status,
+    // A repository with no commit yet is shown as empty, not as a sync error.
+    syncStatus: shownSyncStatus(row.sync_status, row.last_error),
     ...(row.last_commit === null ? {} : { lastCommit: row.last_commit }),
     ...(row.last_synced_at === null ? {} : { lastSyncedAt: row.last_synced_at.toISOString() }),
     // Git's message for the known failures (an empty repository) is said plainly.

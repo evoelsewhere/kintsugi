@@ -56,9 +56,15 @@ export interface UnderstandResultsTabProps {
   onOpenCatalog: () => void;
   /** Opens the Runs tab. */
   onOpenRuns: () => void;
+  /** Rebuilds the generated views from the understood items. */
+  onRebuild?: () => void;
+  /** Why a rebuild cannot start now; undefined when it can. */
+  rebuildDisabled?: string | undefined;
 }
 
-export default function UnderstandResultsTab({ project, application, catalog, version, runs, onOpenCatalog, onOpenRuns }: UnderstandResultsTabProps): React.JSX.Element {
+export default function UnderstandResultsTab({ project, application, catalog, version, runs, onOpenCatalog, onOpenRuns, onRebuild, rebuildDisabled }: UnderstandResultsTabProps): React.JSX.Element {
+  // Understood items without views: the rebuild after a merge did not run or failed; the work is there.
+  const understood = catalog?.counts.understood ?? 0;
   const [params, setParams] = useSearchParams();
   const requested = params.get("view");
   const view: ViewId = isView(requested) ? requested : "understand";
@@ -110,7 +116,24 @@ export default function UnderstandResultsTab({ project, application, catalog, ve
 
       <Loaded loader={results} rows={6}>
           {(loaded) =>
-            loaded.empty && item === undefined ? (
+            loaded.empty && item === undefined && understood > 0 ? (
+              <Card>
+                <EmptyState
+                  icon={PackageOpen}
+                  title={`${understood} ${understood === 1 ? "item is" : "items are"} understood; the views are not built yet`}
+                  description="The views here are rebuilt from the understood items after each merge. That did not happen for these: rebuild them now."
+                  action={
+                    onRebuild === undefined ? undefined : (
+                      <Button size="small" variant="ghost" className="shadow-border" disabled={rebuildDisabled !== undefined} title={rebuildDisabled} onClick={onRebuild}>
+                        <RefreshCw className="size-3.5" />
+                        Rebuild generated views
+                      </Button>
+                    )
+                  }
+                />
+                {rebuildDisabled === undefined ? null : <p className="pb-3 text-center text-[12px] text-text-muted">{rebuildDisabled}</p>}
+              </Card>
+            ) : loaded.empty && item === undefined ? (
               <UnderstandFirstSteps
                 applicationName={application.name}
                 hasCatalog={catalog !== null}

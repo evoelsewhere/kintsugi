@@ -43,7 +43,7 @@ export function DesignSetsTab({
       <Card>
         <EmptyState
           title="No design sets yet"
-          description="Define the project's design sets in 01-standards/templates/ of the document repo, one folder per set with a set.md and a template per document. The starter template has a basic, a detail, an API and a test design to copy and change."
+          description="Define the project's design sets in 01-standards/templates/ of the document repo, one folder per set with a set.md and a template per document. Copy one of the starter template's sets and change it."
           action={<span className="text-[12px] text-text-muted">Guide: docs/guides/define-design-templates.md</span>}
         />
       </Card>

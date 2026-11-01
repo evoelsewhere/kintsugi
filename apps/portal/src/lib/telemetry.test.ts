@@ -14,6 +14,7 @@ import {
   formatRate,
   formatTokens,
   isRunFilter,
+  jobError,
   matchesRunFilter,
   pickRun,
   problemKeys,
@@ -142,6 +143,16 @@ describe("buildTrace", () => {
     expect(spanDetail(by("s5"))).toBe("timeout");
     expect(spanDetail(by("s6"))).toBe("90K → 20K tokens");
   });
+
+  it("says a limit the job reached in plain words, and any other job error as it is", () => {
+    const job = (outcome: string, error: string): TraceSpan => span({ spanId: "j", name: "kintsugi.job", status: "error", error, attributes: { turns: 80, outcome } });
+    expect(spanDetail(job("max-turns", "stopped after 80 turn(s)"))).toBe(
+      "turns 80 · The agent stopped at the turn limit of 80 turns per job before it finished; raise Turns per job in Settings → Sandbox & Agent, or narrow the task. Detail: max-turns: stopped after 80 turn(s)",
+    );
+    expect(spanDetail(job("error", "boom"))).toBe("turns 80 · boom");
+    expect(jobError("timeout", "timed out after 900s")).toMatch(/^The agent stopped at the time limit of 15 min per job/);
+    expect(jobError("timeout", "stalled: no activity from the model for 300s")).toBe("stalled: no activity from the model for 300s");
+  });
 });
 
 describe("sumUsage", () => {
@@ -218,6 +229,15 @@ describe("attentionOf", () => {
   it("flags a tool that fails often and jobs that mostly compact", () => {
     const items = attentionOf({ ...quiet, totals: { ...quiet.totals, compactions: 6 }, tools: [{ tool: "mcp__tracker__search", calls: 10, errors: 3 }, { tool: "read", calls: 100, errors: 1 }] });
     expect(items.map((item) => item.id)).toEqual(["tool:mcp__tracker__search", "compacting"]);
+  });
+
+  it("points a failing MCP tool at its server, and a failing kernel tool at the run", () => {
+    const [mcp, kernel] = attentionOf({ ...quiet, tools: [{ tool: "mcp__tracker__search", calls: 10, errors: 3 }, { tool: "ls", calls: 30, errors: 8 }] });
+    expect(mcp?.detail).toBe("3 of 10 calls failed. Check the MCP server tracker, or the tools allowed on it (Settings → MCP servers).");
+    expect(kernel?.title).toBe("ls fails in 27% of its calls");
+    expect(kernel?.detail).toContain("kernel tool");
+    expect(kernel?.detail).toContain("workspace guard");
+    expect(kernel?.detail).not.toContain("MCP");
   });
 });
 

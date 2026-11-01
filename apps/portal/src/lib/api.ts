@@ -44,8 +44,11 @@ export class ApiError extends Error {
   }
 }
 
-/** What to tell a person when the API cannot be reached at all. */
+/** What to tell a person when the API cannot be reached at all (sign-in, where it may be a setup problem). */
 export const API_UNREACHABLE_MESSAGE = "Kintsugi's API is not reachable. Check that it is running (and the portal's KINTSUGI_API_URL).";
+
+/** What every other request says when the API did not answer: a network error or a gateway error page of a proxy. */
+export const API_DID_NOT_ANSWER_MESSAGE = "Kintsugi's API did not answer. Try again in a moment.";
 
 /** Whether an error means the API itself could not be reached (rather than an answer from it). */
 export function isApiUnreachable(error: unknown): boolean {
@@ -69,7 +72,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   } catch (networkError) {
     // An aborted request is the caller's own doing; anything else is the network.
     if (networkError instanceof DOMException && networkError.name === "AbortError") throw networkError;
-    throw new ApiError(0, { ...failureBody(path, 0, "Network error"), message: API_UNREACHABLE_MESSAGE }, true);
+    throw unanswered(path, 0, "Network error");
   }
   const body = (await response.json().catch(() => null)) as ApiSuccess<T> | ApiErrorBody | null;
 
@@ -91,7 +94,14 @@ const GATEWAY_STATUSES = new Set([502, 503, 504]);
 
 /** An error answer that is not the API's envelope: a gateway status means the API was not reached. */
 function failureOf(path: string, response: Response): ApiError {
-  return new ApiError(response.status, failureBody(path, response.status, response.statusText), GATEWAY_STATUSES.has(response.status));
+  if (GATEWAY_STATUSES.has(response.status)) return unanswered(path, response.status, response.statusText);
+  return new ApiError(response.status, failureBody(path, response.status, response.statusText), false);
+}
+
+/** The API did not answer: one message for a person, the request in the console for whoever looks into it. */
+function unanswered(path: string, status: number, error: string): ApiError {
+  console.warn(`Kintsugi API did not answer ${path}${status === 0 ? "" : ` (${status} ${error})`}`);
+  return new ApiError(status, { ...failureBody(path, status, error), message: API_DID_NOT_ANSWER_MESSAGE }, true);
 }
 
 function failureBody(path: string, status: number, error: string): ApiErrorBody {

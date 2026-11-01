@@ -10,6 +10,7 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { Select, type SelectOption } from "@/components/ui/select";
+import { SkeletonRows } from "@/components/ui/skeleton";
 import { StatusDot } from "@/components/ui/status-dot";
 import { useToast } from "@/components/ui/toast";
 import { permissionsOf } from "@/lib/access";
@@ -60,6 +61,8 @@ export function MembersTable({ onManageRoles }: MembersTableProps): React.JSX.El
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [roles, setRoles] = useState<RoleRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
+  /** Whether a first answer came: until then the lists are unknown, not empty. */
+  const [loaded, setLoaded] = useState(false);
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -80,6 +83,7 @@ export function MembersTable({ onManageRoles }: MembersTableProps): React.JSX.El
       const [userList, roleList] = await Promise.all([identityApi.users(), identityApi.roles()]);
       setUsers(userList);
       setRoles(roleList);
+      setLoaded(true);
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : String(loadError));
@@ -224,64 +228,74 @@ export function MembersTable({ onManageRoles }: MembersTableProps): React.JSX.El
         </div>
       </div>
 
-      <MembersSummary users={users} roles={roles} />
+      {loaded ? <MembersSummary users={users} roles={roles} /> : null}
 
-      {error === null ? null : <p className="text-[13px] text-[var(--ds-status-red)]">{error}</p>}
+      {error === null ? null : (
+        <p role="alert" className="text-[13px] text-[var(--ds-status-red)]">
+          {error}
+        </p>
+      )}
 
       {/* Members table */}
-      <div className="shadow-border overflow-hidden rounded-xl">
-        <div className="hidden grid-cols-[1.2fr_1fr_1.4fr_5.5rem_auto] gap-3 px-4 py-2 text-[11px] tracking-wider text-text-muted uppercase sm:grid">
-          <span>Member</span>
-          <span>Username</span>
-          <span>Roles</span>
-          <span className="text-right">Permissions</span>
-          <span className="w-20" />
-        </div>
-        {filtered.map((user, index) => (
-          <div
-            key={user.id}
-            className={cn(
-              "grid grid-cols-1 items-center gap-2 px-4 py-2.5 sm:grid-cols-[1.2fr_1fr_1.4fr_5.5rem_auto] sm:gap-3",
-              index > 0 && "[box-shadow:0_-1px_0_rgba(0,0,0,0.06)]",
-            )}
-          >
-            <div className="min-w-0">
-              <p className="truncate text-[13px] text-text">{user.displayName || user.username}</p>
-              <p className="truncate text-[11px] text-text-muted">{user.email || "—"}</p>
-            </div>
-            <div className="flex items-center gap-1.5 text-[13px] text-text-secondary">
-              <StatusDot tone={user.enabled ? "green" : "orange"} />
-              {user.username}
-            </div>
-            <div className="flex flex-wrap items-center gap-1">
-              {user.roleIds.map((id) => (
-                <span key={id} className="rounded-[var(--geist-pill-radius)] bg-recessed px-1.5 py-0.5 text-[11px] text-text-secondary">
-                  {roleLabel(id)}
-                </span>
-              ))}
-            </div>
-            <span className="text-[12px] text-text-secondary tabular-nums sm:text-right" title="Distinct permissions through all of the member's roles">
-              {permissionsOf(user, roles).size}
-            </span>
-            <div className="flex items-center gap-1">
-              <Button size="small" variant="ghost" onClick={() => openEdit(user)}>
-                <Settings2 className="size-4" />
-                Edit
-              </Button>
-              <Button size="icon" variant="danger" aria-label={`Remove ${user.username}`} onClick={() => setRemoveTarget(user)}>
-                <Trash2 className="size-4" />
-              </Button>
-            </div>
+      {!loaded ? (
+        error === null ? (
+          <SkeletonRows rows={4} className="rounded-xl px-4 py-3 shadow-border" />
+        ) : null
+      ) : (
+        <div className="shadow-border overflow-hidden rounded-xl">
+          <div className="hidden grid-cols-[1.2fr_1fr_1.4fr_5.5rem_auto] gap-3 px-4 py-2 text-[11px] tracking-wider text-text-muted uppercase sm:grid">
+            <span>Member</span>
+            <span>Username</span>
+            <span>Roles</span>
+            <span className="text-right">Permissions</span>
+            <span className="w-20" />
           </div>
-        ))}
-        {filtered.length === 0 ? (
-          <p className="px-4 py-8 text-center text-[13px] text-text-secondary">
-            {users.length === 0 ? "No members yet." : "No members match the filters."}
-          </p>
-        ) : null}
-      </div>
+          {filtered.map((user, index) => (
+            <div
+              key={user.id}
+              className={cn(
+                "grid grid-cols-1 items-center gap-2 px-4 py-2.5 sm:grid-cols-[1.2fr_1fr_1.4fr_5.5rem_auto] sm:gap-3",
+                index > 0 && "[box-shadow:0_-1px_0_rgba(0,0,0,0.06)]",
+              )}
+            >
+              <div className="min-w-0">
+                <p className="truncate text-[13px] text-text">{user.displayName || user.username}</p>
+                <p className="truncate text-[11px] text-text-muted">{user.email || "—"}</p>
+              </div>
+              <div className="flex items-center gap-1.5 text-[13px] text-text-secondary">
+                <StatusDot tone={user.enabled ? "green" : "orange"} />
+                {user.username}
+              </div>
+              <div className="flex flex-wrap items-center gap-1">
+                {user.roleIds.map((id) => (
+                  <span key={id} className="rounded-[var(--geist-pill-radius)] bg-recessed px-1.5 py-0.5 text-[11px] text-text-secondary">
+                    {roleLabel(id)}
+                  </span>
+                ))}
+              </div>
+              <span className="text-[12px] text-text-secondary tabular-nums sm:text-right" title="Distinct permissions through all of the member's roles">
+                {permissionsOf(user, roles).size}
+              </span>
+              <div className="flex items-center gap-1">
+                <Button size="small" variant="ghost" onClick={() => openEdit(user)}>
+                  <Settings2 className="size-4" />
+                  Edit
+                </Button>
+                <Button size="icon" variant="danger" aria-label={`Remove ${user.username}`} onClick={() => setRemoveTarget(user)}>
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
+            </div>
+          ))}
+          {filtered.length === 0 ? (
+            <p className="px-4 py-8 text-center text-[13px] text-text-secondary">
+              {users.length === 0 ? "No members yet." : "No members match the filters."}
+            </p>
+          ) : null}
+        </div>
+      )}
 
-      <AccessOverview users={users} roles={roles} />
+      {loaded ? <AccessOverview users={users} roles={roles} /> : null}
 
       {/* Create / edit member */}
       <Modal

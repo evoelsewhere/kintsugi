@@ -24,7 +24,7 @@ kintsugi.yaml                  project manifest (repositories, unit kinds, pipel
   01-legacy/                   the old system (P1): the assessment, the catalog, the understanding plan
     <module>/<unit>/           what is known about a unit
   02-modern/                   the new system (P2-P4): requirements.md, design.md, _design/<set>/
-    <module>/<unit>/           the unit's card, its design and its task pack
+    <module>/<unit>/           the unit's card and its design (a task pack is planned)
   _generated/                  read models rebuilt after a merge
 plugins/                       P3: project-authored plugins only
 ```
@@ -43,7 +43,7 @@ migrated; both halves of its application use the same `<module>/<unit>` path:
 10-applications/<app>/02-modern/<module>/<unit>/
   README.md                    the unit's card: identity, kind, source → target, wave, state, waived design files
   <set>/                       the unit's documents of one design set (screen/, api/, batch-job/, test/, ...)
-  task.md                      the task pack a member implements from
+  task.md                      planned: the unit's task pack, to implement from
 ```
 
 The unit id is always the full `<app>/<module>/<unit>`; `<unit>` in a path is the last segment.

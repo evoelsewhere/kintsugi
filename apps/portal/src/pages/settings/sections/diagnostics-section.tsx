@@ -9,9 +9,9 @@ import { APP_VERSION } from "@/lib/app-info";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusDot, type StatusTone } from "@/components/ui/status-dot";
-import { formatRelative } from "@/lib/format";
+import { formatDateTime, formatRelative } from "@/lib/format";
 import { useHealth } from "@/lib/use-health";
-import { workerVerdict } from "@/lib/worker-health";
+import { activeJobsOnLiveWorkers, workerVerdict } from "@/lib/worker-health";
 
 interface Row {
   label: string;
@@ -36,8 +36,7 @@ function RowList({ rows }: { rows: Row[] }): React.JSX.Element {
 /** The worker rows: its state, last heartbeat, the jobs it runs and the depth of its queues. */
 function workerRows(worker: WorkerHealth, workers: WorkerStatus[]): Row[] {
   const verdict = workerVerdict(worker);
-  const running = workers.filter((entry) => entry.state === "up");
-  const activeJobs = running.reduce((total, entry) => total + entry.activeJobs, 0);
+  const activeJobs = activeJobsOnLiveWorkers(workers);
   const queued = worker.queues === null ? undefined : worker.queues.reduce((total, queue) => total + queue.queued, 0);
   return [
     { label: "Worker", value: verdict.label, tone: verdict.tone },
@@ -71,7 +70,7 @@ export function DiagnosticsSection({ onNavigate }: { onNavigate?: () => void }):
     { label: "API", value: health === "up" ? "up" : health === "down" ? "unreachable" : "checking…", tone: health === "up" ? "green" : health === "down" ? "red" : "orange" },
     { label: "Service", value: info?.service ?? "—", tone: "muted" },
     { label: "API version", value: build === undefined ? "—" : `${build.version} (${build.commitShort})`, tone: "muted" },
-    { label: "Reported at", value: info?.at ?? "—", tone: "muted" },
+    { label: "Reported at", value: info?.at === undefined ? "—" : formatDateTime(info.at), tone: "muted" },
     { label: "Database", value: "Postgres (schema per domain)", tone: "muted" },
     { label: "Portal", value: APP_VERSION, tone: "muted" },
   ];

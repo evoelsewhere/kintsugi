@@ -10,10 +10,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { StatusDot } from "@/components/ui/status-dot";
 import { useToast } from "@/components/ui/toast";
 import { type SandboxSettingsView, sandboxApi } from "@/lib/api/sandbox";
 import { errorText } from "@/lib/format";
-import { type SandboxForm, type SandboxNumberField, defaultLabel, defaultValue, formProblems, isUnchanged, toForm, toSettings } from "@/lib/sandbox-form";
+import { type FieldNames, type SandboxForm, type SandboxNumberField, agentLimitsOff, defaultLabel, defaultValue, fieldProblems, footerStatus, formProblems, isUnchanged, toForm, toSettings } from "@/lib/sandbox-form";
+import { useUnsavedChanges } from "../unsaved-changes";
 
 interface FieldSpec {
   id: SandboxNumberField;
@@ -85,6 +87,12 @@ const GROUPS: GroupSpec[] = [
   },
 ];
 
+/** Each field's label and unit, so a problem names the field as the form does. */
+const NAMES: FieldNames = Object.fromEntries(GROUPS.flatMap((group) => group.fields.map((field) => [field.id, { label: field.label, unit: field.unit }])));
+
+/** "A", "A and B", "A, B and C". */
+const listed = (names: readonly string[]): string => (names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`);
+
 export function SandboxSection(): React.JSX.Element {
   const [stored, setStored] = useState<SandboxSettingsView | null>(null);
   const [form, setForm] = useState<SandboxForm | null>(null);
@@ -110,7 +118,11 @@ export function SandboxSection(): React.JSX.Element {
   }, [load]);
 
   const problems = form === null ? [] : formProblems(form);
+  const limitsOff = form === null ? [] : agentLimitsOff(form);
   const changed = form !== null && stored !== null && !isUnchanged(form, stored);
+  useUnsavedChanges(changed);
+  const shown = form === null || !changed ? { fields: {}, other: [] } : fieldProblems(form, NAMES);
+  const fieldErrors: Partial<Record<SandboxNumberField, string>> = shown.fields;
 
   async function save(): Promise<void> {
     const settings = form === null ? undefined : toSettings(form);
@@ -128,31 +140,41 @@ export function SandboxSection(): React.JSX.Element {
     }
   }
 
-  const row = (spec: FieldSpec): React.JSX.Element => (
-    <div key={spec.id} className="grid items-start gap-x-6 gap-y-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_11rem]">
-      <div className="min-w-0">
-        <label htmlFor={`sandbox-${spec.id}`} className="text-[13px] font-medium text-text">
-          {spec.label}
-        </label>
-        <p className="mt-0.5 text-[12px] text-text-muted">{spec.hint}</p>
-        <p className="mt-0.5 text-[12px] text-text-muted">Default: {defaultLabel(spec.id, spec.unit, spec.zero)}.</p>
+  const row = (spec: FieldSpec): React.JSX.Element => {
+    const error = fieldErrors[spec.id];
+    return (
+      <div key={spec.id} className="grid items-start gap-x-6 gap-y-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_11rem]">
+        <div className="min-w-0">
+          <label htmlFor={`sandbox-${spec.id}`} className="text-[13px] font-medium text-text">
+            {spec.label}
+          </label>
+          <p className="mt-0.5 text-[12px] text-text-muted">{spec.hint}</p>
+          <p className="mt-0.5 text-[12px] text-text-muted">Default: {defaultLabel(spec.id, spec.unit, spec.zero)}.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Input
+            id={`sandbox-${spec.id}`}
+            type="number"
+            inputMode="decimal"
+            min={spec.min ?? 0}
+            {...(spec.step === undefined ? {} : { step: spec.step })}
+            placeholder={defaultValue(spec.id)}
+            value={form?.[spec.id] ?? ""}
+            disabled={form === null}
+            aria-invalid={error === undefined ? undefined : true}
+            aria-describedby={error === undefined ? undefined : `sandbox-${spec.id}-error`}
+            onChange={(event) => setForm((current) => (current === null ? current : { ...current, [spec.id]: event.target.value }))}
+          />
+          <span className="w-10 shrink-0 text-[12px] text-text-muted">{spec.unit}</span>
+        </div>
+        {error === undefined ? null : (
+          <p id={`sandbox-${spec.id}-error`} className="text-[12px] text-[var(--ds-status-red)] sm:col-span-2">
+            {error}
+          </p>
+        )}
       </div>
-      <div className="flex items-center gap-2">
-        <Input
-          id={`sandbox-${spec.id}`}
-          type="number"
-          inputMode="decimal"
-          min={spec.min ?? 0}
-          {...(spec.step === undefined ? {} : { step: spec.step })}
-          placeholder={defaultValue(spec.id)}
-          value={form?.[spec.id] ?? ""}
-          disabled={form === null}
-          onChange={(event) => setForm((current) => (current === null ? current : { ...current, [spec.id]: event.target.value }))}
-        />
-        <span className="w-10 shrink-0 text-[12px] text-text-muted">{spec.unit}</span>
-      </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="flex max-w-3xl flex-col gap-4">
@@ -175,6 +197,19 @@ export function SandboxSection(): React.JSX.Element {
                   {group.title}
                 </CardTitle>
                 <CardDescription>{group.description}</CardDescription>
+                {group.id === "agent" ? (
+                  <div role="status">
+                    {limitsOff.length === 0 ? null : (
+                      <p className="mt-2 flex items-start gap-2 text-[12px] text-text">
+                        <StatusDot tone="orange" className="mt-1 size-2 shrink-0" />
+                        <span>
+                          {listed(limitsOff.map((id) => group.fields.find((field) => field.id === id)?.label ?? id))} {limitsOff.length === 1 ? "is" : "are"} 0, so off: a model that loops then runs, and bills, until someone cancels
+                          the job.
+                        </span>
+                      </p>
+                    )}
+                  </div>
+                ) : null}
               </div>
             </CardHeader>
             <CardContent className="flex flex-col divide-y divide-[rgba(0,0,0,0.08)] p-0 pb-1 dark:divide-[rgba(255,255,255,0.12)]">
@@ -198,9 +233,9 @@ export function SandboxSection(): React.JSX.Element {
         );
       })}
 
-      {problems.length > 0 && changed ? (
+      {shown.other.length > 0 ? (
         <ul className="list-disc pl-5 text-[12px] text-[var(--ds-status-red)]">
-          {problems.map((problem) => (
+          {shown.other.map((problem) => (
             <li key={problem}>{problem}</li>
           ))}
         </ul>
@@ -215,14 +250,15 @@ export function SandboxSection(): React.JSX.Element {
       )}
       {/* Full-bleed over the scroll area's padding and above the cards, so no heading shows through or beside it. */}
       <div className="sticky bottom-0 z-10 -mx-6 -mb-5 mt-2 flex items-center justify-between gap-2 bg-surface px-6 py-3 [box-shadow:0_-1px_0_0_rgba(0,0,0,0.08)] dark:[box-shadow:0_-1px_0_0_rgba(255,255,255,0.12)]">
-        <p className="text-[12px] text-text-muted">
-          {stored === null
-            ? loadError !== null
-              ? "Not loaded."
-              : "Loading…"
-            : stored.isDefault
-              ? "Nothing saved yet: the defaults shown under each field apply."
-              : `Set by ${stored.updatedBy ?? "an admin"}${stored.updatedAt === undefined ? "" : ` on ${new Date(stored.updatedAt).toLocaleString()}`}.`}
+        <p role="status" className={changed ? "text-[12px] font-medium text-text" : "text-[12px] text-text-muted"}>
+          {footerStatus({
+            changed,
+            loaded: stored !== null,
+            failed: loadError !== null,
+            isDefault: stored?.isDefault ?? false,
+            ...(stored?.updatedBy === undefined ? {} : { updatedBy: stored.updatedBy }),
+            ...(stored?.updatedAt === undefined ? {} : { updatedAt: stored.updatedAt }),
+          })}
         </p>
         <Button size="small" variant="solid" disabled={busy || !changed || problems.length > 0} onClick={() => void save()}>
           {busy ? "Saving…" : "Save"}

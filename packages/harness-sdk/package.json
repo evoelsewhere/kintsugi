@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@kintsugi/domain": "workspace:*",
+    "yaml": "^2.9.1",
     "zod": "^4.6.5"
   },
   "devDependencies": {

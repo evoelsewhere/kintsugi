@@ -6,6 +6,7 @@
 import { Activity, ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { stopReasonLabel } from "@kintsugi/domain";
 import { Loaded } from "@/components/loaded";
 import { CHART_COLOR } from "@/components/results/chart-colors";
 import { ShareBar } from "@/components/results/charts";
@@ -40,6 +41,7 @@ import {
   formatTokens,
   isRunFilter,
   isUsageMetric,
+  jobError,
   matchesRunFilter,
   pickRun,
   previousRange,
@@ -342,14 +344,14 @@ function RunsTable({ rows, onOpen, selected }: { rows: readonly TelemetryRun[]; 
       id: "outcome",
       header: "Outcome",
       cell: (run) => (
-        <span className="inline-flex items-center gap-1.5 whitespace-nowrap" title={run.error ?? undefined}>
+        <span className="inline-flex items-center gap-1.5 whitespace-nowrap" title={run.error === null ? undefined : jobError(run.outcome, run.error)}>
           <StatusDot tone={run.status === "ok" ? "green" : "red"} className="size-2" />
-          {run.outcome}
+          {stopReasonLabel(run.outcome)}
           {run.attempt > 1 ? <span className="text-text-muted"> · attempt {run.attempt}</span> : null}
         </span>
       ),
-      sort: (run) => run.outcome,
-      search: (run) => run.outcome,
+      sort: (run) => stopReasonLabel(run.outcome),
+      search: (run) => `${run.outcome} ${stopReasonLabel(run.outcome)}`,
     },
     { id: "turns", header: "Turns", cell: (run) => formatCount(run.turns), sort: (run) => run.turns, align: "right" },
     { id: "tokens", header: "Tokens", cell: (run) => formatTokens(run.inputTokens + run.outputTokens + run.cacheReadTokens + run.cacheWriteTokens), sort: (run) => run.inputTokens + run.outputTokens + run.cacheReadTokens + run.cacheWriteTokens, align: "right", title: "New input, output and cache tokens" },
@@ -415,7 +417,7 @@ function TraceBody({ run }: { run: TelemetryRun }): React.JSX.Element {
           </p>
         </div>
         <dl className="grid grid-cols-2 gap-x-5 gap-y-5 sm:grid-cols-3 xl:grid-cols-6">
-          <TraceMetric label="Outcome" value={run.outcome} hint={run.error ?? undefined} tone={run.status === "ok" ? "green" : "red"} />
+          <TraceMetric label="Outcome" value={stopReasonLabel(run.outcome)} hint={run.error === null ? undefined : jobError(run.outcome, run.error)} tone={run.status === "ok" ? "green" : "red"} />
           <TraceMetric label="Turns" value={formatCount(run.turns)} hint={formatMillis(run.durationMs)} />
           <TraceMetric label="Tokens" value={formatTokens(tokens)} hint={`in ${formatTokens(run.inputTokens)} · out ${formatTokens(run.outputTokens)}`} />
           <TraceMetric label="Cached" value={formatRate(cacheHitRate(run))} hint={`${formatTokens(run.cacheReadTokens)} read · ${formatTokens(run.cacheWriteTokens)} written`} />

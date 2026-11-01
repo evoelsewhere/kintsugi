@@ -21,7 +21,24 @@ const since = z.string().optional().describe("From this time on: 15m, 2h, 1d (be
 const runId = z.string().min(1).max(128).describe("The id of a run (a top-level job run, as `runs.list` shows it)");
 const limit = (max: number, fallback: number) => z.number().int().min(1).max(max).default(fallback);
 
-/** Statements `db.query` accepts: one select or with, nothing that changes or explains. */
+/**
+ * Names `db.query` refuses wherever they appear, strings included: the tables that hold secrets, credentials, sessions,
+ * password and token hashes, and the catalog views that show role passwords or sampled column values.
+ */
+const SECRET_TABLES = /(restricted_record|secret|credential|llm_provider|git_server|session|password|app_user|member_token|member_connection|refresh_token|token_hash|code_hash|pg_authid|pg_shadow|pg_user_mapping|pg_statistic|pg_stats)/i;
+/**
+ * Functions that run SQL text, read or list the server's files, reach other servers or change the server's state,
+ * including state a read-only transaction and its rollback do not undo (replication slots, session advisory locks,
+ * notifications, statistics resets, WAL).
+ */
+const FORBIDDEN_FUNCTIONS =
+  /\b(query_to_\w*|cursor_to_\w*|table_to_\w*|schema_to_\w*|database_to_\w*|ts_stat|ts_rewrite|pg_read_\w*|pg_ls_\w*|pg_stat_file|pg_file_\w*|pg_hba_file_rules|pg_ident_file_mappings|lo_\w*|dblink\w*|copy|set_config|pg_terminate_backend|pg_cancel_backend|pg_reload_conf|pg_rotate_logfile|pg_create_\w*_replication_slot|pg_copy_\w*_replication_slot|pg_drop_replication_slot|pg_replication_slot_advance|pg_replication_origin_\w*|pg_(?:try_)?advisory_\w*|pg_notify|pg_logical_emit_message|pg_stat_reset\w*|pg_switch_wal|pg_promote|pg_create_restore_point|pg_backup_\w*|pg_wal_replay_\w*|pg_log_backend_memory_contexts)\b/i;
+
+/**
+ * Statements `db.query` accepts: one select or with, nothing that changes or explains, no table that holds secrets, no
+ * Unicode-escaped name and no function that runs SQL text or reads the server. A best-effort filter over the text, not a
+ * security boundary (`docs/reference/debug-mcp.md`): the debug server is for development installations.
+ */
 export function checkStatement(sql: string): string {
   const text = sql.trim().replace(/;\s*$/, "");
   if (text === "") throw new Error("The statement is empty");
@@ -30,6 +47,10 @@ export function checkStatement(sql: string): string {
   if (/\b(insert|update|delete|drop|alter|create|truncate|grant|revoke|vacuum|call|do|set|reset|lock|listen|notify)\b/i.test(text.replace(/'[^']*'/g, "''"))) {
     throw new Error("The statement contains a keyword that changes things; this tool only reads");
   }
+  // U&"…" and U&'…' spell a name with escapes the checks below cannot read.
+  if (/u&["']/i.test(text)) throw new Error("The statement uses a Unicode-escaped name or string; write it plainly");
+  if (SECRET_TABLES.test(text)) throw new Error("The statement names a table that holds secrets, sessions or password and token hashes; this tool does not read them");
+  if (FORBIDDEN_FUNCTIONS.test(text)) throw new Error("The statement uses a function that runs SQL text, reads the server's files or changes the server; this tool does not run them");
   return text;
 }
 
@@ -165,7 +186,7 @@ export function debugTools(store: DebugStore, files: WorkspaceFiles): ReadonlyMa
     table: z.string().regex(/^[a-z_][a-z0-9_]*$/).optional(),
   }, async (args) => store.tables(args.schema, args.table));
 
-  tool("db.query", "One read-only select or with statement against the database (five seconds, at most 200 rows, long values cut). Tables that hold secrets and sessions are refused. Use `db.tables` to find the columns.", {
+  tool("db.query", "One read-only select or with statement against the database (five seconds, at most 200 rows, long values cut). Tables that hold secrets, sessions and password or token hashes, Unicode-escaped names and functions that run SQL text or read the server's files are refused; the filter is best effort, not a security boundary, so use this server on development installations only. Use `db.tables` to find the columns.", {
     sql: z.string().min(1).max(4000),
     limit: limit(200, 50),
   }, async (args) => store.query(checkStatement(args.sql), args.limit));

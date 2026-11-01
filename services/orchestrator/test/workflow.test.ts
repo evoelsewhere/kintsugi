@@ -78,3 +78,45 @@ it("checks the shared token budget again before starting a queued agent", async 
   expect(outcome.agents).toBe(1);
   expect(outcome.result).toEqual(["done", null, null]);
 });
+
+describe("harden-scan verification cap (T3-015)", () => {
+  const finding = (index: number, severity: string) => ({
+    cwe: "CWE-89",
+    severity,
+    confidence: "Medium",
+    source: `legacy/src/F${index}.java:${index + 1}`,
+    title: `Finding ${index}`,
+    exploitScenario: "x",
+    recommendedFix: "y",
+  });
+  const run = async (findings: ReturnType<typeof finding>[]) => {
+    const labels: string[] = [];
+    const outcome = await runWorkflow({
+      source: await loadWorkflow("harden-scan"),
+      args: { app: "billing", findings, classes: [] },
+      budgets: { maxAgents: 500, concurrency: 8 },
+      runAgent: async (_prompt, options) => {
+        labels.push(options.label ?? "");
+        return { result: { real: false, reason: "a false positive" }, tokens: 1 };
+      },
+      log: () => undefined,
+    });
+    return { labels, result: outcome.result as { refuted: { title: string }[]; unverified: { title: string; severity: string; unverifiedReason: string }[] } };
+  };
+
+  it("verifies at most 40 findings, the most severe first, and returns the rest unverified with the reason", async () => {
+    const findings = [...Array.from({ length: 30 }, (_, i) => finding(i, "Low")), ...Array.from({ length: 15 }, (_, i) => finding(30 + i, "High"))];
+    const { labels, result } = await run(findings);
+    expect(labels.filter((label) => label.startsWith("refute:"))).toHaveLength(40);
+    expect(result.refuted).toHaveLength(40);
+    expect(result.unverified).toHaveLength(5);
+    expect(result.unverified.every((f) => f.severity === "Low" && f.unverifiedReason.startsWith("over the verification cap"))).toBe(true);
+    expect(result.refuted.filter((f) => f.title.startsWith("Finding 3") || f.title.startsWith("Finding 4")).length).toBeGreaterThanOrEqual(15);
+  });
+
+  it("verifies every finding below the cap", async () => {
+    const { labels, result } = await run(Array.from({ length: 12 }, (_, i) => finding(i, "Medium")));
+    expect(labels.filter((label) => label.startsWith("refute:"))).toHaveLength(12);
+    expect(result.unverified).toEqual([]);
+  });
+});

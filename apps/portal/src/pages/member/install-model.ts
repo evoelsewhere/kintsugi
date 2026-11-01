@@ -109,6 +109,21 @@ export function safeMemberReturnTo(value: string | null): string {
   return `${url.pathname}${url.search}`;
 }
 
+/**
+ * Where sign-in returns to: a coding agent's authorization request as `safeMemberReturnTo` checks it, or any other path
+ * of this portal under the same checks (one leading slash, no backslash, no control character, same origin once
+ * parsed); its hash is dropped and anything else is the Overview.
+ */
+export function safeReturnTo(value: string | null): string {
+  if (value === null) return "/";
+  if (value.startsWith("/member/authorize")) return safeMemberReturnTo(value);
+  if (value.length > 2500 || !value.startsWith("/") || value.startsWith("//") || value.includes("\\") || hasControlCharacters(value)) return "/";
+  let url: URL;
+  try { url = new URL(value, "https://kintsugi.invalid"); } catch { return "/"; }
+  if (url.origin !== "https://kintsugi.invalid" || url.pathname === "/login") return "/";
+  return `${url.pathname}${url.search}`;
+}
+
 export function validatedAuthorizationRedirect(value: string, request: MemberAuthorizationRequest): string {
   const expected = new URL(request.redirectUri);
   let redirect: URL;

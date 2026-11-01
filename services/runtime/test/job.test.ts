@@ -99,3 +99,34 @@ describe("cost budget", () => {
     expect(aborted).toBe(true);
   });
 });
+
+describe("activity", () => {
+  // The launcher's idle watchdog reads lastActivityAt: a long tool call of the model is work, not a silent provider (T3-013).
+  it("counts a running tool call as activity, and a silent model after it as none", async () => {
+    let listener: ((event: AgentSessionEvent) => void) | undefined;
+    const seen: { during: number; after: number } = { during: 0, after: 0 };
+    const job = new KernelJob("job-1", jobSpec(workspace, agent([])), "0.0.0");
+    const session = {
+      subscribe: (next: (event: AgentSessionEvent) => void) => {
+        listener = next;
+        return () => undefined;
+      },
+      prompt: async () => {
+        listener?.({ type: "tool_execution_start", toolCallId: "call-1", toolName: "shell", args: { command: "make test" } } as AgentSessionEvent);
+        await sleep(400);
+        seen.during = Date.now() - job.lastActivityAt;
+        listener?.({ type: "tool_execution_end", toolCallId: "call-1", toolName: "shell", result: { content: [{ type: "text", text: "ok" }] }, isError: false } as unknown as AgentSessionEvent);
+        await sleep(400);
+        seen.after = Date.now() - job.lastActivityAt;
+        listener?.({ type: "message_end", message: { role: "assistant", stopReason: "stop" } } as unknown as AgentSessionEvent);
+      },
+      abort: async () => undefined,
+      getContextUsage: () => undefined,
+      dispose: () => undefined,
+    } as unknown as AgentSession;
+    await job.run(session, () => undefined);
+    expect(await job.done).toMatchObject({ type: "job.completed" });
+    expect(seen.during).toBeLessThan(100);
+    expect(seen.after).toBeGreaterThanOrEqual(350);
+  });
+});

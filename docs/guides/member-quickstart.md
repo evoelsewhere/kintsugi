@@ -73,7 +73,14 @@ kintsugi remove modernize --all
 kintsugi auth logout
 ```
 
-`auth logout` revokes the connection and removes the local credential. Access tokens stay in memory, rotating refresh credentials live in the operating system credential store, and profiles contain nonsecret configuration. Administrators can revoke connections in the portal.
+To take Kintsugi out of a client too, remove its connector plugin and that plugin's marketplace with the client's own commands; `kintsugi remove` leaves them in place. In Claude Code, `claude plugin list` shows the entry `kintsugi@<marketplace>`:
+
+```sh
+claude plugin uninstall --scope user kintsugi@<marketplace>
+claude plugin marketplace remove --scope user <marketplace>
+```
+
+Do this before deleting the CLI, or the client keeps starting an MCP server that no longer exists. `auth logout` revokes the connection and removes the local credential. Access tokens stay in memory, rotating refresh credentials live in the operating system credential store, and profiles contain nonsecret configuration. Administrators can revoke connections in the portal.
 
 ## Troubleshooting
 

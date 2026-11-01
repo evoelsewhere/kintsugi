@@ -2,6 +2,7 @@
 
 import { mcpHeaderValueProblem, MCP_SERVER_ID_PATTERN } from "@kintsugi/domain";
 import { z } from "zod";
+import { notReserved } from "#common/interface/dto.js";
 import type { RegisterMcpServer } from "../domain/mcp-server.js";
 
 const url = z
@@ -35,7 +36,8 @@ const fields = {
 };
 
 export const createMcpServerSchema = z
-  .object({ id: z.string().regex(MCP_SERVER_ID_PATTERN, "Lowercase letters, digits and dashes, starting with a letter (at most 41 characters)."), ...fields })
+  // `GET admin/mcp-servers/choices` is a route of its own.
+  .object({ id: notReserved(z.string().regex(MCP_SERVER_ID_PATTERN, "Lowercase letters, digits and dashes, starting with a letter (at most 41 characters)."), ["choices"]), ...fields })
   .superRefine((input, context) => {
     if (Object.values(input.headers).some((value) => value === null)) context.addIssue({ code: "custom", path: ["headers"], message: "Header values can only be null when keeping stored ones during a replacement." });
   });

@@ -57,19 +57,23 @@ export type RuleSet = {
   byFileBase: Map<string, Rule[]>
 }
 
+// A citation starts where a path can start, never inside a longer word (as citations.py): without the lookbehind every
+// character of a long word starts a match that scans to its end, and one long token blocks the API for minutes (T3-010).
 const CITATION =
-  /([A-Za-z0-9_][A-Za-z0-9_./-]*\.[A-Za-z][A-Za-z0-9]{0,7}):(\d+)(?:\s*[-–]\s*(\d+))?/g
+  /(?<![A-Za-z0-9_./-])([A-Za-z0-9_][A-Za-z0-9_./-]*\.[A-Za-z][A-Za-z0-9]{0,7}):(\d+)(?:\s*[-–]\s*(\d+))?/g
 
 /** `P0-052`, `RULE-001`, `BR-D7-09`: letters, optional segments (a domain), then the number; item-namespaced `SEC-invoicing.invoice-entry-03` (ADR-0033); or a citation-derived rule id `RULE-invoicing.invoice-entry-1a2b3c4d`, its hash suffix optionally carrying the name discriminator of two rules on one citation (ADR-0038). */
 const ID = '(?:RULE-[a-z0-9][a-z0-9-]*\\.[a-z0-9][a-z0-9-]*-(?:\\d+|[0-9a-f]{8}(?:-[a-z0-9][a-z0-9-]*)?)|SEC-[a-z0-9][a-z0-9-]*\\.[a-z0-9][a-z0-9-]*-\\d+|[A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*-\\d+[a-z]?)'
 
-const CARD_HEADING = new RegExp(`^#{3,4}\\s+(${ID})\\s*[·:\\-–—]\\s*(.+?)\\s*$`)
+// A title is matched to the end of the line and trimmed in code: `(.+?)\s*$` backtracks quadratically on a long run
+// of spaces (T3-011).
+const CARD_HEADING = new RegExp(`^#{3,4}\\s+(${ID})\\s*[·:\\-–—](.+)$`)
 
 /** Sections that describe or summarise the rules rather than hold them: a legend, a panel summary, appendices, provenance. */
 const SKIPPED_SECTION =
   /\b(?:index|appendix|open questions|rejected|refuted|retired|how to read|p0 confirmation|provenance)\b/i
 
-const DOMAIN_HEADING = /^##\s+(.+?)\s*$/
+const DOMAIN_HEADING = /^##\s(.+)$/
 
 const clean = (text: string) =>
   text
@@ -438,12 +442,12 @@ export function parseRules(text: string): RuleSet {
 
     if (card !== null) {
       close(index)
-      open = { id: card[1] ?? '', title: card[2] ?? '', start: index + 1, domain }
+      open = { id: card[1] ?? '', title: (card[2] ?? '').trim(), start: index + 1, domain }
 
       return
     }
 
-    const top = /^#\s+(.+?)\s*$/.exec(line)
+    const top = /^#\s(.+)$/.exec(line)
 
     if (top !== null) {
       close(index)

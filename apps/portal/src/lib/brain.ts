@@ -62,6 +62,18 @@ export function searchIntent(text: string): "lookup" | "grep" {
   return !/\s/.test(value) && (value.includes("/") || value.includes("#") || /\.md$/i.test(value)) ? "lookup" : "grep";
 }
 
+/** The length a text search takes (the API's brain_grep rule); a lookup by id or path takes up to 2000 characters. */
+export const BRAIN_SEARCH_MIN = 2;
+export const BRAIN_SEARCH_MAX = 200;
+
+/** Why the search box cannot search for `text` yet, in a person's words; undefined when it can. */
+export function searchProblem(text: string): string | undefined {
+  const length = text.trim().length;
+  if (length < BRAIN_SEARCH_MIN) return `Type at least ${BRAIN_SEARCH_MIN} characters to search the Brain.`;
+  if (length > BRAIN_SEARCH_MAX && searchIntent(text) === "grep") return `Search for at most ${BRAIN_SEARCH_MAX} characters: shorten the text.`;
+  return undefined;
+}
+
 /** The node a link inside a rendered document points to: its section when it names an anchor, else the document. */
 export function linkedNodeIds(path: string, anchor: string | undefined): string[] {
   return anchor === undefined || anchor === "" ? [path] : [`${path}#${anchor}`, path];

@@ -68,14 +68,48 @@ def one_line(value, limit=200):
     return docmd.clean_text(value, limit) if isinstance(value, str) else ''
 
 
-# A masked value that still shows its first characters (`AKIA****`, `'Pr0d****'`): a masked preview shows the kind and the
-# length of a credential only, never a character of it, since the first characters help to guess the rest.
-PARTIAL_MASK = re.compile(r'(?<![\w*])[A-Za-z0-9+/_.\-]{1,8}\*{2,}(?![\w*])')
+# A masked value that still shows some of its characters (`AKIA****`, `'Pr0d****'`, `****1234`, `ab****yz`, `AKIA••••`,
+# `AKIA...`): a masked preview shows the kind and the length of a credential only, never a character of it, since the
+# characters shown help to guess the rest. Values are the parts of the text between spaces, quotes and the punctuation
+# that separates a value from its name or its neighbours, so `password=***** (8 chars)` and `postgres://app:*****@db`
+# keep what is not secret.
+VALUE_SEPARATORS = re.compile(r'''(\s+|['"`:=@,;()\[\]{}<>|])''')
+MASK_RUN = re.compile('[*•●]+')
+EMPHASIS = re.compile(r'(\*{1,2})[^*•●]+\1')
+ELLIPSIS = re.compile(r'\.{3,}|…')
+SENTENCE_END = re.compile(r'(?<!\.)[.!?]$')
+
+
+def looks_secret(visible):
+    """Characters next to an ellipsis that look like part of a credential rather than a word: digits, symbols or capitals."""
+    return len(visible) >= 3 and (re.search(r'[0-9_+/=-]', visible) is not None or sum(ch.isupper() for ch in visible) > 1)
+
+
+def partly_masked(value):
+    if not value or EMPHASIS.fullmatch(value):
+        return False
+    runs = list(MASK_RUN.finditer(value))
+    visible = MASK_RUN.sub('', value)
+    if runs:
+        # A run at the end is a mask from two characters on (`hu**`); one at the start or in the middle from three, so
+        # `**kwargs` and `a**2` stay. Bullets are never code.
+        return visible != '' and any(len(run.group()) >= (2 if run.end() == len(value) or '*' not in run.group() else 3) for run in runs)
+    parts = ELLIPSIS.split(value)
+    return len(parts) > 1 and looks_secret(''.join(parts))
 
 
 def hide_partial_masks(text):
     """`text` with every partly masked value replaced by `*****`; the kind and length a model wrote next to it stay."""
-    return PARTIAL_MASK.sub('*****', text)
+    def scrub(part):
+        end = SENTENCE_END.search(part)
+        core, tail = (part[:end.start()], part[end.start():]) if end else (part, '')
+        return '*****' + tail if partly_masked(core) else part
+    return ''.join(scrub(part) for part in VALUE_SEPARATORS.split(text))
+
+
+def free_text(value, limit=200):
+    """A free-text field of a finding as the documents print it: one line, partly masked values hidden."""
+    return hide_partial_masks(one_line(value, limit))
 
 
 def render_findings(app, item_id, findings, reviewed, tools, dead):
@@ -91,7 +125,7 @@ def render_findings(app, item_id, findings, reviewed, tools, dead):
     ]
     if findings:
         doc.append(docmd.table(['ID', 'CWE', 'Severity', 'Confidence', 'Location', 'Title', 'Exploit scenario'], [
-            [finding['id'], one_line(finding.get('cwe'), 20), one_line(finding.get('severity'), 10), one_line(finding.get('confidence'), 10), f"`{one_line(finding.get('source'), 120).replace(chr(96), '')}`", one_line(finding.get('title')), one_line(finding.get('exploitScenario'))]
+            [finding['id'], one_line(finding.get('cwe'), 20), one_line(finding.get('severity'), 10), one_line(finding.get('confidence'), 10), f"`{one_line(finding.get('source'), 120).replace(chr(96), '')}`", free_text(finding.get('title')), free_text(finding.get('exploitScenario'))]
             for finding in findings
         ]))
     else:
@@ -100,7 +134,7 @@ def render_findings(app, item_id, findings, reviewed, tools, dead):
     if details:
         doc += ['## Details', '']
         for finding in details:
-            doc += [docmd.heading(3, finding['id']), '', docmd.field_lines({'recommended fix': one_line(finding.get('recommendedFix'), 600), 'evidence (masked)': hide_partial_masks(one_line(finding.get('maskedEvidence'), 300))})]
+            doc += [docmd.heading(3, finding['id']), '', docmd.field_lines({'recommended fix': free_text(finding.get('recommendedFix'), 600), 'evidence (masked)': free_text(finding.get('maskedEvidence'), 300)})]
     if tools:
         doc += ['## Tools not run', '', docmd.table(['Tool', 'Why'], [[one_line(tool.get('tool') or tool.get('name'), 80), one_line(tool.get('reason') or tool.get('why'), 200)] for tool in tools])]
     if dead:

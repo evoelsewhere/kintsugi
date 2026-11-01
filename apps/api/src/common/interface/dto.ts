@@ -10,6 +10,14 @@ export const idSchema = z
   .max(IDENTIFIER_MAX_LENGTH)
   .regex(IDENTIFIER_PATTERN, "must be lowercase kebab-case");
 
+/**
+ * A name a resource cannot take because a fixed route beside it has it (`GET /admin/agents/context` would answer
+ * instead of an agent `context`); refused with a 400 that names the word.
+ */
+export function notReserved<S extends z.ZodType<string>>(schema: S, reserved: readonly string[]) {
+  return schema.refine((name) => !reserved.includes(name), { message: `This name is used by the API itself (${reserved.join(", ")}); choose another` });
+}
+
 /** Short free-text field used by the skeleton DTOs. */
 export function stringField(): z.ZodString;
 export function stringField(optional: false): z.ZodString;

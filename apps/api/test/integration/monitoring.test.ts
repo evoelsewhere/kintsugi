@@ -3,6 +3,7 @@
 // document writes across projects, the restricted record list (metadata only, restricted.read)
 // and the pipeline stages. Rows the worker would write are inserted directly.
 
+import { EMPTY_REPOSITORY_MESSAGE } from "@kintsugi/domain";
 import { encryptSecret } from "@kintsugi/secrets";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { hasDatabase } from "../support/database.js";
@@ -58,6 +59,8 @@ describe.skipIf(!hasDatabase)("monitoring and cross-project reads (integration)"
       ["alpha-legacy", "ready", null],
       ["beta-docs", "ready", null],
       ["broken", "error", "authentication failed"],
+      // A new target repository nobody pushed to yet: not a sync error.
+      ["empty-target", "error", EMPTY_REPOSITORY_MESSAGE],
       ["fresh", "pending", null],
     ];
     for (const [id, status, error] of repositories) {
@@ -143,12 +146,13 @@ describe.skipIf(!hasDatabase)("monitoring and cross-project reads (integration)"
       pendingWrites: 1,
       pullRequests7d: 1,
       failedWrites24h: 1,
-      repositories: 5,
+      repositories: 6,
       repositoriesWithErrors: 1,
-      // broken and fresh are registered and linked to no project.
-      repositoriesUnlinked: 2,
+      // broken, empty-target and fresh are registered and linked to no project.
+      repositoriesUnlinked: 3,
       repositoriesWithErrorsUnlinked: 1,
       repositoriesNotReady: 1,
+      repositoriesEmpty: 1,
       pendingGates: 1,
     });
   });
@@ -249,7 +253,8 @@ describe.skipIf(!hasDatabase)("monitoring and cross-project reads (integration)"
     const response = await admin.get<Array<{ id: string; serverId: string; syncStatus: string; lastError?: string; projects: Array<Record<string, string>> }>>("/monitoring/repositories");
     expect(response.status).toBe(200);
     const repositories = response.body.data!;
-    expect(repositories.map((repository) => repository.id)).toEqual(["alpha-docs", "alpha-legacy", "beta-docs", "broken", "fresh"]);
+    expect(repositories.map((repository) => repository.id)).toEqual(["alpha-docs", "alpha-legacy", "beta-docs", "broken", "empty-target", "fresh"]);
+    expect(repositories.find((repository) => repository.id === "empty-target")).toMatchObject({ syncStatus: "empty", lastError: EMPTY_REPOSITORY_MESSAGE });
     expect(repositories.find((repository) => repository.id === "alpha-docs")).toMatchObject({ serverId: "github", syncStatus: "ready", projects: [{ projectId: "alpha", role: "document" }] });
     expect(repositories.find((repository) => repository.id === "alpha-legacy")?.projects).toEqual([{ projectId: "alpha", role: "legacy", applicationId: "web" }]);
     expect(repositories.find((repository) => repository.id === "broken")).toMatchObject({ syncStatus: "error", lastError: "authentication failed", projects: [] });

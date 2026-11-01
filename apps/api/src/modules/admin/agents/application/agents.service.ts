@@ -45,6 +45,8 @@ import type {
 } from "../domain/agent.js";
 import { AgentCatalog, AgentRepository } from "../domain/agent.repository.js";
 
+/** Names a custom agent cannot take: `GET admin/agents/context` is a route of its own. */
+const ROUTE_NAMES = ["context"];
 /** Import limits: a package is a handful of Markdown files. */
 const MAX_IMPORT_FILES = 100;
 const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
@@ -243,6 +245,7 @@ export class AgentsService {
     if (installation.builtin.agents.some((entry) => entry.manifest.name === agent.manifest.name)) {
       throw new ConflictException(`The name ${agent.manifest.name} is reserved by a built-in agent; choose another name`);
     }
+    if (ROUTE_NAMES.includes(agent.manifest.name)) throw new BadRequestException(`The name ${agent.manifest.name} is used by the API itself; choose another name`);
     const problems = this.#validate(agent, installation);
     if (problems.length > 0) throw problemsError(problems);
     return agent;

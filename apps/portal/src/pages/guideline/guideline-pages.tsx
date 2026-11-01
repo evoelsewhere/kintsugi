@@ -59,7 +59,7 @@ function PackageList({ context }: { context: GuideContext }): React.JSX.Element 
   if (context.assets.length === 0) return <P>This installation has no CLI release yet; an administrator builds it with the image.</P>;
   return (
     <>
-      <P>Version {context.version}. Download the package for your platform, check its SHA-256, unpack it, and put its <Code>bin</Code> folder on your PATH.</P>
+      <P>Version {context.version}. Download the package for your platform, check its SHA-256, unpack it, and put its <Code>bin</Code> folder on your PATH. On Windows keep both <Code>kintsugi.cmd</Code> and <Code>kintsugi</Code> in it: Git Bash, where Claude Code runs a plugin&apos;s hooks, starts the second.</P>
       <Table
         head={["Platform", "Package", "SHA-256"]}
         rows={context.assets.map((asset) => [
@@ -123,15 +123,21 @@ const install: GuidePage = {
       </List>
       <H2>Install</H2>
       <InstallCommands context={context} />
-      <P>The installer downloads the package for your platform from this installation, checks it against a SHA-256 that came with the installer, and unpacks it into <Code>~/.kintsugi</Code> (<Code>%LOCALAPPDATA%\Kintsugi</Code> on Windows). It changes nothing else, except that on Windows it adds its <Code>bin</Code> folder to your user PATH. On macOS and Linux it prints the line to add to your shell profile instead of editing it.</P>
+      <P>The installer downloads the package for your platform from this installation, checks it against a SHA-256 that came with the installer, and unpacks it into <Code>~/.kintsugi</Code> (<Code>%LOCALAPPDATA%\Kintsugi</Code> on Windows). It changes nothing else, except that on Windows it adds its <Code>bin</Code> folder to your user PATH, with <Code>kintsugi.cmd</Code> and a <Code>kintsugi</Code> script for Git Bash, where Claude Code runs a plugin&apos;s hooks. On macOS and Linux it prints the line to add to your shell profile instead of editing it.</P>
       <CodeBlock label="Verify" code={"# Open a new terminal, then:\nkintsugi --version"} />
       <H2>Manual download</H2>
       <PackageList context={context} />
       <H2>Update</H2>
       <P>Run the same installer again. It replaces the CLI in place, so the plugins you generated for your AI client keep working. Set <Code>KINTSUGI_HOME</Code> before running it to install somewhere else.</P>
       <H2>Remove</H2>
-      <CodeBlock label="Remove" code={"# Remove the plugins from your AI client first\nkintsugi remove modernize --all\n\n# Then delete the folder\nrm -rf ~/.kintsugi"} />
-      <P>On Windows, delete <Code>%LOCALAPPDATA%\Kintsugi</Code> and remove its <Code>bin</Code> folder from your user PATH.</P>
+      <P>Take Kintsugi out of each AI client first: the plugins you installed, then the Kintsugi connector and its marketplace, which <Code>kintsugi remove</Code> leaves in place. Your client lists them: <Code>claude plugin list</Code> (or the plugin list of Codex or Copilot) shows each <Code>kintsugi@kintsugi-…</Code> entry, and the part after the <Code>@</Code> is its marketplace.</P>
+      <CodeBlock
+        label="Remove"
+        code={
+          "# 1. The plugins you installed from Kintsugi\nkintsugi remove modernize --all\n\n# 2. The connector and its marketplace, per client\n# Claude Code\nclaude plugin uninstall --scope user kintsugi@<marketplace>\nclaude plugin marketplace remove --scope user <marketplace>\n# Codex\ncodex plugin remove kintsugi@<marketplace>\ncodex plugin marketplace remove <marketplace>\n# GitHub Copilot CLI\ncopilot plugin uninstall kintsugi\ncopilot plugin marketplace remove <marketplace>\n\n# 3. The CLI and your profile (macOS: ~/Library/Application Support/Kintsugi)\nrm -rf ~/.kintsugi ~/.config/kintsugi"
+        }
+      />
+      <P>On Windows, delete <Code>%LOCALAPPDATA%\Kintsugi</Code> (the CLI) and <Code>%APPDATA%\Kintsugi</Code> (your profile), and remove the CLI&apos;s <Code>bin</Code> folder from your user PATH. Removing the CLI before the connector leaves your AI client starting an MCP server that no longer exists.</P>
       <H2>Troubleshooting</H2>
       <Table
         head={["You see", "What to do"]}
@@ -157,7 +163,7 @@ const connect: GuidePage = {
       <P>A connection links your AI clients to one project. It is made of a small Kintsugi package in each client (it starts a local program that talks to Kintsugi), and your sign-in, which is separate and revocable.</P>
       <H2>Sign in, then init</H2>
       <CodeBlock label="Set up" code={"kintsugi login my-project\nkintsugi init"} />
-      <P><Code>init</Code> finds the clients on your machine and asks two things: <strong>which clients</strong> to set up, and whether to install <strong>globally</strong> (every workspace) or only for <strong>the current workspace</strong>. It then installs the Kintsugi connector in each. Skip the questions with flags:</P>
+      <P><Code>init</Code> finds the clients on your machine and asks two things: <strong>which clients</strong> to set up, and whether to install <strong>globally</strong> (every workspace) or only for <strong>the current workspace</strong>. It then installs the Kintsugi connector in each. Set up one project per client and scope: two projects of one installation in the same client at the same scope install two plugins with the same name, and the client does not keep them apart (the member CLI reference, Current limits). Skip the questions with flags:</P>
       <CodeBlock label="Without questions" code={"# Every client found, for all workspaces\nkintsugi init --all\n\n# Claude Code only, for this folder only\nkintsugi init -H claude --scope workspace"} />
       <Table
         head={["Client", "Set up by init", "Notes"]}

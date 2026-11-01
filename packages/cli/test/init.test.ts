@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { runCli } from "../src/cli.js";
+import { ClientVersionTimeout } from "../src/client-version.js";
 import { summarizeTranscript } from "../src/commands/activity-hook.js";
 import { parseChoice } from "../src/prompt.js";
 import { stableProjectProfileId } from "../src/profile.js";
@@ -60,6 +61,23 @@ describe("kintsugi init", () => {
     expect(scope).toEqual({ scope: "local", workspace: state.root });
     expect(state.runClientCommand.mock.calls.map((call) => (call as unknown[])[1] as string[])[0]).toEqual(["plugin", "marketplace", "add", "--scope", "local", artifactRoot(state.root, "claude-code", PROFILE)]);
     expect(state.stdout.join("")).toContain(`workspace ${state.root}`);
+  });
+
+  it("asks each client for its version once, and says which client did not answer in time instead of dropping it", async () => {
+    const { state } = await initialised();
+    const probes: string[] = [];
+    (state.deps as { getClientVersion: (target: string) => Promise<string> }).getClientVersion = async (target) => {
+      probes.push(target);
+      if (target === "codex") throw new ClientVersionTimeout("codex", 20_000);
+      if (target === "claude") return "2.1.260";
+      throw new Error("not installed");
+    };
+    expect(await runCli(["init", "shop", "--all"], state.deps), state.stderr.join("")).toBe(0);
+    expect(probes.filter((target) => target === "claude")).toHaveLength(1);
+    expect(probes.filter((target) => target === "codex")).toHaveLength(1);
+    expect(state.stdout.join("")).toContain("✓ Claude Code — global");
+    expect(state.stderr.join("")).toMatch(/codex did not answer its version check within 20 s/);
+    expect(state.stderr.join("")).toContain("kintsugi init -H codex");
   });
 
   it("shares one profile between login and init, so signing in and setting up meet", async () => {
@@ -149,6 +167,26 @@ describe("the activity hook of a plugin command", () => {
       inputTokens: 14, outputTokens: 10, cacheReadTokens: 100, cacheCreationTokens: 20, turns: 2, durationSeconds: 120, model: "claude-opus-5-5",
     });
     expect(summarizeTranscript("", "modernize", "build")).toMatchObject({ turns: 0, inputTokens: 0 });
+  });
+
+  it("counts from the member's invocation, not from a tool result that mentions the command", () => {
+    const toolResult = (text: string, timestamp: string) => JSON.stringify({ type: "user", timestamp, message: { role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content: text }] } });
+    const session = (middle: string) => [
+      user("chat", "2026-10-24T10:00:00Z"),
+      user("<command-name>/modernize:build</command-name> billing/tax shop", "2026-10-24T10:00:10Z"),
+      assistant("msg_a", { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 100, cache_creation_input_tokens: 50 }, "2026-10-24T10:00:20Z"),
+      assistant("msg_a", { input_tokens: 10, output_tokens: 7, cache_read_input_tokens: 100, cache_creation_input_tokens: 50 }, "2026-10-24T10:00:21Z"),
+      middle,
+      assistant("msg_b", { input_tokens: 20, output_tokens: 30, cache_read_input_tokens: 200 }, "2026-10-24T10:01:10Z"),
+    ].join("\n");
+    const typed = summarizeTranscript(session(user("ok", "2026-10-24T10:00:40Z")), "modernize", "build");
+    expect(typed).toEqual({ inputTokens: 30, outputTokens: 37, cacheReadTokens: 300, cacheCreationTokens: 50, turns: 2, durationSeconds: 60, model: "claude-opus-5-5" });
+    expect(summarizeTranscript(session(toolResult("Guideline: run /modernize:build <module>/<unit> to build a unit.", "2026-10-24T10:00:40Z")), "modernize", "build")).toEqual(typed);
+    // A second invocation typed by the member starts the count again.
+    const again = summarizeTranscript(session(user("/modernize:build billing/ledger", "2026-10-24T10:00:40Z")), "modernize", "build");
+    expect(again).toMatchObject({ turns: 1, inputTokens: 20, durationSeconds: 30 });
+    // A plugin whose client name differs (underscores become hyphens) is found under that name too.
+    expect(summarizeTranscript(session(user("ok", "2026-10-24T10:00:40Z")).replace("/modernize:build", "/my-plugin:build"), "my_plugin", "build")).toEqual(typed);
   });
 
   it("records one factual note with numbers and names only, and never fails the session", async () => {

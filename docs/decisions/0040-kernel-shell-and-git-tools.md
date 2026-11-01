@@ -77,3 +77,21 @@ shaped the design:
   and checkouts; writes are confined to a clone under `out/`/scratch instead.
 - **A separate `tree` tool.** Rejected: `ls` is the tool models reach for when looking around;
   tree is a shape of the same answer, so it is a parameter.
+
+## Implementation notes
+
+- **Diff drivers (2026-11-01).** `diff.external` and `GIT_EXTERNAL_DIFF` are no longer set to an empty value: git
+  takes a set but empty value as an external diff command named "" and every patch failed. `diff`, `log` and `show`
+  run with `--no-ext-diff --no-textconv` instead. `diff --no-index`, and a diff whose path arguments leave the
+  workspace (git compares them as plain files then), are refused.
+- **Escapes closed (2026-11-01).** The option checks also catch a command-starting short option bundled or with its
+  value attached (`clone -qu <cmd>`, `-u<cmd>`, `rebase -x<cmd>`, `grep -O<cmd>`), and git refuses abbreviated long
+  options (`GIT_TEST_DISALLOW_ABBREVIATED_OPTIONS`, so `--upload=<cmd>` cannot stand for `--upload-pack`). `config`
+  only reads (`--get`, `--get-all`, `--get-regexp`, `--list`; no `--file`): configuration names commands (filter
+  drivers, `core.sshCommand`, `gpg.program`). `init`, `worktree` and the target of `clone` must be in the writable
+  area, the source of a local clone in the workspace; `--reference`, `--separate-git-dir`, `--template` and
+  `--open-files-in-pager` are refused, and `write`/`edit` do not reach inside a `.git` folder.
+- **Transports (2026-11-01).** A local repository (a path or a `file:` URL) that `fetch`, `pull`, `remote` or
+  `submodule` reach must be inside the job workspace, and one that `push` reaches must be in the writable area: a
+  remote named by the command, or every configured remote when none is named, is read from the repository's
+  configuration first, and for `submodule` the URLs of `.gitmodules` too. Network remotes are unchanged.

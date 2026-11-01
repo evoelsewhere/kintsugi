@@ -8,6 +8,7 @@ import { Injectable } from "@nestjs/common";
 import { describeSyncError } from "@kintsugi/domain";
 import type { Pool } from "pg";
 import { getPool } from "#common/db/pool.js";
+import { EMPTY_REPOSITORY_ERROR, shownSyncStatus } from "#common/domain/repository-sync.js";
 import type {
   MonitoredRepository,
   OverviewCounts,
@@ -49,6 +50,8 @@ interface WriteRow {
 
 /** A recorded sync error in plain words for the known Git failures (an empty repository). */
 const syncError = (raw: string | null): string | null => (raw === null ? null : describeSyncError(raw));
+/** SQL: a sync error that is not an empty repository (the worker records the plain message, ADR-0025). */
+const REAL_SYNC_ERROR = "sync_status = 'error' and last_error is distinct from $1";
 
 const optional = <K extends string, V>(key: K, value: V | null): { [P in K]?: V } => (value === null ? {} : ({ [key]: value } as { [P in K]?: V }));
 
@@ -106,6 +109,7 @@ export class PgMonitoringReadModel extends MonitoringReadModel {
       repositories_unlinked: number;
       repositories_with_errors_unlinked: number;
       repositories_not_ready: number;
+      repositories_empty: number;
       pending_gates: number;
     }>(`
       select (select count(*)::int from admin.project) as projects,
@@ -113,7 +117,8 @@ export class PgMonitoringReadModel extends MonitoringReadModel {
              (select count(*)::int from governance.gate where status = 'pending') as pending_gates,
              runs.queued_runs, runs.running_runs, runs.failed_runs_24h, runs.succeeded_runs_24h,
              writes.pending_writes, writes.pull_requests_7d, writes.failed_writes_24h,
-             repos.repositories, repos.repositories_with_errors, repos.repositories_unlinked, repos.repositories_with_errors_unlinked, repos.repositories_not_ready
+             repos.repositories, repos.repositories_with_errors, repos.repositories_unlinked, repos.repositories_with_errors_unlinked, repos.repositories_not_ready,
+             repos.repositories_empty
         from (select count(*) filter (where status = 'queued')::int as queued_runs,
                      count(*) filter (where status = 'running')::int as running_runs,
                      count(*) filter (where status = 'failed' and coalesce(finished_at, created_at) >= now() - interval '24 hours')::int as failed_runs_24h,
@@ -124,12 +129,13 @@ export class PgMonitoringReadModel extends MonitoringReadModel {
                      count(*) filter (where status = 'failed' and updated_at >= now() - interval '24 hours')::int as failed_writes_24h
                 from workflow.document_write) writes,
              (select count(*)::int as repositories,
-                     count(*) filter (where sync_status = 'error')::int as repositories_with_errors,
+                     count(*) filter (where ${REAL_SYNC_ERROR})::int as repositories_with_errors,
                      count(*) filter (where not linked)::int as repositories_unlinked,
-                     count(*) filter (where sync_status = 'error' and not linked)::int as repositories_with_errors_unlinked,
-                     count(*) filter (where sync_status in ('pending', 'cloning'))::int as repositories_not_ready
-                from (select g.sync_status, exists (select 1 from admin.project_repository l where l.repository_id = g.id) as linked
-                        from admin.git_repository g) registered) repos`);
+                     count(*) filter (where ${REAL_SYNC_ERROR} and not linked)::int as repositories_with_errors_unlinked,
+                     count(*) filter (where sync_status in ('pending', 'cloning'))::int as repositories_not_ready,
+                     count(*) filter (where sync_status = 'error' and last_error = $1)::int as repositories_empty
+                from (select g.sync_status, g.last_error, exists (select 1 from admin.project_repository l where l.repository_id = g.id) as linked
+                        from admin.git_repository g) registered) repos`, [EMPTY_REPOSITORY_ERROR]);
     const row = result.rows[0]!;
     return {
       projects: row.projects,
@@ -147,6 +153,7 @@ export class PgMonitoringReadModel extends MonitoringReadModel {
       repositoriesUnlinked: row.repositories_unlinked,
       repositoriesWithErrorsUnlinked: row.repositories_with_errors_unlinked,
       repositoriesNotReady: row.repositories_not_ready,
+      repositoriesEmpty: row.repositories_empty,
       pendingGates: row.pending_gates,
     };
   }
@@ -230,8 +237,8 @@ export class PgMonitoringReadModel extends MonitoringReadModel {
   async repositoryErrors(limit: number): Promise<RepositoryErrorRecord[]> {
     const result = await this.#pool.query<{ id: string; last_error: string | null; at: Date }>(
       `select id, last_error, greatest(updated_at, last_synced_at) as at from admin.git_repository
-        where sync_status = 'error' order by at desc, id limit $1`,
-      [limit],
+        where ${REAL_SYNC_ERROR} order by at desc, id limit $2`,
+      [EMPTY_REPOSITORY_ERROR, limit],
     );
     return result.rows.map((row) => ({ id: row.id, ...optional("lastError", syncError(row.last_error)), at: row.at.toISOString() }));
   }
@@ -285,7 +292,7 @@ export class PgMonitoringReadModel extends MonitoringReadModel {
       serverId: row.server_id,
       url: row.url,
       ...optional("defaultBranch", row.default_branch),
-      syncStatus: row.sync_status,
+      syncStatus: shownSyncStatus(row.sync_status, row.last_error),
       ...optional("lastCommit", row.last_commit),
       ...optional("lastSyncedAt", row.last_synced_at?.toISOString() ?? null),
       ...optional("lastError", syncError(row.last_error)),

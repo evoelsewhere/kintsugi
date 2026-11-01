@@ -210,6 +210,7 @@ describe.skipIf(!hasDatabase)("agents (integration)", () => {
 
   it("resolves a project's bindings and binds every runtime agent of a project at once", async () => {
     expect((await admin.get("/admin/agents?projectId=Not_An_Id")).status).toBe(400);
+    await app.db.query("insert into admin.project (id, name) values ('billing', 'Billing'), ('payroll', 'Payroll')");
     expect((await admin.request("POST", "/admin/llm-providers/model-bindings/apply", { body: { projectId: "billing", provider: "missing", model: "m1" } })).status).toBe(404);
     await admin.request("PUT", "/admin/llm-providers/model-bindings", { body: [{ agent: "legacy-analyst", provider: "gateway", model: "m1" }] });
     const applied = await admin.request("POST", "/admin/llm-providers/model-bindings/apply", { body: { projectId: "billing", provider: "gateway", model: "m1", thinking: "low" } });
@@ -222,6 +223,28 @@ describe.skipIf(!hasDatabase)("agents (integration)", () => {
     expect(scoped.body.data!.find((agent) => agent.name === "legacy-analyst")!.binding).toEqual({ provider: "gateway", model: "m1", thinking: "low", scope: "project" });
     const installation = await admin.get<Summary[]>("/admin/agents?projectId=payroll");
     expect(installation.body.data!.find((agent) => agent.name === "legacy-analyst")!.binding).toEqual({ provider: "gateway", model: "m1", scope: "installation" });
+    await admin.request("PUT", "/admin/llm-providers/model-bindings", { body: [] });
+  });
+
+  it("binds only projects that exist and forgets a deleted project's bindings", async () => {
+    await app.db.query("insert into admin.project (id, name) values ('ledger', 'Ledger') on conflict do nothing");
+    const ghost = await admin.request("POST", "/admin/llm-providers/model-bindings/apply", { body: { projectId: "ghost", provider: "gateway", model: "m1" } });
+    expect(ghost.status).toBe(404);
+    const put = await admin.request("PUT", "/admin/llm-providers/model-bindings", { body: [{ agent: "legacy-analyst", projectId: "ghost", provider: "gateway", model: "m1" }] });
+    expect(put.status).toBe(404);
+    expect((await admin.get<unknown[]>("/admin/llm-providers/model-bindings")).body.data).toEqual([]);
+
+    await admin.request("PUT", "/admin/llm-providers/model-bindings", { body: [{ agent: "legacy-analyst", provider: "gateway", model: "m1" }] });
+    expect((await admin.request("POST", "/admin/llm-providers/model-bindings/apply", { body: { projectId: "ledger", provider: "gateway", model: "m1" } })).status).toBe(200);
+    expect((await admin.request("DELETE", "/admin/projects/ledger")).status).toBe(204);
+    const kept = await admin.get<Array<{ agent: string; projectId?: string }>>("/admin/llm-providers/model-bindings");
+    expect(kept.body.data).toEqual([expect.objectContaining({ agent: "legacy-analyst", provider: "gateway", model: "m1" })]);
+    expect(kept.body.data!.some((binding) => binding.projectId === "ledger")).toBe(false);
+
+    // A project created again under the same id starts without the old project's models.
+    await app.db.query("insert into admin.project (id, name) values ('ledger', 'Ledger again')");
+    const fresh = await admin.get<Summary[]>("/admin/agents?projectId=ledger");
+    expect(fresh.body.data!.find((agent) => agent.name === "legacy-analyst")!.binding).toEqual({ provider: "gateway", model: "m1", scope: "installation" });
     await admin.request("PUT", "/admin/llm-providers/model-bindings", { body: [] });
   });
 });

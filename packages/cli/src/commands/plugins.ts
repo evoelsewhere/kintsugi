@@ -6,6 +6,7 @@ import { applyClientSetup, clientVersionStatus, planClientSetup, readPluginState
 import type { CliDeps } from "../cli.js";
 import { registerInstallCommands, registerPluginDistribution } from "./plugin-distribution.js";
 import { HARNESS_TARGETS, clientPluginVersion, normalizeHarness, runInstallSteps, safeProfileDirectory, writeHarnessScope } from "./plugin-native.js";
+import { clientUnavailable, clientVersionTimedOut, rememberClientVersions } from "../client-version.js";
 import { oauthFor } from "../oauth.js";
 import { CliError, defaultInstallationUrl, isProfileId, profileConfigPathFromEnv, stableProjectProfileId, validateInstallationUrl } from "../profile.js";
 
@@ -107,8 +108,8 @@ export async function runSetup(deps: CliDeps, options: SetupOptions): Promise<vo
     let clientVersion: string;
     try {
       clientVersion = await deps.getClientVersion(target);
-    } catch {
-      throw new CliError("PLUGIN_CLIENT_UNAVAILABLE", `Could not read the ${target} CLI version; install it or make it available on PATH`);
+    } catch (error) {
+      throw clientUnavailable(target, error);
     }
     const artifactRoot = join(dirname(profileConfigPath), "plugins", "connector", safeProfileDirectory(profileId), harness);
     // Clients update often; another version than the one this release was probed with goes ahead, with a note (ADR-0072).
@@ -169,12 +170,20 @@ interface ClientChoice {
   detail: string;
 }
 
-/** The AI clients on this machine that Kintsugi can set up, found by asking each for its version. */
+/**
+ * The AI clients on this machine that Kintsugi can set up, found by asking each for its version. A client that is there but
+ * did not answer in time is left out with a note, never silently.
+ */
 async function findClients(deps: CliDeps): Promise<{ found: ClientChoice[]; unsupported: string[] }> {
   const found: ClientChoice[] = [];
   const unsupported: string[] = [];
   const version = async (target: "claude" | "codex" | "copilot"): Promise<string | undefined> => {
-    try { return await deps.getClientVersion?.(target); } catch { return undefined; }
+    try {
+      return await deps.getClientVersion?.(target);
+    } catch (error) {
+      if (clientVersionTimedOut(error)) deps.stderr.write(`Note: ${error.message}, so it is not set up now; run kintsugi init -H ${target} to try it again.\n`);
+      return undefined;
+    }
   };
   const claude = await version("claude");
   if (claude !== undefined) found.push({ id: "claude", label: "Claude Code", detail: claude });
@@ -201,6 +210,8 @@ async function runInit(deps: CliDeps, command: Command, projectArgument: string 
   const project = projectArgument ?? options.project ?? active?.projectId;
   if (project === undefined) throw new CliError("PROJECT_REQUIRED", "Say which project: kintsugi login <project>, then kintsugi init");
   const profileId = options.profile ?? stableProjectProfileId(baseUrl, project);
+  // Finding the clients and setting each up both read its version: ask each client once.
+  if (deps.getClientVersion !== undefined) deps = { ...deps, getClientVersion: rememberClientVersions(deps.getClientVersion) };
 
   // Which clients.
   const { found, unsupported } = await findClients(deps);

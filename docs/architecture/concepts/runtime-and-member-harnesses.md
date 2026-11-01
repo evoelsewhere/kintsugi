@@ -50,7 +50,7 @@ Once a unit's design is merged, the member implements and tests it on their own 
 
 | Runtime need | What pi offers |
 |---|---|
-| Embeddable, TypeScript | SDK createAgentSession, used by a Node runner inside the job container |
+| Embeddable, TypeScript | SDK createAgentSession, used by the kernel in a child process of the worker, one per job |
 | Kintsugi-specific tools | Extensions via registerTool; skills in the Agent Skills format |
 | Control and audit | Tool-call and tool-result hooks |
 | Multi-provider, on-prem capable | Anthropic, OpenAI, Azure OpenAI, Bedrock, Vertex and OpenAI-compatible providers |

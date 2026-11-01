@@ -2,7 +2,7 @@
 
 - Written by: people, members in their harness, and the Kintsugi runtime (`understand` proposes the unit cards, `design` writes the design sets)
 - Serves: P2-P4, the development of the new system; input to gate G2
-- Auto-commit: each unit's `README.md` and `task.md`; everything else arrives as pull requests
+- Auto-commit: each unit's `README.md` (and `task.md`, planned); everything else arrives as pull requests
 
 At the top, what is specific to this application:
 
@@ -18,7 +18,7 @@ Below it, one folder per unit, `<module>/<unit>/`:
 | --- | --- |
 | `README.md` | the unit's card: identity, kind, source → target, wave, state, the design files it waives |
 | `<set>/` | the unit's documents of one design set of `01-standards/templates/` (for example `screen/`, `api/`, `batch-job/`, `test/`) |
-| `task.md` | the task pack a member implements from |
+| `task.md` | planned: the unit's task pack, to implement from |
 
 Module notes sit beside the module's units (`<module>/TRANSFORMATION_NOTES.md`). What is known about
 a unit is on the same `<module>/<unit>/` path in `../01-legacy/`.

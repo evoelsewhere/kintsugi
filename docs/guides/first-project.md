@@ -4,7 +4,7 @@ This walkthrough takes an installed Kintsugi portal from an empty project to a r
 
 ## 1. Prepare the installation
 
-An installation administrator first [deploys the Docker images](docker-images.md), adds a [runtime LLM provider](configure-llm-providers.md), and configures Git servers and credentials in Settings → Git. Grant users the installation permissions and explicit Project Access they need. A role alone does not give a member access to every project.
+An installation administrator first [deploys the Docker images](docker-images.md), adds a [runtime LLM provider](configure-llm-providers.md), and configures Git servers and credentials in Settings → Git. Grant users the installation permissions they need, and Project Access to the members who will use the project from the CLI or an AI client or record stage decisions. In the portal every signed-in member reads every project ([what Project Access governs](../architecture/concepts/identity-and-access.md#authorization)).
 
 Use a small application or a representative pilot. Have its legacy source, an empty document repository and scaffolded target repositories ready. The runtime reads source; members implement in the target repositories with their own Git credentials.
 

@@ -14,6 +14,27 @@ export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
+/**
+ * A gate that lets at most `max` tasks run at once; the others wait their turn, in order. A task that fails frees its
+ * place like one that succeeds.
+ */
+export function limitConcurrency(max: number): <T>(task: () => Promise<T>) => Promise<T> {
+  let running = 0;
+  const waiting: Array<() => void> = [];
+  return async <T>(task: () => Promise<T>): Promise<T> => {
+    if (running >= max) await new Promise<void>((resolve) => waiting.push(resolve));
+    else running++;
+    try {
+      return await task();
+    } finally {
+      // The place passes to the next waiting task, or is given back.
+      const next = waiting.shift();
+      if (next !== undefined) next();
+      else running--;
+    }
+  };
+}
+
 export interface RetryOptions {
   attempts?: number;
   delayMs?: number;

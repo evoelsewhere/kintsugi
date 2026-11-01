@@ -6,6 +6,7 @@ import { BarList, Donut, Heatmap, ShareBar } from "@/components/results/charts";
 import { CHART_COLOR } from "@/components/results/chart-colors";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { Finding, HardenResults, Severity } from "@/lib/api/documents";
+import { coverageSignal, injectionSignal } from "@/lib/security-signals";
 import { CONFIDENCE_COLOR, countBy, formatCount, SEVERITY_COLOR, segmentsOf } from "./results-format";
 import { Distribution, MoreLink, Section, Signal, SignalList } from "./results-parts";
 
@@ -28,7 +29,8 @@ export function HardenOverview({ results, onFindings, onCoverage }: { results: H
   const grid = LEVELS.map((level) => CONFIDENCES.map((confidence) => findings.filter((finding) => finding.severity === level && finding.confidence === confidence).length));
   const shownLevels = LEVELS.filter((_, index) => (grid[index] ?? []).some((value) => value > 0));
   const shownGrid = grid.filter((row) => row.some((value) => value > 0));
-  const injection = report.injectionFlags !== undefined && !/^none\b/i.test(report.injectionFlags);
+  const coverage = coverageSignal(report);
+  const injection = injectionSignal(report);
   const toolsNotRun = report.toolsNotRunItems?.length ?? report.toolsNotRun?.rows.length ?? 0;
   return (
     <div className="flex flex-col gap-4">
@@ -43,9 +45,9 @@ export function HardenOverview({ results, onFindings, onCoverage }: { results: H
         <Section title="Signals" description="Coverage and side effects of the run." className="lg:col-span-2" actions={<MoreLink label="Coverage & tools" onClick={onCoverage} />}>
           <SignalList>
             <Signal label="Refuted by verification" value={formatCount(report.refutedCount ?? 0)} note="false positives" />
-            <Signal label="Coverage" value={report.coverageComplete || report.coverageGaps.length === 0 ? "Complete" : `${report.coverageGaps.length} gaps`} />
+            <Signal label="Coverage" value={coverage === "complete" ? "Complete" : coverage === "gaps" ? `${report.coverageGaps.length} gaps` : "Not reported"} />
             <Signal label="Tools not run" value={formatCount(toolsNotRun)} />
-            <Signal label="Instruction-shaped text" value={injection ? "Found" : "None"} />
+            <Signal label="Instruction-shaped text" value={injection === "found" ? "Found" : injection === "none" ? "None" : "Not reported"} />
             <Signal label="Remediation patch" value={results.patch === undefined ? "None" : `${results.patch.hunks} hunks`} note={results.patch === undefined ? undefined : `${results.patch.files.length} files`} />
             <Signal label="Restricted records" value={formatCount(results.restrictedRecords)} note="never committed" />
           </SignalList>

@@ -90,10 +90,36 @@ const SECRETISH = [
 ];
 const OPAQUE_SECRETISH = /[A-Za-z0-9+_=-]{32,}/g;
 
-/** Masks credential-shaped text: failure reasons may quote a script's stderr. */
+const CREDENTIAL_WORD = /password|passwd|pwd|secret|token|api[_-]?key|credential|identified\s+by/i;
+const QUOTED = /(["'`])([^"'`\n]{0,400})\1/g;
+const NAME_CHAR = /[A-Za-z0-9_.-]/;
+
+/**
+ * A line that names a credential, in any language (`01 WS-DB-PASSWORD PIC X(14) VALUE '…'`, `"password", "…"`,
+ * `db.password = …`, `IDENTIFIED BY …`, a grep pattern holding a value the model read): every quoted literal goes but a
+ * quoted name (`"password"`), then everything after the name that holds the word. A log line may lose more than its
+ * secret; it must not keep the secret (T2-027).
+ */
+function redactCredentialLine(line: string): string {
+  if (!CREDENTIAL_WORD.test(line)) return line;
+  const unquoted = line.replace(QUOTED, (whole: string, _quote: string, inner: string) => (/^[A-Za-z0-9_.-]+$/.test(inner) && CREDENTIAL_WORD.test(inner) ? whole : "[redacted]"));
+  const found = CREDENTIAL_WORD.exec(unquoted);
+  if (found === null) return unquoted;
+  let end = found.index + found[0].length;
+  while (end < unquoted.length && NAME_CHAR.test(unquoted[end]!)) end += 1;
+  if (unquoted[end] === '"' || unquoted[end] === "'") end += 1;
+  return unquoted.slice(end).trim() === "" ? unquoted : `${unquoted.slice(0, end)} [redacted]`;
+}
+
+/**
+ * Masks credential-shaped text: failure reasons may quote a script's stderr, and run events quote what a model read
+ * and searched for. With `opaqueTokens: false` it is the narrower detector of what must not leave the installation (a
+ * web query, a memory quote): only the shapes of SECRETISH.
+ */
 export function redactText(text: string, options: { opaqueTokens?: boolean } = {}): string {
-  const patterns = options.opaqueTokens === false ? SECRETISH : [...SECRETISH, OPAQUE_SECRETISH];
-  return patterns.reduce((result, pattern) => result.replace(pattern, "[redacted]"), text);
+  if (options.opaqueTokens === false) return SECRETISH.reduce((result, pattern) => result.replace(pattern, "[redacted]"), text);
+  const lines = text.split("\n").map(redactCredentialLine).join("\n");
+  return [...SECRETISH, OPAQUE_SECRETISH].reduce((result, pattern) => result.replace(pattern, "[redacted]"), lines);
 }
 
 /** The last non-empty line of a process stream, redacted and bounded. */

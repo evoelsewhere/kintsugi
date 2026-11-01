@@ -250,7 +250,10 @@ describe("agents service", () => {
 
 /** The provider registry's storage: one provider ("gateway") and the bindings, in memory. */
 class MemoryProviders extends LlmProviderRepository {
-  constructor(public bindings: AgentModelBinding[]) {
+  constructor(
+    public bindings: AgentModelBinding[],
+    public projects = new Set(["billing", "payroll"]),
+  ) {
     super();
   }
   readonly #gateway: LlmProviderRecord = {
@@ -282,6 +285,9 @@ class MemoryProviders extends LlmProviderRepository {
   }
   async replaceBindings(bindings: AgentModelBinding[]) {
     this.bindings = [...bindings];
+  }
+  async unknownProjects(projectIds: readonly string[]) {
+    return projectIds.filter((id) => !this.projects.has(id));
   }
   async resolveApiKey() {
     return undefined;
@@ -344,5 +350,16 @@ describe("agent model bindings", () => {
     expect(audit.entries[0]).toMatchObject({ detail: { projectId: "billing", provider: "gateway", model: "m1", thinking: "low" } });
 
     expect(await rejection(service.applyToProject({ projectId: "billing", provider: "missing", model: "m1" }, admin))).toMatchObject({ type: NotFoundException });
+  });
+
+  it("binds only projects that exist", async () => {
+    const { service, store, audit } = withRegistry(bindings);
+    expect(await rejection(service.applyToProject({ projectId: "ghost", provider: "gateway", model: "m1" }, admin))).toMatchObject({ type: NotFoundException });
+    const providers = new LlmProvidersService(store, {} as ProviderCatalog, audit);
+    expect(await rejection(providers.replaceBindings([...bindings, { agent: "designer", projectId: "ghost", provider: "gateway", model: "m1" }], admin))).toMatchObject({
+      type: NotFoundException,
+    });
+    expect(store.bindings).toEqual(bindings);
+    expect(audit.actions()).toEqual([]);
   });
 });

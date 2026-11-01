@@ -176,6 +176,7 @@ export class LlmProvidersService {
     for (const binding of bindings) {
       await this.#mustGet(binding.provider);
     }
+    await this.#mustBeProjects(bindings.flatMap((binding) => (binding.projectId === undefined ? [] : [binding.projectId])));
     await this.providers.replaceBindings(bindings);
     await this.audit.recordChange(
       auditRecord(actor, AUDIT_ACTIONS.modelBindingsSave, {
@@ -193,6 +194,7 @@ export class LlmProvidersService {
   async applyToProject(input: ApplyModelToProject, agents: readonly string[], actor: Actor): Promise<AgentModelBinding[]> {
     if (agents.length === 0) throw new BadRequestException("There are no runtime agents to bind");
     await this.#mustGet(input.provider);
+    await this.#mustBeProjects([input.projectId]);
     const { projectId, provider, model, thinking } = input;
     const merged = withProjectBindings(await this.providers.listBindings(), projectId, agents, (agent) => ({
       agent,
@@ -269,5 +271,11 @@ export class LlmProvidersService {
     const record = await this.providers.get(id);
     if (record === undefined) throw new NotFoundException(`LLM provider ${id} not found`);
     return record;
+  }
+
+  /** A project binding needs its project: one that names none would wait for whoever reuses the id. */
+  async #mustBeProjects(projectIds: readonly string[]): Promise<void> {
+    const unknown = await this.providers.unknownProjects(projectIds);
+    if (unknown.length > 0) throw new NotFoundException(`Project ${unknown.join(", ")} not found`);
   }
 }

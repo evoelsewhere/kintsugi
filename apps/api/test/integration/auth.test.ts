@@ -117,5 +117,18 @@ describe.skipIf(!hasDatabase)("auth (integration)", () => {
       expect((await new Client(app).login("lock-target", password)).status).toBe(429);
       expect((await new Client(app).login(ADMIN_USER, ADMIN_PASSWORD)).status).toBe(200);
     });
+
+    it("counts guesses sent at once like guesses sent one after another", async () => {
+      const admin = await adminClient(app);
+      const { password } = await memberClient(app, admin, "burst-target", ["user"]);
+      const statuses = (await Promise.all(Array.from({ length: 30 }, () => new Client(app).login("burst-target", "wrong-password")))).map((response) => response.status);
+      expect(statuses.filter((status) => status === 401).length).toBeLessThanOrEqual(5);
+      expect(statuses.filter((status) => status === 429).length).toBeGreaterThanOrEqual(25);
+      expect((await new Client(app).login("burst-target", password)).status).toBe(429);
+      // Sign-ins with the right password sent at once wait for each other; none is refused.
+      const { password: right } = await memberClient(app, admin, "burst-member", ["user"]);
+      const parallel = await Promise.all(Array.from({ length: 8 }, () => new Client(app).login("burst-member", right)));
+      expect(parallel.map((response) => response.status)).toEqual(Array.from({ length: 8 }, () => 200));
+    });
   });
 });

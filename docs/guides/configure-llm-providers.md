@@ -37,5 +37,5 @@ A stage page shows, for its project, the model each agent will run with and whet
 
 ## Notes
 
-- **Egress**: the egress proxy allowlist is updated automatically from the configured provider endpoints.
+- **Egress**: Kintsugi does not filter outbound traffic; the worker calls the configured provider endpoints directly. To allow only those endpoints, restrict the worker's egress at the network level ([Security](../architecture/concepts/security.md), item 8).
 - **Not supported for the runtime**: consumer subscription logins (Claude Pro/Max, ChatGPT, Copilot tokens).

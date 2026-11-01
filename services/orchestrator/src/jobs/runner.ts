@@ -27,7 +27,7 @@ import { DEFAULT_SANDBOX, legacySources, memberTestReportOf, mcpServersNamedBy, 
 import { type CheckoutStorage, type JobPaths, runGit } from "@kintsugi/git";
 import { type Interpreters, makeReadOnly, redactText, removeTree, runScript } from "@kintsugi/runtime/launcher";
 import { RESULT_FILE, RESULT_TOOL, MEMORY_TOOL_NAMES } from "@kintsugi/runtime/tool-names";
-import type { AgentRuntime, JobEvent, JobSpec, McpServerSpec, JobServices } from "@kintsugi/runtime-sdk";
+import type { AgentRuntime, JobEvent, JobSpan, JobSpec, McpServerSpec, JobServices } from "@kintsugi/runtime-sdk";
 import { explainFailure } from "../failures.js";
 import type { DocumentWriteRequest } from "../queues.js";
 import { bindWebTools, type PgWebSearch } from "../web-search/index.js";
@@ -38,6 +38,7 @@ import { digestOf, filesDigest, Ledger, type LedgerOutput } from "../workspace/l
 import { readManifest, writeAtomically, writeManifest, type WorkspaceManifest } from "../workspace/manifest.js";
 import { dropCheckouts, mountFolder, mountPath, mountSources } from "../workspace/provision.js";
 import type { AgentResolver } from "./agents.js";
+import { AttemptSpans } from "./attempt-spans.js";
 import { ToolTail } from "./diagnostic.js";
 import { materializeSkillFiles } from "./skill-files.js";
 import { type LeafPlacement, type LeafResult, type LeafRun, StageFailure, StagePlanExecutor, type StepReuse } from "./executor.js";
@@ -718,6 +719,9 @@ export class JobRunner {
       ...(signal === undefined ? {} : { signal }),
     });
     await this.#deps.store.update(run.id, { scriptHash: result.sha256 });
+    if (result.outlived === true) {
+      await this.#event(ws, run.id === ws.rootId ? undefined : run.id, "log", `script ${run.name}: a process it started was still running when it ended; its output was cut there and that process may still be running`);
+    }
     if (result.failure !== undefined) {
       const output = [result.stderr, result.stdout].map((text) => text.trim()).filter((text) => text !== "");
       const detail = redactText(output.join("\n").split(/\r?\n/).slice(-MAX_DETAIL_LINES).join("\n")).slice(-4000);
@@ -827,9 +831,22 @@ export class JobRunner {
       // Not awaited: a slow backend must not slow the job (ADR-0074).
       void this.#deps.spanExporter?.export(batch);
     };
+    const spanRecord = (span: JobSpan): SpanRecord => ({
+      runId: ws.rootId,
+      ...(stepId === undefined ? {} : { stepId }),
+      projectId: run.projectId,
+      ...(run.applicationId === undefined ? {} : { applicationId: run.applicationId }),
+      agent: agentId,
+      provider: binding.provider,
+      model: binding.model,
+      attempt: attempts,
+      runAttempt: ws.attempt,
+      span,
+    });
     const attempt = async (task: string = spec.task): Promise<Extract<JobEvent, { type: "job.completed" | "job.failed" }>> => {
       attempts += 1;
       const tail = new ToolTail();
+      const settled = new AttemptSpans();
       const handle = await this.#deps.agents.startJob({ ...spec, task }, services);
       // Why it is stopped: a person cancelled the run, a sibling of its group failed, or the worker is stopping.
       const stoppedFor = (): string => (isCancelled(signal) ? "cancelled" : signal?.reason instanceof Error && signal.reason.message.startsWith("another step of the group failed") ? "another step of its group failed" : "the worker is stopping");
@@ -841,18 +858,8 @@ export class JobRunner {
           this.#count(event, usage);
           reads.add(event);
           if (event.type === "span") {
-            spans.push({
-              runId: ws.rootId,
-              ...(stepId === undefined ? {} : { stepId }),
-              projectId: run.projectId,
-              ...(run.applicationId === undefined ? {} : { applicationId: run.applicationId }),
-              agent: agentId,
-              provider: binding.provider,
-              model: binding.model,
-              attempt: attempts,
-              runAttempt: ws.attempt,
-              span: event.span,
-            });
+            settled.add(event.span);
+            spans.push(spanRecord(event.span));
             if (spans.length >= 100) await flushSpans();
           } else if (event.type === "progress") {
             const kb = (chars: number): string => (chars < 1000 ? `${chars}` : `${(chars / 1000).toFixed(1)}k`);
@@ -887,6 +894,13 @@ export class JobRunner {
         await flushSpans();
       }
       const end = await handle.done;
+      // An attempt whose process was killed sent no root span: record it from what settled, so it counts (T2-008).
+      const outcome = end.type === "job.completed" ? "completed" : end.reason === "aborted" ? (isCancelled(signal) ? "cancelled" : "stopped") : end.reason;
+      const root = settled.missingRoot(end, outcome, { agent: spec.agent.id, agentVersion: spec.agent.version, provider: spec.model.provider, model: spec.model.id }, end.type === "job.failed" ? redactText(end.error).slice(0, 300) : undefined);
+      if (root !== undefined) {
+        spans.push(spanRecord(root));
+        await flushSpans();
+      }
       // Why a model looped is in what it called last and what it got back: kept when the attempt failed or was stopped.
       if (end.type === "job.failed" && tail.size > 0) {
         const lines = tail.lines();

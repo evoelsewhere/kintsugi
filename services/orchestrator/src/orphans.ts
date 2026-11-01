@@ -21,16 +21,40 @@ function processExists(pid: number): boolean {
   }
 }
 
-/** Fails the `running` runs left by dead workers; returns how many. */
-export async function failOrphanedRuns(pool: Pick<Pool, "query">, log: (message: string) => void): Promise<number> {
+/** Fails the `running` runs (started before `before`, when given) left by dead workers; undefined when another worker is alive. */
+async function sweep(pool: Pick<Pool, "query">, log: (message: string) => void, before?: unknown): Promise<number | undefined> {
   const seen = await pool.query<{ host: string; pid: number }>(
     "select host, pid from workflow.worker_heartbeat where stopped_at is null and last_seen_at > now() - make_interval(secs => $1)",
     [ALIVE_SECONDS],
   );
   // Another host's worker counts as alive while it beats; on this host its process must exist too.
-  if (seen.rows.some((row) => row.host !== hostname() || (row.pid !== process.pid && processExists(row.pid)))) return 0;
-  const result = await pool.query("update workflow.job_run set status = 'failed', failure_reason = $1, finished_at = now() where status = 'running'", [INTERRUPTED]);
+  if (seen.rows.some((row) => row.host !== hostname() || (row.pid !== process.pid && processExists(row.pid)))) return undefined;
+  const result =
+    before === undefined
+      ? await pool.query("update workflow.job_run set status = 'failed', failure_reason = $1, finished_at = now() where status = 'running'", [INTERRUPTED])
+      : await pool.query("update workflow.job_run set status = 'failed', failure_reason = $1, finished_at = now() where status = 'running' and started_at < $2", [INTERRUPTED, before]);
   const count = result.rowCount ?? 0;
   if (count > 0) log(`${count} run(s) left running by a stopped worker marked failed`);
   return count;
+}
+
+/** Fails the `running` runs left by dead workers; returns how many. */
+export async function failOrphanedRuns(pool: Pick<Pool, "query">, log: (message: string) => void): Promise<number> {
+  return (await sweep(pool, log)) ?? 0;
+}
+
+/**
+ * Fails the runs dead workers left `running` when this worker starts, and once more when another worker looked alive
+ * then: a worker killed during a container recreate leaves a heartbeat that stays fresh for ALIVE_SECONDS, so the
+ * start-up sweep skipped and its runs stayed `running` for good (T3-009). The second sweep fails only runs started
+ * before this worker came up (by the database's clock), and skips too while another worker still beats. Returns a
+ * function that cancels the second sweep.
+ */
+export async function sweepOrphanedRuns(pool: Pick<Pool, "query">, log: (message: string) => void, delayMs = (ALIVE_SECONDS + 5) * 1000): Promise<() => void> {
+  const startedAt = (await pool.query<{ at: unknown }>("select now() as at")).rows[0]?.at;
+  if ((await sweep(pool, log)) !== undefined || startedAt === undefined) return () => undefined;
+  log(`another worker looks alive; checking again in ${Math.round(delayMs / 1000)} s for runs a stopped one left running`);
+  const timer = setTimeout(() => void sweep(pool, log, startedAt).catch(() => undefined), delayMs);
+  timer.unref();
+  return () => clearTimeout(timer);
 }

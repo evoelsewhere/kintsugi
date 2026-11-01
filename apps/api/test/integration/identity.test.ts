@@ -1,7 +1,10 @@
 // Members and roles guard rails, session revocation and password hash upgrades (ADR-0008).
 
-import { scryptSync } from "node:crypto";
+import { randomBytes, scryptSync } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { newId } from "../../src/common/domain/ids.js";
+import { hashToken } from "../../src/common/security/token-hash.js";
+import { MEMBER_TOKEN_PREFIX } from "../../src/modules/core/auth/application/member-token.service.js";
 import { hasDatabase } from "../support/database.js";
 import { ADMIN_USER, Client, adminClient, memberClient, startTestApp, subRole, type TestApp } from "../support/app.js";
 
@@ -47,6 +50,40 @@ describe.skipIf(!hasDatabase)("identity (integration)", () => {
       const grant = await client.request("PUT", "/admin/roles/sneaky/permissions", { body: { permissions: ["providers.manage"] } });
       expect(grant.status).toBe(403);
     });
+
+    it("a role manager cannot take away permissions they do not hold, from admin or any other role", async () => {
+      await subRole(admin, "role-editor-strip", ["roles.manage"]);
+      await subRole(admin, "auditors", ["audit.read", "restricted.read"]);
+      const { client } = await memberClient(app, admin, "role-editor-2", ["user", "role-editor-strip"]);
+      const before = (await admin.get<{ permissions: string[] }>("/admin/roles/admin")).body.data!.permissions;
+
+      const strip = await client.request("PUT", "/admin/roles/admin/permissions", { body: { permissions: ["members.manage", "roles.manage"] } });
+      expect(strip.status).toBe(403);
+      expect(strip.raw).toContain("providers.manage");
+      const emptied = await client.request("PUT", "/admin/roles/auditors/permissions", { body: { permissions: [] } });
+      expect(emptied.status).toBe(403);
+      expect(emptied.raw).toContain("audit.read");
+      expect((await admin.get<{ permissions: string[] }>("/admin/roles/admin")).body.data!.permissions).toEqual(before);
+
+      // A change that touches only what the role manager holds still goes through.
+      expect((await client.request("PUT", "/admin/roles/auditors/permissions", { body: { permissions: ["audit.read", "restricted.read", "roles.manage"] } })).status).toBe(200);
+      expect((await client.request("PUT", "/admin/roles/auditors/permissions", { body: { permissions: ["audit.read", "restricted.read"] } })).status).toBe(200);
+      // And an admin still edits every role.
+      expect((await admin.request("PUT", "/admin/roles/auditors/permissions", { body: { permissions: ["audit.read"] } })).status).toBe(200);
+    });
+
+    it("a role manager cannot delete a sub-role that grants permissions they do not hold", async () => {
+      await subRole(admin, "role-editor-delete", ["roles.manage"]);
+      await subRole(admin, "watchers", ["audit.read"]);
+      await subRole(admin, "managers", ["roles.manage"]);
+      const { client } = await memberClient(app, admin, "role-editor-3", ["user", "role-editor-delete"]);
+      const refused = await client.request("DELETE", "/admin/roles/watchers");
+      expect(refused.status).toBe(403);
+      expect(refused.raw).toContain("audit.read");
+      expect((await admin.get("/admin/roles/watchers")).status).toBe(200);
+      expect((await client.request("DELETE", "/admin/roles/managers")).status).toBe(204);
+      expect((await admin.request("DELETE", "/admin/roles/watchers")).status).toBe(204);
+    });
   });
 
   describe("last admin", () => {
@@ -89,6 +126,42 @@ describe.skipIf(!hasDatabase)("identity (integration)", () => {
       expect((await client.get("/auth/me")).status).toBe(200);
       expect((await admin.request("POST", `/admin/users/${id}/password`, { body: { password: "brand-new-pass" } })).status).toBeLessThan(300);
       expect((await client.get("/auth/me")).status).toBe(401);
+    });
+
+    it("a password reset or a disable ends the member's tokens and AI-client connections too, and nobody else's", async () => {
+      const credentials = async (userId: string) => {
+        const token = MEMBER_TOKEN_PREFIX + randomBytes(32).toString("base64url");
+        await app.db.query("insert into core.member_token (id, user_id, name, token_hash, expires_at) values ($1, $2, 'cli', $3, now() + interval '1 hour')", [newId(), userId, hashToken(token)]);
+        const connection = newId();
+        await app.db.query("insert into core.member_connection (id, user_id, client_name) values ($1, $2, 'Claude Code')", [connection, userId]);
+        await app.db.query("insert into core.member_connection_refresh_token (token_hash, connection_id) values ($1, $2)", [randomBytes(32).toString("hex"), connection]);
+        return { token, connection };
+      };
+      const read = (token: string) => new Client(app).request("GET", "/member/v1/projects", { csrf: false, headers: { authorization: `Bearer ${token}` } });
+      const ended = async (connection: string) =>
+        (await app.db.query<{ revoked: boolean; consumed: boolean }>(
+          "select c.revoked_at is not null as revoked, bool_and(r.consumed_at is not null) as consumed from core.member_connection c join core.member_connection_refresh_token r on r.connection_id = c.id where c.id = $1 group by c.id",
+          [connection],
+        )).rows[0];
+
+      const { id: resetId } = await memberClient(app, admin, "reset-tokens", ["user"]);
+      const { id: otherId } = await memberClient(app, admin, "keeps-tokens", ["user"]);
+      const reset = await credentials(resetId);
+      const other = await credentials(otherId);
+      expect((await read(reset.token)).status).toBe(200);
+      expect((await admin.request("POST", `/admin/users/${resetId}/password`, { body: { password: "brand-new-pass" } })).status).toBeLessThan(300);
+      expect((await read(reset.token)).status).toBe(401);
+      expect(await ended(reset.connection)).toEqual({ revoked: true, consumed: true });
+      expect((await read(other.token)).status).toBe(200);
+      expect(await ended(other.connection)).toEqual({ revoked: false, consumed: false });
+      const audit = await app.db.query<{ detail: { revoked?: { tokens: number; connections: number } } }>("select detail from governance.audit_event where action = 'user.password' and subject = $1", [resetId]);
+      expect(audit.rows[0]?.detail.revoked).toEqual({ tokens: 1, connections: 1 });
+
+      const { id: disabledId } = await memberClient(app, admin, "disable-tokens", ["user"]);
+      const disabled = await credentials(disabledId);
+      expect((await admin.request("PATCH", `/admin/users/${disabledId}`, { body: { enabled: false } })).status).toBe(200);
+      expect((await read(disabled.token)).status).toBe(401);
+      expect(await ended(disabled.connection)).toEqual({ revoked: true, consumed: true });
     });
 
     it("disabling a member ends their sessions and blocks sign-in", async () => {

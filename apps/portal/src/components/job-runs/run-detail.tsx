@@ -2,6 +2,7 @@
 import { AlertCircle, ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { explainFailure } from "@kintsugi/domain";
 import { Loaded } from "@/components/loaded";
 import { RunStatusBadge } from "@/components/status-badges";
 import { Button } from "@/components/ui/button";
@@ -189,7 +190,7 @@ function RunWorkspace({
             <AlertCircle className="mt-0.5 size-4 shrink-0 text-text-secondary" />
             <div className="min-w-0 flex-1">
               <h2 className="text-[14px] font-medium text-text">Run failed</h2>
-              <p className="mt-2 whitespace-pre-wrap break-words text-[13px] leading-6 text-text-secondary">{run.failureReason}</p>
+              <p className="mt-2 whitespace-pre-wrap break-words text-[13px] leading-6 text-text-secondary">{explainFailure(run.failureReason)}</p>
               <Button
                 size="small"
                 className="mt-2 shadow-border"

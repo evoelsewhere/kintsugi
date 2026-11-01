@@ -69,7 +69,9 @@ def old_from_catalog(previous):
     return items, modules
 
 
-FRONT_FIELD = re.compile(r'^(id|title|module|kind):\s*(.+?)\s*$')
+# The value runs to the end of the line and is trimmed by scalar(): `(.+?)\s*$` backtracks quadratically on a long
+# run of spaces (T3-011).
+FRONT_FIELD = re.compile(r'^(id|title|module|kind):(.+)$')
 
 
 def scalar(value):

@@ -4,7 +4,7 @@
 // Adding a tool here widens what any agent can do: review its security boundary.
 
 import { glob as fsGlob, mkdir, readFile, stat, writeFile } from "node:fs/promises";
-import { dirname, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import {
   createEditToolDefinition,
   createFindToolDefinition,
@@ -125,6 +125,17 @@ const searchingIn = (tool: ToolDefinition, dir: string): ToolDefinition => ({
   },
 });
 
+/**
+ * A find pattern names files below the search path only. An absolute or drive pattern, or one with a `..` segment, is
+ * refused; fs.glob also climbs out through `{..,x}`, `.[.]` and the like, so the first match outside the search path
+ * refuses the pattern too (before it walks the disk), and a match whose real path leaves the readable locations (a
+ * link) is left out (T3-004).
+ */
+function escapingPattern(pattern: string): boolean {
+  const normalized = pattern.replaceAll("\\", "/");
+  return isAbsolute(pattern) || normalized.startsWith("/") || /^[A-Za-z]:/.test(normalized) || normalized.split("/").includes("..");
+}
+
 const findTool: ToolFactory = (context) => {
   const guard = readGuard(context);
   return notInOutput(searchingIn(erase(
@@ -140,9 +151,19 @@ const findTool: ToolFactory = (context) => {
         },
         // Supplying glob() also keeps pi from spawning fd, which would skip exists().
         glob: async (pattern, searchPath, options) => {
+          const refused = `the pattern "${pattern}" leaves the search path: a find pattern is relative to the search path and names files below it (pass another path instead)`;
+          if (escapingPattern(pattern)) throw new Error(refused);
           const results: string[] = [];
           const skip = (path: string): boolean => /(^|[\\/])(node_modules|\.git)$/.test(path);
-          for await (const path of fsGlob(pattern, { cwd: guard.check(searchPath), exclude: skip })) {
+          const root = guard.check(searchPath);
+          for await (const path of fsGlob(pattern, { cwd: root, exclude: skip })) {
+            const full = resolve(root, path);
+            if (!isInside(root, full)) throw new Error(refused);
+            try {
+              guard.check(full);
+            } catch {
+              continue;
+            }
             results.push(path);
             if (results.length >= options.limit) break;
           }
@@ -162,9 +183,20 @@ const globTool: ToolFactory = (context) => {
 
 // write and edit are pi's own tools, working in the job's output directory: a relative path is
 // relative to it, and every path (symlinks included) must stay inside it. The read-only roots and
-// the rest of the filesystem are out of reach. Each file written is reported as an output.
-const outputOperations = (context: ToolContext): { guard: PathGuard; save: (path: string, content: string) => Promise<void> } => {
-  const guard = new PathGuard([context.outDir]);
+// the rest of the filesystem are out of reach. Each file written is reported as an output. The inside of a
+// repository's .git folder is out of reach too: a config or hook written there would make git run a command (T3-003).
+const outputOperations = (context: ToolContext): { guard: Pick<PathGuard, "check">; save: (path: string, content: string) => Promise<void> } => {
+  const output = new PathGuard([context.outDir]);
+  const root = output.check(context.outDir);
+  const guard = {
+    check: (path: string): string => {
+      const real = output.check(path);
+      if (relative(root, real).split(sep).some((part) => part.toLowerCase() === ".git")) {
+        throw new Error(`path is inside a repository's .git folder, which git keeps: ${path}`);
+      }
+      return real;
+    },
+  };
   return {
     guard,
     save: async (path, content) => {

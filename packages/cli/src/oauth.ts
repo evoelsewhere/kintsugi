@@ -221,6 +221,27 @@ async function awaitWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Pro
   } finally { signal.removeEventListener("abort", onAbort); }
 }
 
+/**
+ * Failures that happen before a request is written (no route, no name, no connection, a refused TLS handshake): the
+ * installation never saw it. A reset or a timeout after connecting may come after the body was sent, so it is not one.
+ */
+const NEVER_SENT = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "EHOSTUNREACH", "ENETUNREACH", "UND_ERR_CONNECT_TIMEOUT", "CERT_HAS_EXPIRED", "DEPTH_ZERO_SELF_SIGNED_CERT", "SELF_SIGNED_CERT_IN_CHAIN", "UNABLE_TO_VERIFY_LEAF_SIGNATURE", "ERR_TLS_CERT_ALTNAME_INVALID"]);
+
+function neverSent(error: unknown): boolean {
+  for (let cause = error, depth = 0; typeof cause === "object" && cause !== null && depth < 4; cause = (cause as { cause?: unknown }).cause, depth++) {
+    const code = (cause as { code?: unknown }).code;
+    if (typeof code === "string" && NEVER_SENT.has(code)) return true;
+  }
+  return false;
+}
+
+/** A request that could not reach Kintsugi; `sent` is false only when it provably never left this machine. */
+class NetworkError extends CliError {
+  constructor(readonly sent: boolean) {
+    super("OAUTH_NETWORK_ERROR", "Could not contact Kintsugi; check the installation URL and retry");
+  }
+}
+
 export class OAuthSession {
   private readonly access = new Map<string, { token: string; expiresAt: number; credential: string }>();
   private readonly flights = new Map<string, Promise<string>>();
@@ -232,7 +253,7 @@ export class OAuthSession {
     const requestSignal = AbortSignal.any([AbortSignal.timeout(60_000), ...(signal === undefined ? [] : [signal])]);
     try {
       return await fetcher(`${profile.baseUrl}/api/auth/coding-agent/${route}`, { method: "POST", headers: { "content-type": "application/json", "x-kintsugi-csrf": "1" }, credentials: "omit", redirect: "error", body: JSON.stringify(body), signal: requestSignal });
-    } catch { throw requestSignal.aborted ? cancelled(requestSignal) : new CliError("OAUTH_NETWORK_ERROR", "Could not contact Kintsugi; check the installation URL and retry"); }
+    } catch (error) { throw requestSignal.aborted ? cancelled(requestSignal) : new NetworkError(!neverSent(error)); }
   }
 
   private async accept(profile: Profile, response: Response): Promise<OAuthCredential> {
@@ -354,7 +375,14 @@ export class OAuthSession {
       await this.deps.credentials.delete(profile.id).catch(() => undefined);
       throw reauthenticate();
     }
-    const response = await this.request(profile, "token", { grantType: "refresh_token", refreshToken: credential.refreshToken }, this.deps.signal);
+    let response: Response;
+    try {
+      response = await this.request(profile, "token", { grantType: "refresh_token", refreshToken: credential.refreshToken }, this.deps.signal);
+    } catch (error) {
+      // The refresh credential never left this machine, so it cannot have been used: it stays as it was.
+      if (error instanceof NetworkError && !error.sent) await this.deps.credentials.set(profile.id, raw!).catch(() => undefined);
+      throw error;
+    }
     if (!response.ok) {
       if (response.status === 400 || response.status === 401 || response.status === 403) {
         this.unusable.add(profile.id);

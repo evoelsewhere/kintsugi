@@ -18,8 +18,14 @@ export function PanelShell(): React.JSX.Element {
 
   return (
     <div className="flex min-h-screen bg-background">
+      <a
+        href="#content"
+        className="sr-only rounded-[var(--geist-radius)] bg-surface px-3 py-2 text-[13px] text-text shadow-border focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[70] focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
+      >
+        Skip to content
+      </a>
       <Sidebar onOpenSettings={() => setSettings({ open: true })} />
-      <main className="min-w-0 flex-1">
+      <main id="content" tabIndex={-1} className="min-w-0 flex-1 outline-none">
         <div className="w-full px-4 py-4 sm:px-5 md:px-5 md:py-5">
           <DetailHost>
             <Outlet context={context} />

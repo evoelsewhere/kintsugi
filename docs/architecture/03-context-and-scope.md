@@ -18,7 +18,7 @@
 | Project members (portal) | Projects, decisions, approvals, configuration | Dashboards, KB answers, scorecards, gate status |
 | Member harnesses | MCP / CLI calls: KB queries, task status, artifact registrations; plugin hook events; optional OTel | Task packs, planned generated marketplace files or fallback rendering for agent plugins, KB results, policies |
 | Git servers (many) | Code, documents, PR events | Commits and PRs in the document repo; PR comments on code repos |
-| LLM providers | Model responses (runtime jobs) | Prompts from runtime agents, sent only through the egress proxy |
+| LLM providers | Model responses (runtime jobs) | Prompts from runtime agents, sent directly to the configured providers |
 | Trackers / wikis | Unit status, existing documents | Status sync |
 | Target-system observability | Health, incidents | — |
 

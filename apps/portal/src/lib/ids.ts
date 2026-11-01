@@ -15,3 +15,9 @@ export function uniqueId(text: string, taken: readonly string[]): string {
   if (base === "" || !taken.includes(base)) return base;
   for (let n = 2; ; n++) if (!taken.includes(`${base}-${n}`)) return `${base}-${n}`;
 }
+
+/** The name in `others` that `name` repeats, ignoring case and surrounding spaces; undefined when it is new. */
+export function takenName(name: string, others: readonly string[]): string | undefined {
+  const wanted = name.trim().toLowerCase();
+  return wanted === "" ? undefined : others.find((other) => other.trim().toLowerCase() === wanted);
+}

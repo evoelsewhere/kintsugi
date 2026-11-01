@@ -52,12 +52,23 @@ function seconds(entries: readonly Entry[]): number {
 
 const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** Claude Code: from the command's last invocation (the line holding `/<plugin>:<command>`), else the session start. One model message counts once, by its id. */
+/** The names a client shows a plugin under: its Kintsugi name, and with hyphens for underscores (ADR-0072). */
+const pluginNames = (plugin: string): string[] => [...new Set([plugin, plugin.replace(/_/g, "-")])];
+/** `name1|name2` for a regular expression. */
+const pluginPattern = (plugin: string): string => pluginNames(plugin).map(escape).join("|");
+
+/**
+ * Claude Code: from the command's last invocation (a user message holding `/<plugin>:<command>`), else the session start.
+ * A tool result is a user message too, but only what the member typed is an invocation. One model message counts once, by its id.
+ */
 function claudeSummary(entries: readonly Entry[], plugin: string, command: string): RunSummary {
+  const invocations = pluginNames(plugin).map((name) => `/${name}:${command}`);
+  const invokes = (content: unknown): boolean =>
+    !(Array.isArray(content) && content.some((block) => obj(block)["type"] === "tool_result")) && invocations.some((text) => JSON.stringify(content ?? "").includes(text));
   let start = 0;
   entries.forEach((entry, index) => {
     const message = obj(entry["message"]);
-    if (message["role"] === "user" && JSON.stringify(message["content"] ?? "").includes(`/${plugin}:${command}`)) start = index;
+    if (message["role"] === "user" && invokes(message["content"])) start = index;
   });
   const messages = new Map<string, { input: number; output: number; read: number; created: number }>();
   let model: string | undefined;
@@ -83,7 +94,7 @@ function claudeSummary(entries: readonly Entry[], plugin: string, command: strin
 
 /** Codex: the rollout's `token_count` events carry cumulative totals, so the command's usage is the last total minus the one before its invocation. */
 function codexSummary(entries: readonly Entry[], plugin: string, command: string): RunSummary | undefined {
-  const mention = new RegExp(`(?:^|[\\s(])[$@/](?:${escape(plugin)}:)?${escape(command)}(?![\\w-])`);
+  const mention = new RegExp(`(?:^|[\\s(])[$@/](?:(?:${pluginPattern(plugin)}):)?${escape(command)}(?![\\w-])`);
   let start = -1;
   entries.forEach((entry, index) => {
     const payload = obj(entry["payload"]);
@@ -115,7 +126,7 @@ function codexSummary(entries: readonly Entry[], plugin: string, command: string
 
 /** Copilot: `assistant.message` keeps the output tokens of each reply and `subagent.completed` the total of a sub-agent; input and cache are only in the shutdown snapshot of the whole session. */
 function copilotSummary(entries: readonly Entry[], plugin: string, command: string): RunSummary | undefined {
-  const mention = new RegExp(`(?:^|[\\s(])/(?:${escape(plugin)}:)?${escape(command)}(?![\\w-])`);
+  const mention = new RegExp(`(?:^|[\\s(])/(?:(?:${pluginPattern(plugin)}):)?${escape(command)}(?![\\w-])`);
   let start = -1;
   entries.forEach((entry, index) => {
     const data = obj(entry["data"]);

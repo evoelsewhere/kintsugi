@@ -11,6 +11,9 @@ export { explainFailure } from "@kintsugi/domain";
  * failure of the settings are not.
  */
 const TRANSIENT =
-  /connection error|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|socket hang up|fetch failed|finish_reason|content_filter|provider|rate.?limit|overloaded|\b(429|50[0-4])\b|stalled/i;
+  /connection error|\brequest timed out\b|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|socket hang up|fetch failed|finish_reason|content_filter|provider|rate.?limit|overloaded|\b(429|50[0-4])\b|stalled/i;
 
-export const isTransientFailure = (text: string): boolean => !isKnownFailure(text) && TRANSIENT.test(text);
+/** A stop by the kernel's limits (`Agent x failed (loop): …`): the tool or agent it names may read like a provider failure. */
+const LIMIT = /failed \((loop|max-turns|budget)\)/;
+
+export const isTransientFailure = (text: string): boolean => !isKnownFailure(text) && !LIMIT.test(text) && TRANSIENT.test(text);

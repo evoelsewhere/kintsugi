@@ -60,7 +60,7 @@ export abstract class DebugStore {
   /** The status and finish time of runs by id, for the workspaces on disk. */
   abstract runStates(ids: readonly string[]): Promise<Map<string, Json>>;
   abstract tables(schema: string | undefined, table: string | undefined): Promise<Json>;
-  /** One read-only statement; the caller has checked it. */
+  /** One read-only statement, run in a read-only transaction; the caller has checked it (`checkStatement`). */
   abstract query(sql: string, limit: number): Promise<Json>;
 }
 

@@ -7,7 +7,7 @@ import { FolderGit2, FolderKanban, Package, Settings2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Loaded } from "@/components/loaded";
-import { ProjectSelector } from "@/components/project-selector";
+import { ProjectNotFound, ProjectSelector } from "@/components/project-selector";
 import { SyncStatusBadge } from "@/components/status-badges";
 import { StickyHeader } from "@/components/sticky-header";
 import { Card } from "@/components/ui/card";
@@ -30,7 +30,7 @@ export interface DeliveryShellProps {
 
 export function DeliveryShell({ crumbs = [], title, description, actions, children }: DeliveryShellProps): React.JSX.Element {
   const projects = useLoader("projects", projectsApi.list);
-  const { projectId, select } = useProjectSelection(projects.data?.map((project) => project.id));
+  const { projectId, select, notFound } = useProjectSelection(projects.data?.map((project) => project.id));
   const current = projects.data?.find((project) => project.id === projectId);
 
   return (
@@ -58,6 +58,7 @@ export function DeliveryShell({ crumbs = [], title, description, actions, childr
           </div>
         )}
       </StickyHeader>
+      {notFound === undefined ? null : <ProjectNotFound requested={notFound} shown={current?.name} />}
       <h1 className="sr-only">{title}</h1>
       <p className="sr-only">{description}</p>
       <Loaded loader={projects} rows={4}>

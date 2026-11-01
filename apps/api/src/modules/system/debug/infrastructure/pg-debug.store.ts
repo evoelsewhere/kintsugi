@@ -26,10 +26,6 @@ function row(record: Record<string, unknown>): Json {
   return Object.fromEntries(Object.entries(record).map(([key, value]) => [key, value instanceof Date ? value.toISOString() : value]));
 }
 
-/** Tables that hold encrypted secrets or their keys: `query` refuses a statement that names one. */
-const SECRET_TABLES = /(restricted_record|mcp_secret|secret|credential|llm_provider|git_server|session|password)/i;
-const FORBIDDEN_FUNCTIONS = /\b(pg_read_file|pg_read_binary_file|pg_ls_dir|pg_stat_file|lo_import|lo_export|lo_get|dblink|copy)\b/i;
-
 @Injectable()
 export class PgDebugStore extends DebugStore {
   get #pool() {
@@ -287,9 +283,8 @@ export class PgDebugStore extends DebugStore {
     return { tables: result.rows.map((entry) => row(entry as Record<string, unknown>)) };
   }
 
+  /** Runs a statement `checkStatement` accepted (application layer) in a read-only transaction. */
   async query(sql: string, limit: number): Promise<Json> {
-    if (SECRET_TABLES.test(sql)) throw new Error("The statement names a table that holds secrets or sessions; this tool does not read them");
-    if (FORBIDDEN_FUNCTIONS.test(sql)) throw new Error("The statement uses a function that reads files or copies data out of the server");
     const client = await this.#pool.connect();
     try {
       await client.query("begin read only");

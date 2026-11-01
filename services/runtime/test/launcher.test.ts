@@ -45,7 +45,7 @@ describe("job environment", () => {
   });
 
   it("redacts credential-shaped text in failure reasons", () => {
-    expect(redactText("password = hunter2hunter2")).toBe("[redacted]");
+    expect(redactText("password = hunter2hunter2")).toBe("password [redacted]");
     expect(redactText("postgres://alice:s3cret@db/app")).toBe("[redacted]db/app");
     expect(redactText("token ghp_0123456789abcdefghijABCDEFGHIJ0123")).toContain("[redacted]");
     expect(lastLine("line one\ninventory.py: cannot read source file x\n\n")).toBe("inventory.py: cannot read source file x");
@@ -111,7 +111,7 @@ describe("script steps", () => {
     const script = join(ws.scripts, "fail.py");
     writeFileSync(script, "import sys\nsys.stderr.write('boom password=hunter2hunter2\\n')\nsys.exit(3)\n");
     const result = await runScript(spec(ws, script, []));
-    expect(result.failure).toBe("exited with code 3: boom [redacted]");
+    expect(result.failure).toBe("exited with code 3: boom password [redacted]");
   });
 
   it("kills the whole process tree on timeout", async () => {
@@ -134,6 +134,74 @@ describe("script steps", () => {
     const child = Number(readFileSync(pidFile, "utf8"));
     for (let i = 0; i < 50 && alive(child); i++) await new Promise((resolve) => setTimeout(resolve, 100));
     expect(alive(child)).toBe(false);
+  });
+
+  /** A script whose grandchild holds stdout open after the script (or its middle process) ended; returns its pid file. */
+  function escaping(ws: ReturnType<typeof workspace>, name: string, lines: string[]): { script: string; pidFile: string } {
+    const script = join(ws.scripts, `${name}.py`);
+    const pidFile = join(ws.out, "grandchild.pid");
+    writeFileSync(script, ["import subprocess, sys, time", ...lines.map((line) => line.replaceAll("PID_FILE", JSON.stringify(pidFile)))].join("\n"));
+    return { script, pidFile };
+  }
+  const killGrandchild = (pidFile: string): void => {
+    if (!existsSync(pidFile)) return;
+    try {
+      process.kill(Number(readFileSync(pidFile, "utf8")));
+    } catch {
+      // already gone
+    }
+  };
+
+  it("ends a step on timeout even when a grandchild keeps the output pipe open, and keeps what was written", async () => {
+    const ws = workspace("escaped");
+    // The script starts a grandchild and exits; the grandchild inherits stdout and outlives the tree kill.
+    const { script, pidFile } = escaping(ws, "escape", [
+      "print('written before exit', flush=True)",
+      "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])",
+      "open(PID_FILE, 'w').write(str(child.pid))",
+    ]);
+    try {
+      const started = Date.now();
+      const result = await runScript(spec(ws, script, [], { timeoutSec: 2, maxOutputBytes: 1024 * 1024 }));
+      expect(Date.now() - started).toBeLessThan(10_000);
+      expect(result.exitCode === 0 || result.stopped === "timeout").toBe(true);
+      expect(result.stdout).toContain("written before exit");
+      expect(result.outlived).toBe(true);
+    } finally {
+      killGrandchild(pidFile);
+    }
+  }, 20_000);
+
+  it("ends an aborted step within seconds when an orphaned grandchild keeps the output pipe open", async () => {
+    const ws = workspace("orphaned");
+    // A middle process starts the grandchild and exits, so the grandchild is no longer below the script; the script waits.
+    const { script, pidFile } = escaping(ws, "orphan", [
+      "middle = 'import subprocess, sys; c = subprocess.Popen([sys.executable, \"-c\", \"import time; time.sleep(60)\"]); open(sys.argv[1], \"w\").write(str(c.pid))'",
+      "subprocess.run([sys.executable, '-c', middle, PID_FILE])",
+      "time.sleep(60)",
+    ]);
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 1500);
+    try {
+      const started = Date.now();
+      const result = await runScript({ ...spec(ws, script, [], { timeoutSec: 60, maxOutputBytes: 1024 * 1024 }), signal: controller.signal });
+      expect(Date.now() - started).toBeLessThan(10_000);
+      expect(result.stopped).toBe("aborted");
+      expect(result.failure).toBe("aborted");
+    } finally {
+      killGrandchild(pidFile);
+    }
+  }, 20_000);
+
+  it("reads all of a normal script's output, written just before it exits", async () => {
+    const ws = workspace("burst");
+    const script = join(ws.scripts, "burst.py");
+    writeFileSync(script, "import sys\nsys.stdout.write('x' * 50000)\nsys.stdout.write('\\nend\\n')\n");
+    const result = await runScript(spec(ws, script, []));
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.length).toBeGreaterThan(50_000);
+    expect(result.stdout.trimEnd().endsWith("end")).toBe(true);
+    expect(result.outlived).toBeUndefined();
   });
 
   it("stops a script that writes more than the output limit", async () => {
@@ -172,5 +240,28 @@ describe("script steps", () => {
     const script = join(ws.scripts, "run.sh");
     writeFileSync(script, "echo hi");
     await expect(runScript(spec(ws, script, []))).rejects.toThrow(/unsupported script type/);
+  });
+});
+
+describe("credential lines (T2-027)", () => {
+  const secret = "Sup3r-Secret!";
+  it("masks the value after a credential name in any language, and keeps the name", () => {
+    const shapes: Array<[string, string]> = [
+      [`cobol/CUSTVAL.cbl:11: 01 WS-DB-PASSWORD PIC X(14) VALUE '${secret}'.`, "cobol/CUSTVAL.cbl:11: 01 WS-DB-PASSWORD [redacted]"],
+      [`props.put("password", "${secret}");`, 'props.put("password" [redacted]'],
+      [`db.password = ${secret}`, "db.password [redacted]"],
+      [`CREATE USER billadm IDENTIFIED BY ${secret};`, "CREATE USER billadm IDENTIFIED BY [redacted]"],
+      [`grep as-is/legacy-billing "BILLADM|${secret}|password|PASSWORD"`, "grep as-is/legacy-billing [redacted]"],
+    ];
+    for (const [line, expected] of shapes) {
+      expect(redactText(line), line).toBe(expected);
+      expect(redactText(`ok\n${line}\nnext`)).toBe(`ok\n${expected}\nnext`);
+    }
+  });
+
+  it("leaves lines without a credential name as they are, and the detector mode as it was", () => {
+    for (const line of ["read as-is/src/Main.java", "model working: turn 3, thinking 1.2k chars", "grep as-is \"CALL '|EXEC PGM=\" → ok: 4 lines"]) expect(redactText(line)).toBe(line);
+    expect(redactText("how do refresh tokens work", { opaqueTokens: false })).toBe("how do refresh tokens work");
+    expect(redactText("password = hunter2", { opaqueTokens: false })).toBe("[redacted]");
   });
 });
