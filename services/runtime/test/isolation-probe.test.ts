@@ -2,7 +2,12 @@
 // run, how it reads what its children report, and its verdict. Running it needs the Linux worker image as root with the
 // job user set; on any other host it says why it cannot, which these tests check too.
 
-import { describe, expect, it } from "vitest";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { delimiter, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { afterAll, describe, expect, it } from "vitest";
 import { PROBE_SECRET, judge, parseReport, probeJobIsolation, probeUnsupported } from "../src/launcher/isolation-probe.js";
 import { interpretersFromEnv } from "../src/launcher/script.js";
 
@@ -17,6 +22,10 @@ describe("when the probe can run", () => {
     expect(probeUnsupported({ ...READY, KINTSUGI_JOB_GID: "" }, "linux", 0)).toMatch(/must both be set/);
     expect(probeUnsupported(READY, "linux", 10001)).toMatch(/not root/);
     expect(probeUnsupported({ KINTSUGI_JOB_UID: "10002", KINTSUGI_JOB_GID: "10002" }, "linux", 0)).toMatch(/KINTSUGI_PROBE_SECRET is not in the environment/);
+    // The control runs as the worker's own (non-root) user without the job user: it needs Linux and the marker only.
+    expect(probeUnsupported({ [PROBE_SECRET]: "marker" }, "linux", 10001, true)).toBeUndefined();
+    expect(probeUnsupported({}, "linux", 10001, true)).toMatch(/KINTSUGI_PROBE_SECRET is not in the environment/);
+    expect(probeUnsupported({ [PROBE_SECRET]: "marker" }, "win32", 0, true)).toMatch(/only on the Linux worker image/);
   });
 
   it("says it cannot run here instead of passing", async () => {
@@ -51,5 +60,51 @@ describe("the verdict", () => {
       expect(result.lines.join("\n"), stdout).toContain(reason);
     }
     expect(judge([], USER).status).toBe("exposed");
+  });
+});
+
+// The wrapper an operator runs (deploy/compose/probe-job-isolation.sh), with a fake docker that answers for the probe:
+// the isolated run's verdict, then the control's (P-037). Needs sh (Git for Windows has one).
+const WRAPPER = fileURLToPath(new URL("../../../deploy/compose/probe-job-isolation.sh", import.meta.url));
+const hasSh = spawnSync("sh", ["-c", "exit 0"]).status === 0;
+
+describe.skipIf(!hasSh)("the probe wrapper and its control run (P-037)", () => {
+  const fake = mkdtempSync(join(tmpdir(), "kintsugi-fake-docker-"));
+  writeFileSync(
+    join(fake, "docker"),
+    [
+      "#!/bin/sh",
+      '[ "$1 $2" = "compose version" ] && exit 0',
+      'case "$*" in *isolated.yml*) verdict="$FAKE_MAIN" ;; *) verdict="$FAKE_CONTROL" ;; esac',
+      'echo "probe: script step: checked"',
+      'echo "probe: $verdict"',
+      "",
+    ].join("\n"),
+    { mode: 0o755 },
+  );
+  afterAll(() => rmSync(fake, { recursive: true, force: true }));
+
+  const run = (main: string, control: string) => {
+    const result = spawnSync("sh", [WRAPPER], { env: { ...process.env, PATH: `${fake}${delimiter}${process.env["PATH"] ?? ""}`, FAKE_MAIN: main, FAKE_CONTROL: control }, encoding: "utf8" });
+    return { code: result.status, text: `${result.stdout}${result.stderr}` };
+  };
+
+  it("passes only when the isolated run is isolated and the control without the override is exposed", () => {
+    const passed = run("isolated", "exposed");
+    expect(passed.code, passed.text).toBe(0);
+    expect(passed.text).toContain("probe: PASSED");
+    expect(passed.text).toContain("control without the override: probe: exposed");
+  });
+
+  it("is not verified when the control sees no exposure: a probe that cannot fail proves nothing", () => {
+    const blind = run("isolated", "isolated");
+    expect(blind.code, blind.text).toBe(3);
+    expect(blind.text).toContain("cannot detect exposure on this host");
+  });
+
+  it("fails when the isolated run is exposed, without a control", () => {
+    const exposed = run("exposed", "exposed");
+    expect(exposed.code, exposed.text).toBe(1);
+    expect(exposed.text).not.toContain("2/2");
   });
 });

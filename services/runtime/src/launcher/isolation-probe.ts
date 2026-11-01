@@ -31,9 +31,13 @@ export interface ChildReport {
   names: string[];
 }
 
-/** Why this process cannot run the probe, or undefined when it can. */
-export function probeUnsupported(env: NodeJS.ProcessEnv, platform: NodeJS.Platform, uid: number | undefined): string | undefined {
+/**
+ * Why this process cannot run the probe, or undefined when it can. The control run (P-037) starts its children as the
+ * worker's own user, the way jobs run without isolation: it needs only Linux and the marker secret.
+ */
+export function probeUnsupported(env: NodeJS.ProcessEnv, platform: NodeJS.Platform, uid: number | undefined, control = false): string | undefined {
   if (platform !== "linux") return "job isolation exists only on the Linux worker image";
+  if (control) return (env[PROBE_SECRET] ?? "") === "" ? `${PROBE_SECRET} is not in the environment this process started with (run probe-job-isolation.sh)` : undefined;
   let user: JobUser | undefined;
   try {
     user = jobUser(env, platform);
@@ -91,12 +95,18 @@ const SHELL_CHILD = `if cat "/proc/$1/environ" >/dev/null 2>&1; then echo enviro
 echo "uid=$(id -u)"
 env | cut -d= -f1`;
 
-/** Runs the probe in this process (the worker container); never throws for a failed check. */
-export async function probeJobIsolation(options: { env?: NodeJS.ProcessEnv; interpreters: Interpreters }): Promise<ProbeResult> {
+/**
+ * Runs the probe in this process (the worker container); never throws for a failed check. With `control`, the children
+ * run as this process's own user, as jobs do without isolation, and the verdict must then be `exposed`: a probe that
+ * cannot see exposure there proves nothing (P-037).
+ */
+export async function probeJobIsolation(options: { env?: NodeJS.ProcessEnv; interpreters: Interpreters; control?: boolean }): Promise<ProbeResult> {
   const env = options.env ?? process.env;
-  const unsupported = probeUnsupported(env, process.platform, process.getuid?.());
+  const control = options.control === true;
+  const unsupported = probeUnsupported(env, process.platform, process.getuid?.(), control);
   if (unsupported !== undefined) return { status: "unsupported", lines: [unsupported] };
-  const user = jobUser(env)!;
+  const user: JobUser = control ? { uid: process.getuid!(), gid: process.getgid!() } : jobUser(env)!;
+  const runAs = control ? {} : { runAs: user };
   const root = await mkdtemp(join(tmpdir(), "kintsugi-isolation-probe-"));
   try {
     const dirs = { src: join(root, "src"), in: join(root, "in"), out: join(root, "out"), tmp: join(root, "tmp"), scripts: join(root, "scripts") };
@@ -109,10 +119,10 @@ export async function probeJobIsolation(options: { env?: NodeJS.ProcessEnv; inte
       workspace: { cwd: root, readOnly: [dirs.src, dirs.in], writable: [dirs.out, dirs.tmp], tmp: dirs.tmp, out: dirs.out },
       limits: { timeoutSec: 60, maxOutputBytes: 1024 * 1024 },
       interpreters: options.interpreters,
-      runAs: user,
+      ...runAs,
     });
     // What a kernel `shell` or `git` call is: a process started by the agent child, with the job environment.
-    const shell = await runProcess({ command: "sh", args: ["-c", SHELL_CHILD, "probe", String(process.pid)], cwd: root, env: jobEnvironment(dirs.tmp), timeoutMs: 60_000, runAs: user });
+    const shell = await runProcess({ command: "sh", args: ["-c", SHELL_CHILD, "probe", String(process.pid)], cwd: root, env: jobEnvironment(dirs.tmp), timeoutMs: 60_000, ...runAs });
     const reports = [parseReport("script step", step.stdout), parseReport("shell child", shell.stdout)];
     const result = judge(reports, user);
     if (step.failure !== undefined) result.lines.push(`script step: ${step.failure}`);
