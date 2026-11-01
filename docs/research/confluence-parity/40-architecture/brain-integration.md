@@ -151,6 +151,13 @@ The collaboration thread decided that **viewing has one boundary, Project Access
 - Restricted pages of a later phase (encrypted Postgres records) are never in Git and never in the Brain; they would be read only through their own audited route.
 - The portal's Brain routes check Project Access, like the member routes (`member.read` with Project Access); the portal document routes that need only a session are a gap to close before the wiki ships (see the data model's open points).
 
+## After a build
+
+A build knows which documents changed between the previous indexed commit and the new one (the incremental diff, or a comparison of the stored and the new tree for a whole build). Two wiki features read that list rather than events of the editor, so they also cover pages changed by members' own pull requests:
+
+- **Watch notifications.** The changed documents are matched against `knowledge.wiki_watch` (page keys and path prefixes) and a notification per watcher is recorded through the worker's outbox (`services/orchestrator/src/outbox`), so each change notifies once. A change whose commit carries `Kintsugi-Minor: true` notifies no one. A first build of a project, or a whole build after a builder change, notifies no one.
+- **Broken links.** Every reference of a page is kept in `knowledge.brain_ref`, resolved or not. A reference whose target path or id matches no node is a broken link: the wiki lists them per space and on the page, and the move dialog warns about links it cannot rewrite. Today such a link is dropped; with `brain_ref` it is kept and reported, and `brain_link` still holds only the links that resolve.
+
 ## Comments and other Postgres data
 
 Comments, mentions, watches, reactions, favourites and view counts live in Postgres ([data model](data-model.md#postgres-tables)) and are **not** part of the tree:
@@ -184,7 +191,7 @@ Each read stays recorded as member activity (`brain.read` today); `brain_search`
 | `knowledge.brain_source` | Extended | `build_mode` (`full`, `incremental`), `documents_read`, `full_after` (incremental builds left before the next whole one) |
 | `knowledge.brain_node` | Extended | `labels text[]` (GIN), `status text`, `owner text`, `space text`, `template boolean`, `attachments jsonb` (name, type, bytes, alt; at most 50 per node) |
 | `knowledge.brain_link` | Unchanged | Now derived from `brain_ref` |
-| `knowledge.brain_ref` | **New** | `(project_id, from_id, kind, target_path, target_anchor, target_id)`: every reference of a node, resolved or not, for incremental resolution |
+| `knowledge.brain_ref` | **New** | `(project_id, from_id, kind, target_path, target_anchor, target_id, line)`: every reference of a node, resolved or not, for incremental resolution and the broken-link report |
 | `knowledge.brain_text` | **New** | `(project_id, node_id, document tsvector)`, GIN: the full-text index |
 
 `BRAIN_BUILDER_VERSION` goes from 5 to 6, so the minute check rebuilds every existing index once with the new columns, as it does for every builder change today.
