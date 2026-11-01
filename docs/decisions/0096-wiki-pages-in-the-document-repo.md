@@ -30,6 +30,7 @@ The wiki must decide where each of its objects lives. Some are reviewed text tha
 - The repository grows with images; Git keeps every version of every attachment. The per-file cap and the allowlist bound it; a project with many large binaries needs another home for them.
 - A page cannot be hidden from one member who has Project Access. Projects that need that keep such content outside the document repository until a restricted-page store is decided.
 - Version numbers are computed from Git on request, so a long history costs a bounded `git log` per view, not storage.
+- Page publishes share the repository with runtime job outputs. The writer's one-write-per-repository rule and the draft's `expectedHash` are the protection: a stale base fails the write instead of overwriting a job's output, and a push race is fetched, rebased and retried. An acceptance test of the writer races a page publish with a runtime write on the same repository, once with the page's hash current and once stale, before the wiki ships.
 - Follow-up work: layout functions and their reference pages, migrations for the `wiki_*` tables and their permission codes, the writer's `page` kind with delete and rename operations, the attachment allowlist in the writer and a raw-file route, Project Access on the portal's document routes, and the Brain changes of [ADR-0097](0097-brain-indexes-wiki-pages.md).
 
 ## Alternatives considered
@@ -38,4 +39,5 @@ The wiki must decide where each of its objects lives. Some are reviewed text tha
 - **A separate wiki repository per project.** Rejected: ADR-0028 decided one document repository per project; a second one splits standards from the pages that explain them and doubles the mirror, writer and Brain configuration.
 - **Comments and labels in Git** (a sidecar Markdown file per page). Rejected for comments: a commit or pull request per comment, merge conflicts between commenters, and history noise. Labels are in Git because they are reviewed page metadata that the Brain filters on.
 - **A per-page `order` number.** Rejected: a reorder changes every sibling file; one list in the parent's `README.md` changes one file, as Docusaurus and MkDocs do.
+- **One central attachment folder per space or repository** (as GitBook does). Rejected: it avoids a copy of an image shared by several pages, but every move of a page would rewrite its image links, a space could no longer be exported alone, and unreferenced files would pile up with no owner; beside the page, links stay relative and a move carries its files.
 - **Attachments in Postgres or object storage.** Rejected: a second source of truth that Git viewers and clones do not see, or a new infrastructure dependency ([ADR-0006](0006-self-hosted-package.md)).
