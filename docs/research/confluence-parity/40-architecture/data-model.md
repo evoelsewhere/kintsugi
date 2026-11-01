@@ -28,7 +28,7 @@ Every row says where the concept lives, what represents it and whether anything 
 | Page | `<slug>.md`, or `<slug>/README.md` when it has children | Git | Every Markdown file |
 | Page tree, parent | The folder tree; the parent of `a/b.md` is `a/README.md` | Git (derived by the Brain) | Brain tree, portal file tree |
 | Sibling order | The parent page's `README.md` front matter `order`: a list of entry names in the folder; unlisted entries after it | Git | Name order only |
-| Page id (permalink) | Front matter `id: PAGE-<SPACE>-0001` | Git; counter in Postgres | Ids for cards and documents ([ADR-0075](../../../decisions/0075-compact-stable-document-reference-ids.md)) |
+| Page id (permalink) | Front matter `id: PAGE-<KEY>-0001` | Git; counter in Postgres | Ids for cards and documents ([ADR-0075](../../../decisions/0075-compact-stable-document-reference-ids.md)) |
 | Title | Front matter `title`, else the top `#` heading | Git | Brain reads it |
 | Body | CommonMark + GFM + Mermaid + fenced directives (macros) | Git | Markdown and Mermaid |
 | Macro | Panels as GitHub alerts (`> [!NOTE]`, `> [!WARNING]`); dynamic and data macros as fenced blocks `kintsugi-<macro>` with YAML parameters (`kintsugi-children`, `kintsugi-toc`, `kintsugi-labels`); stored as the macro, never its output | Git | Mermaid fences only |
@@ -97,7 +97,7 @@ The format follows the existing [building blocks](../../../reference/document-fo
 
 | Key | Type | Required | Meaning | Used by |
 |---|---|---|---|---|
-| `id` | `PAGE-<SPACE>-<nnnn>` | Written on first portal save | Stable identity across moves and renames | Permalinks, comments, watches; Brain reference id |
+| `id` | `PAGE-<KEY>-<nnnn>` | Written on first portal save | Stable identity across moves and renames | Permalinks, comments, watches; Brain reference id |
 | `title` | string | No (falls back to the `#` heading) | The page title | Tree, search, breadcrumbs |
 | `summary` | string, at most 240 characters | No, recommended | One-line description | Brain summary (`front-matter` source) |
 | `labels` | list of `[a-z0-9-]` strings, at most 20 | No | Labels | Label index, label macro, search filter |
