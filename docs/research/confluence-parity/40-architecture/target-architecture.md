@@ -71,22 +71,22 @@ Every module keeps the anatomy of [apps/api](../../../../apps/api/README.md): `d
 
 | Block | State | Domain | Application | Infrastructure | Interface | Schema |
 |---|---|---|---|---|---|---|
-| `delivery/wiki` | new | `Space` (a folder with a home page), `Page` (a Markdown document with front matter `id`, `title`, `labels`, `status`; a folder's `README.md` also lists the `order:` of its entries), `Draft` and its `DraftAttachment`s, `Comment` (anchor: page id, node id, quote, commit), `Watch`, `SpaceRule` (who may edit under a path prefix); ports `DraftStore`, `CommentStore`, `WatchStore`, `RuleStore`, `PageSource` (reads through documents and brain), `PagePublisher` (writes through document-writes) | `SpacesService`, `PagesService` (resolve id to path, render data), `DraftsService` (autosave, presence), `PublishService` (permission and rule check, three-way merge, move and rename with link rewrite, delete), `CommentsService` (re-anchoring), `WatchesService` | `Pg*Store` adapters; a three-way text merge adapter (a pure JavaScript library, no new service) | `WikiController` (spaces, pages, drafts, publish), `CommentsController`, `WatchesController`; zod DTOs | `knowledge` (`wiki_*` tables) |
+| `delivery/wiki` | new | `Space` (a folder with a home page), `Page` (a Markdown document with front matter `id`, `title`, `labels`, `status`; a folder's `README.md` also lists the `order:` of its entries), `Draft` and its `DraftAttachment`s, `Comment` (anchor: page id, node id, quote, commit), `Watch`, `EditRestriction` (who may edit under a path prefix: a space, folder or page); ports `DraftStore`, `CommentStore`, `WatchStore`, `RestrictionStore`, `PageSource` (reads through documents and brain), `PagePublisher` (writes through document-writes) | `SpacesService`, `PagesService` (resolve id to path, render data), `DraftsService` (autosave, presence), `PublishService` (permission and rule check, three-way merge, move and rename with link rewrite, delete), `CommentsService` (re-anchoring), `WatchesService` | `Pg*Store` adapters; a three-way text merge adapter (a pure JavaScript library, no new service) | `WikiController` (spaces, pages, drafts, publish), `CommentsController`, `WatchesController`; zod DTOs | `knowledge` (`wiki_*` tables) |
 | `core/notifications` | new | `Notification` (recipient, kind, subject, read flag, no page text); port `NotificationStore` | `NotificationsService` (create, list, mark read), used by other modules through `index.ts` | `PgNotificationStore`; a change-feed topic `notifications` with the user id as scope | `NotificationsController` (inbox), an SSE stream like the other live views | `core` |
 | `delivery/documents` | extended | `DocumentHistory` (commit, date, actor, message) | `history(path)` and `diff(a, b)` from the mirror, bounded and paged; `attachment(path)` | `git-mirror.reader.ts`: `log --follow`, `diff`, raw blob read | `GET documents/history`, `GET documents/diff`, `GET documents/raw` (allowlisted types, fixed `Content-Type`, `Content-Disposition`, `X-Content-Type-Options: nosniff`, a content security policy); every route checks Project Access | none (reads Git) |
-| `admin/document-writes` | extended | `DocumentWriteFile` gains `encoding: "base64"` (the worker has it) and a `delete` entry; a kind `page` | `publishPage(projectId, files, actor, options)` next to `proposeCorrection`: one open page write per page, like one open correction per specification ([ADR-0094](../../../decisions/0094-one-open-correction-per-specification.md)) | unchanged store; the queue payload carries deletes | unchanged | `workflow` (`document_write` gains the merge commit) |
-| `delivery/brain` | extended | search hit with rank | ranked search beside grep; labels, status and order in node data | `pg-brain.index.ts` reads the search index | `GET brain/search?q&space&label` | `knowledge` (owned by ADR-0097) |
+| `admin/document-writes` | extended | `DocumentWriteFile` gains `encoding: "base64"` (the worker has it) and a `delete` entry; a kind `page` | `publishPage(projectId, files, actor, options)` next to `proposeCorrection`: one open page write per page (its author may add commits to it), like one open correction per specification ([ADR-0094](../../../decisions/0094-one-open-correction-per-specification.md)) | unchanged store; the queue payload carries deletes | unchanged | `workflow` (`document_write` gains the merge commit) |
+| `delivery/brain` | extended | search hit with rank | ranked search beside grep (`brain_search` for members' agents); labels, status and order in node data | `pg-brain.index.ts` reads the full-text index | a search route beside lookup and grep, filtered by space, label and status | `knowledge` (`brain_text`, `brain_search`, `brain_ref`, owned by ADR-0097) |
 | `delivery/member-api` | extended | none | a read of the open comments of a page or node (`comments_list` in the local MCP bridge) | none | `GET /api/member/v1/comments?projectId&node` | none |
 | `core/auth` | extended | none | none | migration of the permission codes `wiki.comment`, `wiki.write`, `wiki.publish`, `wiki.manage` | none | `core` |
 | `governance/audit` | extended | new actions: `wiki.publish`, `wiki.page.delete`, `wiki.comment.delete`, `wiki.rule.set`, `wiki.rule.clear` | none | none | none | `governance` |
-| `monitoring/telemetry` | extended | page views per page and day, without user ids by default | aggregate and prune with the telemetry retention | none | none | `monitoring` |
+| `monitoring/telemetry` | extended | page views per page and day (`monitoring.wiki_page_view`), without user ids by default | aggregate and prune with the telemetry retention | none | none | `monitoring` |
 | `delivery/runtime-jobs`, `admin/agents`, `services/runtime` | unchanged | the wiki adds no job, no agent and no kernel tool | | | | |
 
 ### Worker
 
 | Block | State | Change |
 |---|---|---|
-| `services/orchestrator/src/document-write` | extended | Deletes and renames (`git rm`, `git mv`) validated like writes; binary files from the API; the watch step records the merge commit it saw, so a squash merge can still be joined to the write and its actor |
+| `services/orchestrator/src/document-write` | extended | Deletes and renames (`git rm`, `git mv`) validated like writes; a page write that continues an open one commits on its `kintsugi/*` branch; binary files from the API; the watch step records the merge commit it saw, so a squash merge can still be joined to the write and its actor |
 | `services/orchestrator/src/brain` | extended | A folder `README.md`'s `order:` list orders its entries; `labels`, `status` and the page id kept on nodes; links it cannot follow recorded as broken instead of dropped; the search index written in the same transaction (ADR-0097); after a build of the default branch, the documents that changed are matched against `knowledge.wiki_watch` and notifications are recorded through the worker's outbox (`services/orchestrator/src/outbox`) so each change notifies once |
 | `services/orchestrator/src/git-sync` | unchanged | It already moves the mirror and requests a Brain build when the default branch moves |
 
@@ -134,7 +134,7 @@ sequenceDiagram
   end
   M->>P: Publish (message, review or direct)
   P->>W: POST publish (draft id)
-  W->>W: wiki.write, Project Access, space rules, direct needs wiki.publish and directPublishPaths
+  W->>W: wiki.write, Project Access, edit restrictions, direct needs wiki.publish and directPublishPaths
   W->>D: head of the file now
   alt head hash equals base hash
     W->>W: files = draft, expectedHash = base hash
@@ -183,7 +183,9 @@ What each outcome leaves:
 | Push rejected, rebase clean | Written after a retry | As for a clean publish | Nothing special |
 | Push rejected, rebase conflict | Nothing written | Kept | *Could not publish* with the redacted error and the merge view |
 | Pull request declined | Nothing on the default branch | Kept | *Declined*, with the option to edit and publish again or discard |
-| A second publish while a pull request is open | Refused | Kept | *Pending review in PR #n*: change it there or wait (a later phase can add commits to the open branch) |
+| A second publish by the same author while the pull request is open | A new commit on the same `kintsugi/*` branch; the pull request updates | As for a clean publish | The pull request shows both commits |
+| A publish by another author while a pull request is open | Refused | Kept | *Pending review in PR #n*: comment there or wait for it |
+| A move whose link rewrites touch a page with an open page write | Refused | Kept | The open write that blocks it |
 
 Moves, renames and deletes follow the same path: the publish carries a rename or delete entry plus the rewritten inbound links (`wiki-links.ts` finds them from `knowledge.brain_link` at the base commit and confirms them in the mirror), all in one write, so the default branch never holds a page with broken links that the move created.
 
@@ -201,14 +203,14 @@ A notification holds the kind, the subject (page id, path, comment id) and the r
 
 ## The member surface
 
-Members' agents keep the five Brain tools; published pages are documents of the tree like any other ([ADR-0091](../../../decisions/0091-brain-vectorless-tree-index.md)). The Brain carries the page id, labels and status on the node, so `brain_lookup PAGE-OPS-0007` and a label filter work without a new tool. One read tool is added, `comments_list` (the open comment threads of a page or node, with their anchors, marked as project data), because comments are not in Git. Members write pages from their own Git clone and pull requests, as they write any document; the member API stays read-only ([ADR-0069](../../../decisions/0069-common-member-base-and-plugin-distribution.md)).
+Members' agents keep the five Brain tools and gain `brain_search`, the ranked full-text search of ADR-0097; published pages are documents of the tree like any other ([ADR-0091](../../../decisions/0091-brain-vectorless-tree-index.md)). The Brain carries the page id, labels and status on the node, so `brain_lookup PAGE-OPS-0007` and a label filter work without a new tool. One read tool is added, `comments_list` (the open comment threads of a page or node, with their anchors, marked as project data), because comments are not in Git. Members write pages from their own Git clone and pull requests, as they write any document; the member API stays read-only ([ADR-0069](../../../decisions/0069-common-member-base-and-plugin-distribution.md)).
 
 ## Security
 
 | Concern | Answer |
 |---|---|
 | Who reads a page | A person with Project Access to the project (the portal's document routes must check it, [OQ-5](constraints-and-fit.md#open-questions-for-the-owner)); a member's agent with `member.read` and Project Access |
-| Who changes a page | `wiki.write` and the space rules of its path; direct publish also `wiki.publish` and `directPublishPaths`; the Git server's branch protection stays the last gate |
+| Who changes a page | `wiki.write` and the edit restrictions of its path; direct publish also `wiki.publish` and `directPublishPaths`; the Git server's branch protection stays the last gate |
 | Stored scripts in pages | The renderer drops raw HTML (`skipHtml`) and renders only Markdown, GitHub alerts, Mermaid and `kintsugi-*` fenced macros |
 | Stored scripts in attachments | Allowlisted types only; SVG served as a download or sanitized; `nosniff`, `Content-Disposition` and a content security policy on the raw route |
 | Imported files (Word, HTML) | Converted in the API by a pure JavaScript library under size limits, sanitized, into a draft that a person reviews |
