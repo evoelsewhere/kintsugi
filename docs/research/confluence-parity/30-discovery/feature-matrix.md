@@ -145,6 +145,17 @@ One line per row, tied to the persona it serves (`member`, `manager`, `admin`, `
 | DIS-70 | member | returns to a page in one click |
 | DIS-71 | member | picks up where they left off |
 
+## What other wikis show
+
+Wikis that keep pages in a database, and wikis built on a Git repository, make the same features cheap or costly in different places. The lessons for the rows above:
+
+| Wiki | Observation | Source | Lesson for Kintsugi |
+|---|---|---|---|
+| Azure DevOps code wiki | Publishes the Markdown files of a branch and folder of a Git repository as a wiki; changes to the branch appear automatically; its overview says search relies on searching the code rather than a content-optimised search | [Publish a Git repository to a wiki](https://learn.microsoft.com/en-us/azure/devops/project/wiki/publish-repo-to-wiki) | The same shape as Kintsugi's document repo plus Brain; the search weakness of a code wiki is the reason to add a content index (DIS-04) |
+| Wiki.js | Storage modules sync content with a Git repository as backup or source of truth; page history can be compared and restored; the reason for a change can become the commit message; search can be switched to an external engine | [Storage modules](https://docs.requarks.io/dev/storage), [site features (*secondary*)](https://dev.to/selfhostingsh/wikijs-vs-outline-which-to-self-host-lo1) | A change message belongs in the commit message (DIS-40); an external engine is not an option for Kintsugi (ADR-0010) |
+| BookStack | Tags with an optional value, searched with `[name=value]` and boosted above normal content; filters such as `{created_by:me}` and `{type:page}`; revisions are cut off after a limit (100 by default) to keep the database small | [Searching content](https://www.bookstackapp.com/docs/user/searching/), [Content tags](https://www.bookstackapp.com/docs/user/tags/), [Other configuration](https://www.bookstackapp.com/docs/admin/other-config/) | Labels with a value (`team: payments`) are a later step; a revision limit is a cost of storing history in a database that Git does not have (DIS-48 stays Won't) |
+| Outline | History and restore (a restore creates a new version, revisions can be deleted for good), a trash that keeps deleted documents 30 days, search filters by collection, author and date and an option to include archived documents | [Revision history](https://docs.getoutline.com/s/guide/doc/revision-history-AiL6p22Ssq), [v0.38.0](https://www.getoutline.com/changelog/v0.38.0), [v0.28.0](https://www.getoutline.com/changelog/v0.28.0) | A restore as a new version is common ground (DIS-43); *include archived* is a switch in search (DIS-50, [DIS-US-19](user-stories.md)) |
+
 ## What is out of scope here
 
 - Editing, page tree, move and delete flows, drafts, macros and attachments: [authoring](../10-authoring/feature-matrix.md).
