@@ -17,6 +17,7 @@ export {
   type ScriptSpec,
   type ScriptWorkspace,
 } from "./script.js";
+export { BASH_ENV, bashCommand, findBash } from "./bash.js";
 export { AGENT_CHILD_ENTRY, applyProviderEnvironment, createChildAgentRuntime, type AgentChildInput, type ChildAgentRuntimeOptions } from "./agent-process.js";
 export { loadMcpServers } from "./mcp-registry.js";
 export { buildModelRuntime, piProviderId, type ResolvedCredentials, type StoredProviderConfig } from "./model-runtime.js";

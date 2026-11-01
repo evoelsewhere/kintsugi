@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createChildAgentRuntime } from "@kintsugi/runtime/launcher";
+import { bashCommand, createChildAgentRuntime } from "@kintsugi/runtime/launcher";
 import type { AgentDefinition, JobEvent, JobSpec } from "@kintsugi/runtime-sdk";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { builtinAgents } from "../src/jobs/agents.js";
@@ -101,7 +101,7 @@ process.stdin.setEncoding("utf8");
 process.stdin.on("data", (chunk) => (input += chunk));
 process.stdin.on("end", () => {
   const parsed = JSON.parse(input);
-  const report = { apiKey: parsed.provider.apiKey, region: parsed.provider.env?.KINTSUGI_TEST_REGION ?? null, spawnRegion: process.env.KINTSUGI_TEST_REGION ?? null, leaked: process.env.KINTSUGI_TEST_WORKER_ONLY ?? null, database: process.env.DATABASE_URL ?? null, cwd: process.cwd() };
+  const report = { apiKey: parsed.provider.apiKey, region: parsed.provider.env?.KINTSUGI_TEST_REGION ?? null, spawnRegion: process.env.KINTSUGI_TEST_REGION ?? null, bash: process.env.KINTSUGI_BASH ?? null, leaked: process.env.KINTSUGI_TEST_WORKER_ONLY ?? null, database: process.env.DATABASE_URL ?? null, cwd: process.cwd() };
   process.stdout.write(JSON.stringify({ type: "job.completed", jobId: "x", at: new Date().toISOString(), summary: JSON.stringify(report) }) + "\\n");
 });
 `,
@@ -120,6 +120,8 @@ process.stdin.on("end", () => {
     expect(done.type).toBe("job.completed");
     const report = JSON.parse(done.type === "job.completed" ? done.summary : "{}") as Record<string, string | null>;
     expect(report).toMatchObject({ apiKey: "sk-test-key", region: "eu-test-1", spawnRegion: null, leaked: null, database: null });
+    // The child cannot look through the PATH folders under its permission model: the launcher tells it which bash to run.
+    expect(report["bash"]).toBe(bashCommand() ?? "");
     expect(report["cwd"]?.toLowerCase()).toBe(paths.job.toLowerCase());
     expect(process.env["KINTSUGI_TEST_REGION"]).toBeUndefined();
     delete process.env["KINTSUGI_TEST_WORKER_ONLY"];

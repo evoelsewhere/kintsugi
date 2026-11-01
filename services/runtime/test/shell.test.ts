@@ -4,7 +4,8 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createKernelShellTool, findBash, withAvailableShell } from "../src/kernel/shell.js";
+import { findBash } from "../src/launcher/bash.js";
+import { createKernelShellTool, withAvailableShell } from "../src/kernel/shell.js";
 import { createWorkspace } from "./helpers.js";
 
 const workspace = createWorkspace();
@@ -31,6 +32,11 @@ describe("the bash behind shell (T2-010)", () => {
     expect(findBash({ Path: String.raw`C:\Windows` }, "win32", exists)).toBeUndefined();
     expect(findBash({ PATH: "/usr/local/bin:/usr/bin" }, "linux", (path) => path === "/usr/bin/bash")).toBe("/usr/bin/bash");
     expect(findBash({ PATH: "/usr/local/bin" }, "linux", () => false)).toBeUndefined();
+    // Under Node's permission model a folder it may not read throws: that is no bash, not a crash of the job.
+    const denied = (): boolean => {
+      throw new Error("Access to this API has been restricted. Use --allow-fs-read to manage permissions.");
+    };
+    expect(findBash({ PATH: "/usr/bin" }, "linux", denied)).toBeUndefined();
   });
 
   it("is not offered to a job when the host has none, and is when it has one", () => {

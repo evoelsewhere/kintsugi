@@ -22,6 +22,7 @@ import type { StoredProviderConfig } from "./model-runtime.js";
 import { type JobUser, MAX_TIMER_MS, type ProcessResult, jobUser, runProcess } from "./process.js";
 import type { LoadedProvider } from "./provider-registry.js";
 import { jobEnvironment, redactText } from "./script.js";
+import { BASH_ENV, bashCommand } from "./bash.js";
 import { grantToUser } from "./workspace.js";
 
 /** What the launcher writes to the child's stdin (one JSON document). */
@@ -263,8 +264,9 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Agen
         command: options.node ?? process.execPath,
         args: [...permission, entry],
         cwd: jobDir,
-        // The job environment and the provider's cache setting; credentials go on stdin.
-        env: { ...jobEnvironment(tmp, options.hostEnv), ...cacheEnv },
+        // The job environment, the provider's cache setting and the bash the kernel's shell runs (found here: the child's
+        // permission model keeps it out of the PATH folders); credentials go on stdin.
+        env: { ...jobEnvironment(tmp, options.hostEnv), ...cacheEnv, [BASH_ENV]: bashCommand() ?? "" },
         // timeoutSec 0 = no wall-clock limit; the idle watchdog still catches a stalled provider.
         timeoutMs: timeoutSec > 0 ? (timeoutSec + grace) * 1000 : 0,
         input: JSON.stringify(input),
