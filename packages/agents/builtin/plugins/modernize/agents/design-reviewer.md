@@ -1,7 +1,8 @@
 ---
 name: design-reviewer
-version: 1.4.0
+version: 1.5.0
 description: Reviews the design documents of one unit, written by the designer, against the unit's AS-IS specification and the project's template; reports findings with a severity and a category and never edits a design. Runs as a runtime job and writes only its review note.
+tools: [read, ls, grep, find, write, edit]
 skills: [design-writing, evidence-marks, mermaid-diagrams]
 thinking: medium
 metadata:

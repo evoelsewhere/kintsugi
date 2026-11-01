@@ -15,7 +15,7 @@ export const WORKSPACE = `Your working directory is the root of the job workspac
   10-applications/{app}/01-legacy/assessment.md), never a bare file name and never a path that starts with {out}/. It cannot be read, listed or searched.
 There is no src/, in/ or out/ folder at the workspace root, and no other folder under steps/ is yours: use the paths above as written.
 Cite a source file by its path under {src}/ without that prefix, starting with the repository's folder, for example
-<repository id>/path/File.java:12. Read with the read, ls, grep and find tools only; you have no shell.`;
+<repository id>/path/File.java:12. Read with the read, ls, grep and find tools only; you have no shell and no git.`;
 
 /** The end of a task whose result is the files it writes: a model that is not told when it is done goes looking for its own output. */
 export const STOP = `When every file above is written, reply DONE and stop. Do not look for the files you wrote: your output folder cannot be read, and a step is done when its files are written.`;

@@ -1,7 +1,8 @@
 ---
 name: designer
-version: 2.3.0
+version: 2.4.0
 description: Writes the design documents of one design set, for one unit or for the whole application, from the project's template, the understanding and the common design. Follows the template's contract exactly; never changes it. Runs as a runtime job and writes only the documents of that one set.
+tools: [read, ls, grep, find, write, edit]
 skills: [design-template-contract, design-writing, evidence-marks, mermaid-diagrams]
 thinking: medium
 metadata:

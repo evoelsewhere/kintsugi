@@ -2,7 +2,7 @@
 // generated plugin.json follows the Claude plugin format.
 
 import { describe, expect, it } from "vitest";
-import { loadBuiltinPlugins, PLUGIN_MANIFEST_FILE, readBuiltinPluginFile } from "../src/index.js";
+import { loadBuiltinCatalog, loadBuiltinPlugins, PLUGIN_MANIFEST_FILE, readBuiltinPluginFile } from "../src/index.js";
 
 describe("built-in plugins", () => {
   it("ships the runtime plugins and the plugin of both audiences", async () => {
@@ -41,6 +41,26 @@ describe("built-in plugins", () => {
     expect(modernize.memberFiles.some((path) => path.startsWith("scripts/") || path.startsWith("workflows/") || path === "commands/review.md")).toBe(false);
   });
 
+  it("grants every built-in agent only the tools its tasks need: no shell or codemode, git for the code review only (ADR-0092)", async () => {
+    const { agents } = await loadBuiltinCatalog();
+    const reading = ["read", "ls", "grep", "find", "write", "edit"];
+    expect(Object.fromEntries(agents.map((agent) => [agent.manifest.name, agent.manifest.tools]).sort(([a], [b]) => String(a).localeCompare(String(b))))).toEqual({
+      "architecture-critic": reading,
+      "business-rules-extractor": reading,
+      "code-reviewer": [...reading, "git"],
+      "contract-reviewer": reading,
+      "design-reviewer": reading,
+      designer: reading,
+      "legacy-analyst": reading,
+      "security-auditor": reading,
+      "understand-planner": reading,
+    });
+    // An agent's own text never promises a tool it is not granted.
+    for (const agent of agents) {
+      expect(agent.instructions, agent.manifest.name).not.toMatch(/`shell` and `git` run/);
+    }
+  });
+
   it("covers every agent, command and workflow exactly once", async () => {
     const plugins = await loadBuiltinPlugins();
     for (const [kind, count] of [["agent", 9], ["command", 6], ["workflow", 3]] as const) {
@@ -66,7 +86,7 @@ describe("built-in plugins", () => {
 
   it("reads plugin.json from the plugin folder and reads files only from the plugin", async () => {
     const plugins = await loadBuiltinPlugins();
-    expect(JSON.parse((await readBuiltinPluginFile(plugins, "reverse_engineering", PLUGIN_MANIFEST_FILE))!)).toMatchObject({ name: "reverse-engineering", version: "2.5.0" });
+    expect(JSON.parse((await readBuiltinPluginFile(plugins, "reverse_engineering", PLUGIN_MANIFEST_FILE))!)).toMatchObject({ name: "reverse-engineering", version: "2.6.0" });
     expect(JSON.parse((await readBuiltinPluginFile(plugins, "modernize", "kintsugi.json"))!)).toMatchObject({ audience: "both", requires: ["reverse_engineering"] });
     expect(await readBuiltinPluginFile(plugins, "reverse_engineering", "commands/design.md")).toBeUndefined();
     expect(await readBuiltinPluginFile(plugins, "reverse_engineering", "../package.json")).toBeUndefined();
