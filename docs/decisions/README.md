@@ -127,11 +127,11 @@ This page has two parts:
 | D09 | Sign-in | 🔴 | Username/password + PATs; Entra ID later behind `AuthProvider` | M0 | ✅ [0008](0008-authentication.md) |
 | D10 | API | 🟠 | REST + OpenAPI; NestJS 12 (ESM, Standard Schema validation) | M0 | ✅ [0016](0016-nestjs-api-framework.md) |
 | D11 | Portal | 🟢 | React SPA (Vite) + shadcn/ui, static build served by `kintsugi-app` | M0 | ✅ [0017](0017-portal-vite-react-shadcn.md) |
-| D12 | Vector store | — | pgvector | — | ✅ [0010](0010-postgres-only.md) |
+| D12 | Vector store | — | pgvector; unused: the Brain has no embeddings ([0091](0091-brain-vectorless-tree-index.md)) | — | ✅ [0010](0010-postgres-only.md), superseded by [0091](0091-brain-vectorless-tree-index.md) |
 | D13 | Graph store | — | None: no code / KB graph | — | ✅ [0014](0014-no-code-graph-no-agent-config.md) |
-| D14 | Source-code analysis | — | None: agents read source files directly; KB is text chunks + embeddings | — | ✅ [0014](0014-no-code-graph-no-agent-config.md) |
+| D14 | Source-code analysis | — | None: agents read source files directly; the project knowledge is the Brain, a vectorless tree index, not text chunks + embeddings ([0091](0091-brain-vectorless-tree-index.md)) | — | ✅ [0014](0014-no-code-graph-no-agent-config.md), amended by [0091](0091-brain-vectorless-tree-index.md) |
 | D15 | Document conversion (xlsx/docx → md, multilingual) | 🟠 | Python sidecar (docling / markitdown + Excel → Markdown); adds one container | M1 | ⬜ |
-| D16 | Embedding model | 🟠 | Configured like LLM providers; must offer a local option | M1 | ⬜ |
+| D16 | Embedding model | 🟠 | Not needed: the Brain uses no embedding model ([0091](0091-brain-vectorless-tree-index.md)) | M1 | ✅ superseded by [0091](0091-brain-vectorless-tree-index.md) |
 | D17 | MCP transport + auth | 🟠 | Remote Streamable HTTP on `kintsugi-app`, PAT auth; OAuth with Entra ID | M2 | 🟡 |
 | D18 | Priority member harness + license tier | 🟠 | Copilot first, Claude Code second | M2 | ⬜ |
 | D19 | Asset distribution to harnesses | 🟠 | Canonical Claude Code plugin assets are rendered into tested target packages; marketplaces are generated in the document repo and fallback rendering serves harnesses without plugin support | M2 | ✅ [0015](0015-member-assets-as-agent-plugins.md), [0064](0064-portable-agent-plugin-layouts.md) |

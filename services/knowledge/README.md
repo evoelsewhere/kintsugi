@@ -1,7 +1,5 @@
 # services/knowledge
 
-Knowledge Hub. Sources are files in Git (code repos + document repo); the index lives in Postgres and can be rebuilt from Git (ADR-0007, ADR-0010).
+Placeholder, no code. The Knowledge Hub once planned here (ingestion of text chunks, embeddings in pgvector, a semantic search API) was never built, and [ADR-0091](../../docs/decisions/0091-brain-vectorless-tree-index.md) rejected it.
 
-- Ingestion: source files and documents chunked as text (no code parsing or graph, ADR-0014), xlsx/docx → md (D15), KT recording transcripts, DB schema exports; will orchestrate a planned `knowledge-ingest` runtime agent (none ships yet, ADR-0023).
-- Index: chunks + embeddings (pgvector), entities and edges (plain tables, recursive CTE). Every entry references `repo@commit:path`.
-- Search API (semantic + full-text) used by the portal, a planned runtime kernel tool for knowledge-base search.
+The project knowledge for members is the **Brain**: a vectorless tree index of the document repository, built by the worker (`services/orchestrator/src/brain`) and served by the API (`apps/api`, `delivery/brain`). See [docs/reference/brain.md](../../docs/reference/brain.md).
