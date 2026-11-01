@@ -1,6 +1,6 @@
 # Target architecture
 
-> Research page. The building blocks a Confluence-like wiki adds to Kintsugi, where each sits in the DDD anatomy of `apps/api` and in which database schema, the write path from a portal edit to a commit, and how notifications and the member surface work. It follows the rules of [constraints and fit](constraints-and-fit.md); the tables and columns are in the data model (`data-model.md`) and the Brain side in the Brain integration (`brain-integration.md`). The decisions are proposed in ADR-0096, ADR-0097, [ADR-0098](../../../decisions/0098-wiki-page-editing-and-publishing.md) and [ADR-0099](../../../decisions/0099-wiki-collaboration-and-access.md).
+> Research page. The building blocks a Confluence-like wiki adds to Kintsugi, where each sits in the DDD anatomy of `apps/api` and in which database schema, the write path from a portal edit to a commit, and how notifications and the member surface work. It follows the rules of [constraints and fit](constraints-and-fit.md); the tables and columns are in the [data model](data-model.md) and the Brain side in the [Brain integration](brain-integration.md). The decisions are proposed in [ADR-0096](../../../decisions/0096-wiki-pages-in-the-document-repo.md), [ADR-0097](../../../decisions/0097-brain-indexes-wiki-pages.md), [ADR-0098](../../../decisions/0098-wiki-page-editing-and-publishing.md) and [ADR-0099](../../../decisions/0099-wiki-collaboration-and-access.md).
 
 ## In one paragraph
 
