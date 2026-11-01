@@ -1,6 +1,6 @@
 {
   "builderVersion": 5,
-  "recorded": "kcp-integration b1d59f1c",
+  "recorded": "kcp-integration a20bb69a",
   "report": {
     "builderVersion": 5,
     "stats": {
@@ -319,7 +319,7 @@
         },
         "costs": {
           "levels": 4,
-          "tokensToDescend": 258
+          "tokensToDescend": 286
         },
         "citations": [
           "20-spaces/eng/onboarding/access-requests.md:10-17"
@@ -334,7 +334,7 @@
         },
         "costs": {
           "levels": 3,
-          "tokensToDescend": 174
+          "tokensToDescend": 193
         },
         "citations": [
           "20-spaces/hr/leave-policy.md:14-17"

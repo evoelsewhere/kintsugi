@@ -322,14 +322,14 @@ describe("the Brain on the wiki fixture", () => {
     writeFileSync(baselinePath, `${JSON.stringify(baseline, null, 2)}\n`);
   });
 
-  it("falls below no score of the recorded baseline and costs no more than a fifth over it", () => {
+  it("falls below no score of the recorded baseline and costs no more than a twentieth over it", () => {
     const baseline = JSON.parse(readFileSync(baselinePath, "utf8")) as Baseline;
     const current = new Map(report.questions.map((result) => [result.id, result]));
     for (const before of baseline.report.questions) {
       const now = current.get(before.id);
       expect(now, before.id).toBeDefined();
       for (const [name, score] of Object.entries(before.scores)) expect(now?.scores[name] ?? 0, `${before.id} ${name}`).toBeGreaterThanOrEqual(score - 1e-9);
-      for (const [name, cost] of Object.entries(before.costs)) expect(now?.costs[name] ?? 0, `${before.id} ${name}`).toBeLessThanOrEqual(cost * 1.2 + 1e-9);
+      for (const [name, cost] of Object.entries(before.costs)) expect(now?.costs[name] ?? 0, `${before.id} ${name}`).toBeLessThanOrEqual(cost * 1.05 + 1e-9);
     }
     expect(report.stats.summarised / report.stats.nodes).toBeGreaterThanOrEqual(baseline.report.stats.summarised / baseline.report.stats.nodes - 1e-9);
   });
