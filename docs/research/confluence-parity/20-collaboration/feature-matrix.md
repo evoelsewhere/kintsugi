@@ -92,10 +92,10 @@ Each Confluence level of the permission rows (COL-22 to COL-31), against what ex
 | Global permissions | Access-role permission codes (`core.permission`, `core.role_permission`) | `wiki.comment`, `wiki.write`, `wiki.publish`, `wiki.manage` by migration |
 | Space view | Project Access (`admin.project_access`, `project.access.manage`) | None; the portal's document routes must check it (prerequisite) |
 | Space roles Viewer, Collaborator, Manager, Admin | Access roles bundle codes; project roles never grant | Viewer = `wiki.comment`; Collaborator = `wiki.write`; Manager and Admin = `wiki.manage`; no new role concept |
-| Space or page edit restriction | None (`autoCommitPaths` only picks commit or pull request) | A space rule on a path prefix naming users or access roles, checked by the API |
+| Space or page edit restriction | None (`autoCommitPaths` only picks commit or pull request) | An edit restriction on a path prefix naming users or access roles, checked by the API |
 | Page view restriction | None | Declined on Git content; authored restricted pages are a candidate (COL-27, its own ADR) |
 | Groups | Access roles incl. admin-defined sub-roles | None; project roles are not subjects |
-| Admin override | `admin` holds every code | Audited as `wiki.rule.clear` |
+| Admin override | `admin` holds every code | Audited as `wiki-restriction.clear` |
 
 ## Sources
 

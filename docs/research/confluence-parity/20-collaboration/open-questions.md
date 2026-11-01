@@ -29,7 +29,7 @@ Posted in the same thread at 23:45 with defaults; sa-platform answered the same 
 | Q10 | Does an edit restriction on a folder prefix cover its subtree? (Confluence inherits view restrictions only, not edit.) | Yes, the subtree; a rule on a child adds to the parent's (a writer must satisfy both), never removes it. A stated difference from Confluence. | decided: agree, thread 23:45 sa-platform |
 | Q11 | A people directory for mentions, readable by any holder of Project Access (id, username, display name, no email), since `GET /users` needs `members.manage`. | New read route of the wiki module limited to Project Access holders. | decided: agree |
 | Q12 | Agents and comments: a read tool for a node's comments in the member API and the MCP bridge, text treated as project data, not a `brain.read` record. | `GET /api/member/v1/comments` and `comments_list`, read-only. Anchors carry the Brain node id and commit (sa-brain confirmed in the data model). | decided: agree |
-| Q13 | Who may edit or delete another person's comment. | **Changed:** no separate `wiki.moderate`. Moderation is part of `wiki.manage` (spaces, rules, moderation; seeded to admin), audited as `wiki.comment.delete`; authors edit their own comments and delete them while they have no replies. | decided: changed, thread 23:45 sa-platform |
+| Q13 | Who may edit or delete another person's comment. | **Changed:** no separate moderation code. Moderation is part of `wiki.manage` (spaces, rules, moderation; seeded to admin), audited as `wiki-comment.delete`; authors edit their own comments and delete them while they have no replies. | decided: changed, thread 23:45 sa-platform |
 | Q14 | Authored restricted pages (encrypted Postgres records, no Git, no Brain; matrix row COL-27): roadmap candidate or dropped. | A late-phase Should candidate behind its own ADR; it is OQ-1 in the architects' constraints page, and the product owner decides. | decided as candidate; the owner decides |
 | Q15 | Required reviewers per space (GitBook-style merge rules: a minimum number of reviews, named reviewers, up-to-date change, bypass actors): a Kintsugi feature or the Git server's branch protection? Raised by the Git wiki comparison (ticket BC-005). | Stays on the Git server; no Kintsugi feature in the phases of the pack. | decided: agree with the default (sa-brain, thread) |
 
@@ -39,10 +39,10 @@ Taken from ADR-0099 and the data-model page of the architecture track (branches 
 
 | Kind | Name | Note |
 |---|---|---|
-| Permission codes | `wiki.comment`, `wiki.write`, `wiki.publish`, `wiki.manage` | Moderation of comments is part of `wiki.manage`; there is no `wiki.moderate` (Q13) and no per-space comment level. |
+| Permission codes | `wiki.comment`, `wiki.write`, `wiki.publish`, `wiki.manage` | Moderation of comments is part of `wiki.manage`; there is no separate moderation code (Q13) and no per-space comment level. |
 | Rule table | `knowledge.wiki_space_rule` | Settled by the architects (renamed in the data-model page and ADR-0096). Levels `edit` and `manage`; subjects user or access role. |
 | Other tables | `knowledge.wiki_comment`, `knowledge.wiki_watch`, `core.notification` | |
-| Audit actions | `wiki.publish`, `wiki.page.delete`, `wiki.comment.delete`, `wiki.rule.set`, `wiki.rule.clear` | |
+| Audit actions | `wiki-page.publish`, `wiki-page.delete`, `wiki-comment.delete`, `wiki-restriction.set`, `wiki-restriction.clear` | |
 | Agent read | `GET /api/member/v1/comments`, MCP tool `comments_list` | Q12. |
 
 ## For the product owner

@@ -28,7 +28,7 @@ Smallest step = the least that makes the row true, not the target design (see th
 | COL-01 | None. Review talk happens on the Git server's pull request. | Page-level conversation. | Table `knowledge.wiki_comment` (project, page path, author user id, body Markdown, parent id, timestamps); list and create routes; a thread under the page in the portal. Postgres. |
 | COL-02 | Brain node ids and line ranges at a commit give anchors. | Anchored comments that survive edits. | Add to the comment row: node id, quoted text, commit; on read, re-anchor by the quote, show orphaned comments at the page end (decided). Postgres. |
 | COL-03 | None. | Resolve and reopen. | A `resolved_by`/`resolved_at` pair on the comment and a filter. Postgres. |
-| COL-04 | `AUDIT_ACTIONS` for the delete record. | Edit and delete rules. | Author edits and deletes own comments (delete only without replies); `wiki.manage` deletes any, audited as `wiki.comment.delete`. Postgres + code. |
+| COL-04 | `AUDIT_ACTIONS` for the delete record. | Edit and delete rules. | Author edits and deletes own comments (delete only without replies); `wiki.manage` deletes any, audited as `wiki-comment.delete`. Postgres + code. |
 | COL-05 | None; needs drafts (authoring area). | Draft-only comments. | A `draft_id` on the comment, hidden from others until publish. Do after drafts exist. Postgres. |
 | COL-06 | None. | Reactions. | A reaction table; skip in the first phase. Postgres. |
 | COL-07 | `_build/review.md` written by the review job; Brain read tools return no conversation. | Agents cannot see open comments. | A separate read tool beside the Brain tools (`comments_list` for a node, with its citation), never inside `brain_read` (decided). Code in the member API and the MCP bridge. |
@@ -47,21 +47,21 @@ Smallest step = the least that makes the row true, not the target design (see th
 | COL-20 | `project.access.manage` holders grant access. | Request from the page. | A notification to the managers with a link to Project Access; later. Code. |
 | COL-21 | No anonymous route exists. | Public links. | None; decide by ADR if ever wanted. Won't. |
 | COL-22 | Access-role permission codes plus Project Access. | A space level and a content level. | See [permission mapping](#permission-mapping). Postgres + code. |
-| COL-23 | `core.role` and `core.role_permission` model the bundle; `core.user_role` the assignment. | Rules per space. | A space rule (`knowledge.wiki_space_rule`): project, path prefix, subject user or access role, level `edit` or `manage`. Commenting is a permission code, not a per-space level. A rule never widens Project Access. Postgres. |
+| COL-23 | `core.role` and `core.role_permission` model the bundle; `core.user_role` the assignment. | Rules per space. | An edit restriction (`knowledge.wiki_space_rule`): project, path prefix, subject user or access role, level `edit` or `manage`. Commenting is a permission code, not a per-space level. A rule never widens Project Access. Postgres. |
 | COL-24 | Flat permission catalog by migration. | Fine-grained operations. | Four installation codes by migration, as ADR-0099 names them: `wiki.comment`, `wiki.write` (draft and publish for review), `wiki.publish` (direct publication on the configured paths), `wiki.manage` (spaces, rules, comment moderation). Split further only on demand. Migration. |
-| COL-25 | `autoCommitPaths` chooses commit or pull request. | Edit restriction. | A space rule on a path prefix (see COL-23), checked by the API on every draft save and publish (decided); branch protection or CODEOWNERS on the Git server is the Git-level backstop. Postgres + code. |
+| COL-25 | `autoCommitPaths` chooses commit or pull request. | Edit restriction. | An edit restriction on a path prefix (see COL-23), checked by the API on every draft save and publish (decided); branch protection or CODEOWNERS on the Git server is the Git-level backstop. Postgres + code. |
 | COL-26 | None, and rejected for Git content (decided). | View restriction. | None for pages in the shared repo. Replacement: COL-27. Won't. |
 | COL-27 | `governance.restricted_record`, `restricted.read`, fail-closed audit. | Authored restricted pages. | Extend restricted records so a person can author one in the portal; never in Git or the Brain. Own ADR; the owner decides whether the need is real. Postgres. |
 | COL-28 | None. | The invariant. | A test: no rule yields more than Project Access; a rule on a child adds to its parent's, and a writer must satisfy both (decided). Code. |
-| COL-29 | None. | Listing the rules in force. | A query over the space rules under a prefix, for `wiki.manage`. Code. |
-| COL-30 | Admins hold all permissions by seed (`002_identity.sql`). | A recorded override. | An admin may clear a rule; audited as `wiki.rule.clear` with the admin as actor. Code. |
+| COL-29 | None. | Listing the edit restrictions in force. | A query over the edit restrictions under a prefix, for `wiki.manage`. Code. |
+| COL-30 | Admins hold all permissions by seed (`002_identity.sql`). | A recorded override. | An admin may clear a rule; audited as `wiki-restriction.clear` with the admin as actor. Code. |
 | COL-31 | `core.role`, `core.user_role`; sub-roles defined by admins. | A rule for a set of people. | Allow an access role as a rule subject (decided); no new group concept. Code. |
 | COL-32 | None; Git is the source of truth. | Real-time co-editing. | Not in the phases of this pack; see [the recommendation](#real-time-co-editing). |
 | COL-33 | Change feed can push to the portal. | Presence. | A draft row touched in the last two minutes is "editing"; push on a topic with the page as scope (decided). Postgres + code. |
 | COL-34 | The writer fetches, rebases and retries; a conflict fails the write. | A conflict a person can resolve. | Publish carries the base commit; if the page moved, show a three-way diff and ask. Code in the portal; the writer already rejects. |
 | COL-35 | Pull request and `workflow.document_write` states; `governance.gate`. | Named approvers in the portal. | Show the pull request's state and reviewers from the Git server; a gate only for spaces that require approval (later). Code. |
 | COL-36 | Git history per file; `brain_changes`; Brain `changed`. | A person-facing history. | Authoring area; here only: show author and date from the Git log beside each page. Code. |
-| COL-37 | `governance.audit_event`, `AuditTrail`. | New actions; retention; export. | Add the actions ADR-0099 names: `wiki.publish`, `wiki.page.delete`, `wiki.comment.delete`, `wiki.rule.set`, `wiki.rule.clear`. Retention and CSV export are separate, optional. Code. |
+| COL-37 | `governance.audit_event`, `AuditTrail`. | New actions; retention; export. | Add the actions ADR-0099 names: `wiki-page.publish`, `wiki-page.delete`, `wiki-comment.delete`, `wiki-restriction.set`, `wiki-restriction.clear`. Retention and CSV export are separate, optional. Code. |
 | COL-38 | `restricted.read` audited fail-closed. | Only for COL-27. | Same pattern for restricted pages. Ordinary reads are not audited (decided). Code. |
 | COL-39 | `member-activity`, `brain.read` records. | Per-page views. | Owned by the discovery area; collaboration needs only a privacy decision on per-person views. Code. |
 
@@ -74,18 +74,18 @@ Confluence combines three levels. Kintsugi's identity model has two kinds of "ro
 | Global permission (use the product, create spaces, administer) | What a person may do in the whole installation | **Access role** permission codes (`core.permission`, `core.role_permission`). Create a space: a new code `wiki.manage`. | Existing mechanism; new codes by migration. |
 | Site and space *view* | Who can see a space and its pages | **Project Access** (`admin.project_access`): all or nothing for the project's document repo. A space inside the repo (a folder) is visible to every holder of Project Access. | Existing. The portal's document routes do not check it today (`documents.controller.ts` needs a session only): fixing them is a prerequisite. |
 | Space role *Viewer* (read, comment) | Read and comment | Project Access plus the access role's `wiki.comment`, without `wiki.write`. | New code. |
-| Space role *Collaborator* (create and edit) | Add and edit pages | The access role holds `wiki.write`; a space rule may narrow writing under a path to a list. Publishing still passes through the writer and its pull request; direct publication needs `wiki.publish` on a configured path. | New codes and rule table. |
+| Space role *Collaborator* (create and edit) | Add and edit pages | The access role holds `wiki.write`; an edit restriction may narrow writing under a path to a list. Publishing still passes through the writer and its pull request; direct publication needs `wiki.publish` on a configured path. | New codes and rule table. |
 | Space role *Manager* and *Admin* | Manage people, content, settings | `wiki.manage` (spaces, rules, moderation of comments). Installation `admin` already holds every code by seed. | New code. |
-| Space rule for a *group* | Many people at once | An **access role** (including admin-defined sub-roles such as `ba`, `dev`, `tester`) as the subject of a rule. | Existing roles; new rule table. |
-| Content *edit* restriction (page or subtree; not inherited by children in Confluence) | Who may change this page | A space rule on a path prefix, checked on every draft save and publish. Kintsugi's version applies to the subtree (a folder), because the unit of a page tree is a path; the difference from Confluence is stated in the stories. | New table; enforced by the API (a real control). |
+| Edit restriction for a *group* | Many people at once | An **access role** (including admin-defined sub-roles such as `ba`, `dev`, `tester`) as the subject of a rule. | Existing roles; new rule table. |
+| Content *edit* restriction (page or subtree; not inherited by children in Confluence) | Who may change this page | An edit restriction on a path prefix, checked on every draft save and publish. Kintsugi's version applies to the subtree (a folder), because the unit of a page tree is a path; the difference from Confluence is stated in the stories. | New table; enforced by the API (a real control). |
 | Content *view* restriction (inherits down) | Who may read this page | **Not offered** on Git content (decided): Project Access is the boundary. Authored restricted pages as encrypted records are the replacement, subject to its own ADR. | Gap by decision. |
 | Anonymous access, public link | Readers without an account | None. | Won't. |
 | Admin key (override) | Recover content | `admin` access role. | Existing; audit the override. |
 
 What [ADR-0024](../../../decisions/0024-access-roles-vs-project-roles.md), [ADR-0008](../../../decisions/0008-authentication.md) and [ADR-0062](../../../decisions/0062-coding-agent-context-and-project-access.md) **forbid or make unsafe** here, so the architecture and stories avoid them:
 
-1. **A project role is never a subject of a rule.** "Architects may edit `02-architecture/`" cannot be expressed with the RACI role `architect`; equal strings do not map (an access sub-role `ba` and the project role `ba` are different things). A space rule names users or access roles.
-2. **A rule never widens Project Access.** A user named in a space rule but with no Project Access sees nothing; assignment, mention or share is not an access grant (ADR-0062 decision 1).
+1. **A project role is never a subject of an edit restriction.** "Architects may edit `02-architecture/`" cannot be expressed with the RACI role `architect`; equal strings do not map (an access sub-role `ba` and the project role `ba` are different things). An edit restriction names users or access roles.
+2. **An edit restriction never widens Project Access.** A user named in an edit restriction but with no Project Access sees nothing; assignment, mention or share is not an access grant (ADR-0062 decision 1).
 3. **Identity-provider claims do not define roles or rules** (ADR-0008 as amended). A future Entra ID group is not a space subject unless the roles are first mapped inside Kintsugi.
 4. **No inference from the Git server.** Who may push or approve a pull request on the server is the server's setting; Kintsugi may show it but must not treat it as its own permission.
 
@@ -99,7 +99,7 @@ The document repo keeps reviewed page text only (Markdown and front matter, [ADR
 | Watches, autowatch and notification preferences | Per person, change constantly, private. |
 | Notifications and the read marker | Per person, high volume, expire. |
 | Drafts and presence | Work in progress by one person, not yet reviewed (authoring thread, Q1). |
-| Space rules (who may write under a path) | They govern who may publish; a rule kept in the repo could be changed by the person it restricts through an ordinary pull request. Git server settings (branch protection) are the backstop, not the record. |
+| Edit restrictions (who may write under a path) | They govern who may publish; an edit restriction kept in the repo could be changed by the person it restricts through an ordinary pull request. Git server settings (branch protection) are the backstop, not the record. |
 | Audit entries | Append-only by trigger ([data model](../../../reference/data-model.md#audit-log)). |
 | Views and reads | Telemetry, never page content; owned by the discovery area. |
 | Restricted pages (if ever offered) | Must not reach any clone, mirror or Brain. |
@@ -123,7 +123,7 @@ What closes most of the need cheaply: an "editing now" marker (a draft row touch
 
 1. **Prerequisite, before any wiki route:** make the portal's document routes check Project Access (today a session is enough), or the first wiki route repeats the hole. Evidence: `apps/api/src/modules/delivery/documents/interface/documents.controller.ts:2-4`.
 2. A **people directory** readable by ordinary members (mentions, sharing) does not exist; `GET /users` needs `members.manage`.
-3. Four **permission codes** (`wiki.comment`, `wiki.write`, `wiki.publish`, `wiki.manage`) and the **tables** of the comment, watch and space rule, plus `core.notification`, are the whole identity delta. Names follow ADR-0099; the data model is owned by the architects.
+3. Four **permission codes** (`wiki.comment`, `wiki.write`, `wiki.publish`, `wiki.manage`) and the **tables** of the comment, watch and edit restriction, plus `core.notification`, are the whole identity delta. Names follow ADR-0099; the data model is owned by the architects.
 4. The audit needs five **new actions** and nothing else; its missing retention and export are an independent improvement.
 5. **No email** until an ADR accepts an outbound channel; the in-app inbox is the first delivery.
 6. **View restriction** is the one Confluence behaviour that Kintsugi will not match on Git content. The open question for the owner is whether authored restricted pages (COL-27) justify their own ADR.

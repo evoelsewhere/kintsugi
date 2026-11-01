@@ -28,7 +28,7 @@ As a `manager`, I want to resolve an inline comment thread, so that the open thr
 
 ### COL-US-04 Edit and delete comments (COL-04, S)
 As a `member`, I want to correct or delete my own comment, so that a mistake does not stay on the page.
-- Given I wrote a comment with no replies, When I delete it, Then it is gone from the page and one audit entry `wiki.comment.delete` records who deleted which comment, never its text.
+- Given I wrote a comment with no replies, When I delete it, Then it is gone from the page and one audit entry `wiki-comment.delete` records who deleted which comment, never its text.
 - Given my comment has replies, When I try to delete it, Then I am refused and offered Edit.
 - Given someone else wrote a comment and I do not hold `wiki.manage`, When I try to edit or delete it, Then I am refused (403) and nothing changes.
 - Given I am an `admin` and hold `wiki.manage`, When I delete an inappropriate comment, Then it is removed and the audit entry names me as actor.
@@ -99,12 +99,12 @@ As a `member`, I want to share a page with a colleague with a note, so that they
 ### COL-US-22 One rule for who may do what (COL-22, M)
 As an `admin`, I want a stated order of checks, so that I can predict what any user can do.
 - Given a user, When they ask to read a page, Then the check is Project Access first; with none, the answer is 403 whatever role they hold.
-- Given a user with Project Access, When they ask to comment, write or manage, Then the checks are the access role's permission code and then, for writing, the space rules that cover the path.
+- Given a user with Project Access, When they ask to comment, write or manage, Then the checks are the access role's permission code and then, for writing, the edit restrictions that cover the path.
 - Given a user's project role (RACI) is `architect`, When the system decides whether they may edit a space, Then the project role is not consulted (ADR-0024).
 
 ### COL-US-23 A space with its own writers (COL-23, M)
 As a `manager`, I want a space where only named people publish, so that the standards are not changed by everyone.
-- Given I hold `wiki.manage`, When I set a rule that lets only the access role `ba` and the user Dana write under `01-standards/`, Then the rule is stored and one audit entry (`wiki.rule.set`) names me, the path and the subjects.
+- Given I hold `wiki.manage`, When I set a rule that lets only the access role `ba` and the user Dana write under `01-standards/`, Then the rule is stored and one audit entry (`wiki-restriction.set`) names me, the path and the subjects.
 - Given Sam holds `wiki.write` but is neither in the `ba` role nor Dana, When Sam tries to save or publish a change under `01-standards/`, Then Sam is refused (403) and nothing is written to the document repo.
 - Given Sam holds `wiki.comment` only, When Sam comments on a page under `01-standards/`, Then the comment is accepted: a rule limits who writes, not who comments.
 - Given a user is named in a rule but has no Project Access to the project, When they open the space, Then they get 403: a rule never widens Project Access.
@@ -117,7 +117,7 @@ As an `admin`, I want separate permissions for commenting, editing and managing 
 
 ### COL-US-25 Only the owners may change a rule (COL-25, M; open question Q10)
 As a `manager`, I want an edit restriction on a folder, so that only its owners can publish there.
-- Given I hold `wiki.manage`, When I restrict editing of `02-architecture/` to the users Lee and Sam, Then a restriction row for the path prefix and one audit entry (`wiki.rule.set`) are stored.
+- Given I hold `wiki.manage`, When I restrict editing of `02-architecture/` to the users Lee and Sam, Then a restriction row for the path prefix and one audit entry (`wiki-restriction.set`) are stored.
 - Given the restriction, When a user who is not listed starts a publish of a page below that path, Then the API refuses it (403) at publish and nothing is written to the document repo.
 - Given the restriction, When a listed user publishes, Then the normal write path runs (a pull request unless the path auto-commits).
 - Given the restriction covers the folder, When a user tries to publish a page in a subfolder, Then they are refused as well (assumed answer to Q10: it covers the subtree).
@@ -140,7 +140,7 @@ As an `admin`, I want the system to refuse a restriction that contradicts the re
 As a `manager`, I want a list of every restriction in a space, so that I can clear the stale ones after people leave.
 - Given restrictions exist, When I open the space settings, Then I see each path prefix, its mode, its subjects and who set it and when.
 - Given a listed user was disabled, Then the row shows them as disabled.
-- Given I hold `wiki.manage`, When I clear a rule, Then it is removed and `wiki.rule.clear` is audited.
+- Given I hold `wiki.manage`, When I clear a rule, Then it is removed and `wiki-restriction.clear` is audited.
 
 ### COL-US-31 Name a role instead of each person (COL-31, S)
 As an `admin`, I want to name an access role in a rule, so that new members inherit it.
@@ -176,8 +176,8 @@ As a `viewer`, I want to see who changed a rule and when, so that I know whom to
 ## Audit
 
 ### COL-US-37 Account for permission changes (COL-37, M)
-As an `admin`, I want an audit entry for every space rule change and moderated comment deletion, so that I can answer who changed access and when.
-- Given a rule is set or cleared, or a comment is deleted by a moderator, Then exactly one audit entry (`wiki.rule.set`, `wiki.rule.clear`, `wiki.comment.delete`) is appended with the actor, project and subject, and never the text of any page.
+As an `admin`, I want an audit entry for every edit restriction change and moderated comment deletion, so that I can answer who changed access and when.
+- Given a rule is set or cleared, or a comment is deleted by a moderator, Then exactly one audit entry (`wiki-restriction.set`, `wiki-restriction.clear`, `wiki-comment.delete`) is appended with the actor, project and subject, and never the text of any page.
 - Given the audit log is listed by action, Then the new actions appear in the filter list.
 - Given I try to change or delete an audit entry, Then the database refuses (append-only).
 
