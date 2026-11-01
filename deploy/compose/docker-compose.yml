@@ -44,20 +44,7 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
     networks: [backend]                          # outbound: Git servers and the configured LLM providers
-    # Job processes as a user of their own (ADR-0093), so a job cannot read the worker's environment (DATABASE_URL,
-    # KINTSUGI_SECRET_KEY). Starting a process as another user needs the worker to run as root with SETUID/SETGID, kept to
-    # the capabilities below. Off by default until it has been tried on a Linux host; to turn it on, uncomment:
-    # user: "0:0"
-    # cap_drop: [ALL]
-    # cap_add: [SETUID, SETGID, CHOWN, FOWNER, DAC_OVERRIDE, KILL]
-    # security_opt: ["no-new-privileges:true"]
-    # and add to the worker's environment (the git variables let the root worker use the mirrors the non-root one made):
-    #   KINTSUGI_JOB_UID: "10002"
-    #   KINTSUGI_JOB_GID: "10002"
-    #   GIT_CONFIG_COUNT: "1"
-    #   GIT_CONFIG_KEY_0: safe.directory
-    #   GIT_CONFIG_VALUE_0: "*"
-    # and the same three GIT_CONFIG_* lines to the app's environment (it reads the mirrors the root worker makes).
+    # Job processes as a user of their own (ADR-0093): add docker-compose.isolated.yml and run probe-job-isolation.sh.
 
   postgres:
     image: pgvector/pgvector:pg16

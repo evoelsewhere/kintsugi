@@ -10,8 +10,7 @@
 
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { existsSync } from "node:fs";
-import { posix, win32 } from "node:path";
+import { bashCommand } from "../launcher/bash.js";
 import { runProcess } from "../launcher/process.js";
 import { jobEnvironment } from "../launcher/script.js";
 import { boundOutput } from "./output.js";
@@ -23,34 +22,6 @@ const parameters = Type.Object({
   command: Type.String({ description: "The command to run, executed with `bash -c`." }),
   timeout: Type.Optional(Type.Number({ description: `Timeout in seconds (default ${DEFAULT_TIMEOUT_SEC}, max ${MAX_TIMEOUT_SEC}).` })),
 });
-
-/**
- * The bash the `shell` tool runs, or undefined when there is none (T2-010): on Windows, Git for Windows' bash next to the
- * `git` on the PATH (Git puts only its `cmd` folder there, not `bin`), else a bash on the PATH. Without one, `shell` is
- * not offered to the job (`withAvailableShell`), so a model does not spend turns on a tool that always fails.
- */
-export function findBash(env: NodeJS.ProcessEnv, platform: NodeJS.Platform, exists: (path: string) => boolean = existsSync): string | undefined {
-  const path = platform === "win32" ? win32 : posix;
-  const dirs = (env["PATH"] ?? env["Path"] ?? "").split(path.delimiter).filter((dir) => dir !== "");
-  if (platform === "win32") {
-    for (const dir of dirs) {
-      if (!exists(path.join(dir, "git.exe"))) continue;
-      const root = path.dirname(dir);
-      for (const candidate of [path.join(root, "bin", "bash.exe"), path.join(root, "usr", "bin", "bash.exe")]) if (exists(candidate)) return candidate;
-    }
-  }
-  const name = platform === "win32" ? "bash.exe" : "bash";
-  for (const dir of dirs) if (exists(path.join(dir, name))) return path.join(dir, name);
-  return undefined;
-}
-
-let bash: { path: string | undefined } | undefined;
-
-/** `findBash` for this process, looked up once. */
-export function bashCommand(): string | undefined {
-  bash ??= { path: findBash(process.env, process.platform) };
-  return bash.path;
-}
 
 /** The agent's tools without `shell` when this host has no bash to run it. */
 export function withAvailableShell(tools: readonly string[], hasBash: boolean = bashCommand() !== undefined): string[] {

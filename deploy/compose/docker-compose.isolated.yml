@@ -1,0 +1,29 @@
+# Job processes as a user of their own (ADR-0093): a script step, hook or agent job then cannot read the worker's
+# environment (DATABASE_URL, KINTSUGI_SECRET_KEY) or its files. Starting a process as another user needs CAP_SETUID and
+# CAP_SETGID, which Docker gives a root user only, so the worker runs as root kept to the capabilities it uses: switch
+# user, hand a job its output and scratch folders and clean them up, stop a job's process tree.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.isolated.yml up -d
+#   ./probe-job-isolation.sh     # exits 0 only when a job cannot read the worker's secrets on this host
+#
+# The boundary is not verified on a host until the probe has passed there.
+services:
+  worker:
+    user: "0:0"
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID, CHOWN, FOWNER, DAC_OVERRIDE, KILL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      KINTSUGI_JOB_UID: "10002"   # kintsugi-job in the worker image
+      KINTSUGI_JOB_GID: "10002"
+      # The mirrors a non-root worker made are owned by another user than root: git refuses them without this.
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: safe.directory
+      GIT_CONFIG_VALUE_0: "*"
+
+  app:
+    environment:
+      # The app (non-root) reads mirrors the root worker makes.
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: safe.directory
+      GIT_CONFIG_VALUE_0: "*"
