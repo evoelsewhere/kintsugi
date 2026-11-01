@@ -6,7 +6,7 @@
 
 - **Id**: `AUT-nn-S<n>`, the feature id and a number.
 - **Personas**: *member* (a project member who writes documents and builds), *manager* (a project manager), *admin* (the installation's administrator), *viewer* (a person who only reads), *agent* (a member's agent reading through the [Brain](../../../reference/brain.md) and the member tools).
-- **Words used in the criteria**: *space* is a folder of the project's one document repository (system spaces are the numbered roots, team spaces are under `20-spaces/`); *publish* is one document-write, by pull request unless the path is in `directPublishPaths` and the person holds `wiki.publish`; *draft* is the working copy in Postgres; *page id* is the `id` front-matter field `PAGE-<SPACE>-0001`.
+- **Words used in the criteria**: *space* is a folder of the project's one document repository (system spaces are the numbered roots, team spaces are under `20-spaces/`); *publish* is one document-write, by pull request unless the path is in `directPublishPaths` and the person holds `wiki.publish`; *draft* is the working copy in Postgres; *page id* is the `id` front-matter field `PAGE-<KEY>-0001`.
 - Where a criterion names the pull request, the same applies to a direct commit, with the page live at once.
 
 ## Spaces and the page tree
