@@ -180,6 +180,7 @@ What each outcome leaves:
 | Clean publish, direct | Committed on the default branch | Deleted when the write is `committed` | The page, in the Brain after the next build |
 | Conflict found by the API | Nothing written | Kept | A three-way merge view; publishing again starts over |
 | `expectedHash` refused by the writer | Nothing written | Kept | *Changed since you started*; the portal reloads the head and offers the merge view |
+| A runtime job's write to the same repository lands between the merge and the page write | The writer runs one write per repository at a time, so the two never interleave: if the job changed the page's file, `expectedHash` refuses the page write; otherwise the page commit goes on top | Kept on a refusal | *Changed since you started* with the merge view, or nothing special. An acceptance test of the writer races the two, with the same file and with different files ([ADR-0096](../../../decisions/0096-wiki-pages-in-the-document-repo.md)) |
 | Push rejected, rebase clean | Written after a retry | As for a clean publish | Nothing special |
 | Push rejected, rebase conflict | Nothing written | Kept | *Could not publish* with the redacted error and the merge view |
 | Pull request declined | Nothing on the default branch | Kept | *Declined*, with the option to edit and publish again or discard |
