@@ -2,6 +2,7 @@
 // the worker's store and the document mirror, built by the worker on request.
 
 import { Module } from "@nestjs/common";
+import { ProjectAccessModule } from "#modules/admin/project-access/index.js";
 import { DocumentsModule } from "#modules/delivery/documents/index.js";
 import { BrainService } from "./application/brain.service.js";
 import { BrainBuildQueue, BrainIndex } from "./domain/brain.ports.js";
@@ -10,7 +11,7 @@ import { PgBrainIndex } from "./infrastructure/pg-brain.index.js";
 import { BrainController } from "./interface/brain.controller.js";
 
 @Module({
-  imports: [DocumentsModule],
+  imports: [DocumentsModule, ProjectAccessModule],
   controllers: [BrainController],
   providers: [BrainService, { provide: BrainIndex, useClass: PgBrainIndex }, { provide: BrainBuildQueue, useClass: PgBossBrainBuildQueue }],
   exports: [BrainService],

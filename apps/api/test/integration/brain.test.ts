@@ -92,7 +92,7 @@ describe.skipIf(!hasDatabase)("brain (integration)", () => {
     const status = await admin.get<BrainStatusView>("/projects/shop/brain");
     expect(status.body.data).toMatchObject({ available: true, configured: false, state: "not-built", branch: "main", defaultBranch: "main", branches: ["main", "release"] });
     expect((await admin.get("/projects/shop/brain/tree")).status).toBe(409);
-    const { client } = await memberClient(app, admin, "reader", ["user"]);
+    const { client } = await memberClient(app, admin, "reader", ["user"], ["shop"]);
     expect((await client.get("/projects/shop/brain")).status).toBe(200);
     expect((await client.request("PUT", "/projects/shop/brain", { body: { enabled: true } })).status).toBe(403);
     expect((await admin.request("PUT", "/projects/shop/brain", { body: { enabled: true, branch: "kintsugi/x" } })).status).toBe(400);

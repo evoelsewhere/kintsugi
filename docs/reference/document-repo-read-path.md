@@ -2,7 +2,7 @@
 
 > Explains how the API and portal read document files and stage results.
 
-The API reads the document repo **only from Kintsugi's mirror** under the data directory (`KINTSUGI_DATA_DIR`, kept current by the worker's Git sync), read-only, with plumbing commands of `packages/git`; it never clones, checks out or writes. A session is enough (no permission). Refs are a full commit id or an existing `refs/heads/<branch>`; paths are repository paths (no `..`, `.`, empty or `.git` segments); nothing under `restricted/` is ever served (restricted records are not committed, [ADR-0029](../decisions/0029-job-workspaces-instead-of-os-sandboxes.md)).
+The API reads the document repo **only from Kintsugi's mirror** under the data directory (`KINTSUGI_DATA_DIR`, kept current by the worker's Git sync), read-only, with plumbing commands of `packages/git`; it never clones, checks out or writes. Project Access on the project is required, no permission ([ADR-0099](../decisions/0099-wiki-collaboration-and-access.md) decision 4). Refs are a full commit id or an existing `refs/heads/<branch>`; paths are repository paths (no `..`, `.`, empty or `.git` segments); nothing under `restricted/` is ever served (restricted records are not committed, [ADR-0029](../decisions/0029-job-workspaces-instead-of-os-sandboxes.md)).
 
 ## Read API
 
