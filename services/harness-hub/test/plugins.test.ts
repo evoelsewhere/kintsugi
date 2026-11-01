@@ -107,6 +107,10 @@ describe("connector plugin generation", () => {
       expect(parsed.name).toMatch(/^kintsugi-work-[a-f0-9]{12}$/);
       expect(parsed.plugins[0]).toMatchObject({ name: "kintsugi", version: "0.1.0" });
     }
+    // Where a marketplace describes the connector, it says what its own plugin.json says: no removed task workflow.
+    for (const marketplace of [claude, copilot]) {
+      expect(JSON.parse(marketplace.content).plugins[0].description).toBe("Read Kintsugi projects and documents through a local, read-only MCP connection.");
+    }
     expect(JSON.parse(secondProfile.content).name).not.toBe(JSON.parse(claude.content).name);
     expect(JSON.parse(claude.content).plugins[0].source).toBe("./plugins/claude/kintsugi");
     expect(JSON.parse(codex.content).plugins[0].source.path).toBe("./plugins/codex/kintsugi");

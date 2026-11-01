@@ -64,7 +64,7 @@ Maps one-to-one onto pipeline phases ([delivery pipeline](../methodology/deliver
 | Component | Responsibility |
 |---|---|
 | E1 Workflow Orchestrator | pg-boss job queue + phase / stage / gate state machine driven by the application's **pipeline definition** (built-in, or declared in `kintsugi.yaml`). Transitions are validated by the API, persisted as unit-file commits and indexed in Postgres (ADR-0012); retries; fan-out per wave |
-| E2 Knowledge Hub | AS-IS / TO-BE KB: sources in Git, text chunks + embeddings (pgvector) in Postgres, no code graph; ingestion; search API |
+| E2 Knowledge Hub | The project's knowledge is its document repository in Git; the Brain indexes one branch of it as a vectorless tree (no embeddings, no code graph) that members' agents reason over ([ADR-0091](../decisions/0091-brain-vectorless-tree-index.md)) |
 | E3 Standards & Assets | Reads `kintsugi.yaml`, `01-standards/` and `plugins/` from the document repo at a fixed commit, and combines them with built-in assets for runtime jobs and harness rendering ([document repository](../reference/document-repo.md)) |
 | E4 Kintsugi Runtime (pi) | Generic agent kernel ([ADR-0023](../decisions/0023-runtime-as-generic-agent-kernel.md)): runs one agent job whose [agent definition](../reference/runtime-agents.md) is supplied with the job, in the job's workspace ([ADR-0029](../decisions/0029-job-workspaces-instead-of-os-sandboxes.md)); knows no agent. Built-in and custom agents are installation data managed in the Agent Builder ([ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md)) |
 | E5 Harness Hub | The local MCP bridge and the generation of the connector plugin for member harnesses ([ADR-0069](../decisions/0069-common-member-base-and-plugin-distribution.md)); plugin distribution and per-member monitoring come later |
@@ -90,7 +90,7 @@ Maps one-to-one onto pipeline phases ([delivery pipeline](../methodology/deliver
 | Container | Modules | Code |
 |---|---|---|
 | `kintsugi-app` | API (including the member API), portal, job gateway | `apps/api`, `apps/portal` |
-| `kintsugi-worker` | Orchestrator, Git Sync & Writer, ingestion, job launcher | `services/orchestrator`, `services/knowledge`, `services/runtime` (launcher) |
+| `kintsugi-worker` | Orchestrator, Git Sync & Writer, the Brain index, job launcher | `services/orchestrator`, `services/runtime` (launcher) |
 
 Shared libraries and assets:
 

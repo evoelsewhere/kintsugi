@@ -87,7 +87,7 @@ const overview: GuidePage = {
           <Callout>Windows or running into errors? <Link className="text-[var(--ds-accent)] hover:underline" to="/guideline/install-the-cli">Full installation guide →</Link></Callout>
         </Step>
         <Step number={2} eyebrow="~3 min · sign in and set up" title="Sign in, then set up your AI clients">
-          <P>Sign in to your project in the browser. Then <Code>init</Code> lists the AI clients it finds on your machine (Claude Code, Codex), asks which to set up, and whether for all your workspaces or only the current one. The installer already told the CLI which Kintsugi to talk to.</P>
+          <P>Sign in to your project in the browser. Then <Code>init</Code> lists the AI clients it finds on your machine (Claude Code, Codex, GitHub Copilot), asks which to set up, and whether for all your workspaces or only the current one. The installer already told the CLI which Kintsugi to talk to.</P>
           <CodeBlock label="Sign in and set up" code={"kintsugi login my-project\nkintsugi init"} />
           <P>Restart the client. Nothing else to configure: the connection is ready.</P>
         </Step>

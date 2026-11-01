@@ -48,6 +48,8 @@ export class PluginSetupError extends Error {
 }
 
 export const KINTSUGI_PLUGIN_NAME = "kintsugi";
+/** What the connector plugin does, in its plugin.json and in the marketplace entry that lists it. */
+export const CONNECTOR_DESCRIPTION = "Read Kintsugi projects and documents through a local, read-only MCP connection.";
 export const AGENT_PLUGINS_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
 export const AGENT_PLUGINS_MCP_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json";
 
@@ -84,7 +86,7 @@ function json(value: unknown): string {
 export function generateConnectorPlugin(input: ConnectorPluginInput): GeneratedPluginFiles {
   assertInput(input);
   const pluginName = input.pluginName ?? KINTSUGI_PLUGIN_NAME;
-  const description = "Read Kintsugi projects and documents through a local, read-only MCP connection.";
+  const description = CONNECTOR_DESCRIPTION;
   const displayName = input.pluginDisplayName ?? "Kintsugi";
   const args = [input.cliEntrypointPath, "mcp", "serve", "--profile", input.profileId];
   const files: Record<string, string> = {};

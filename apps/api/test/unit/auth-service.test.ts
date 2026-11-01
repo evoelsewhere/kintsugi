@@ -37,6 +37,27 @@ describe("AuthService sign-in", () => {
     expect(await statusOf(auth.verifyCredentials("alice", "right"))).toBe(200);
   });
 
+  it("keeps the answer of an error that is not the database being down, without counting the attempt", async () => {
+    // Postgres refuses a NUL byte in the username (22021): the global filter answers 400, as before.
+    const refused = Object.assign(new Error("invalid byte sequence for encoding \"UTF8\": 0x00"), { code: "22021", severity: "ERROR" });
+    const { auth, throttle } = service(async () => {
+      throw refused;
+    });
+    for (let i = 0; i < 6; i++) await expect(auth.verifyCredentials("adm\u0000in", "x")).rejects.toBe(refused);
+    expect(throttle.retryAfter("adm\u0000in")).toBeUndefined();
+  });
+
+  it.each([
+    ["a refused connection", Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:5432"), { code: "ECONNREFUSED" })],
+    ["a server shutting down", Object.assign(new Error("terminating connection due to administrator command"), { code: "57P01", severity: "FATAL" })],
+    ["a full pool", new Error("timeout exceeded when trying to connect")],
+  ])("answers 503 for %s", async (_name, failure) => {
+    const { auth } = service(async () => {
+      throw failure;
+    });
+    expect(await statusOf(auth.verifyCredentials("alice", "right"))).toBe(HttpStatus.SERVICE_UNAVAILABLE);
+  });
+
   it("still locks the account after five wrong passwords", async () => {
     const { auth, throttle } = service(async (password) => (password === "right" ? alice : undefined));
     for (let i = 0; i < 5; i++) expect(await statusOf(auth.verifyCredentials("alice", "wrong"))).toBe(HttpStatus.UNAUTHORIZED);

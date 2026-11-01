@@ -171,7 +171,26 @@ export async function runCliWithSignals(
   }
 }
 
+/** A schema refused an argument (a plugin name, a project id): its first issue, as one line. */
+function invalidArgument(error: unknown): { code: string; message: string } | undefined {
+  if (error === null || typeof error !== "object" || (error as { name?: unknown }).name !== "ZodError") return undefined;
+  const issue = (error as { issues?: Array<{ path?: unknown[]; message?: string }> }).issues?.[0];
+  if (issue === undefined) return undefined;
+  const field = Array.isArray(issue.path) && issue.path.length > 0 ? issue.path.join(".") : "argument";
+  return { code: "INVALID_ARGUMENT", message: `${field}: ${issue.message ?? "is not valid"}` };
+}
+
+/** Commander's own outcomes that are not failures: help or the version was shown (a bare group command shows help). */
+const SHOWN_HELP = new Set(["commander.helpDisplayed", "commander.help", "commander.version"]);
+
+/** Whether the arguments ask for JSON, read before parsing so usage errors can be JSON too. */
+function wantsJson(argv: readonly string[]): boolean {
+  return argv.some((value, index) => value === "--json" || value === "--format=json" || (value === "--format" && argv[index + 1] === "json"));
+}
+
 function errorFields(error: unknown): { code: string; status?: number; message: string; details?: unknown } {
+  const invalid = invalidArgument(error);
+  if (invalid !== undefined) return invalid;
   if (error instanceof KintsugiClientError || error instanceof CliError) {
     const details = "details" in error ? error.details : undefined;
     return { code: error.code, ...(error.status === undefined ? {} : { status: error.status }), message: error.message, ...(details === undefined ? {} : { details }) };
@@ -189,6 +208,7 @@ function errorFields(error: unknown): { code: string; status?: number; message: 
 }
 
 export async function runCli(argv: readonly string[], deps: CliDeps): Promise<number> {
+  const json = wantsJson(argv);
   const program = new Command();
   program.name("kintsugi").description("Connect your coding agent to Kintsugi").version(KINTSUGI_CLI_VERSION);
   program
@@ -201,7 +221,8 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
   program.configureOutput({
     writeOut: (value) => { deps.stdout.write(value); },
     writeErr: (value) => { deps.stderr.write(value); },
-    outputError: (value, write) => { write(value); },
+    // A usage error is written once: by commander as text, or below as JSON under --json.
+    outputError: (value, write) => { if (!json) write(value); },
   });
   program.exitOverride();
   program.hook("preAction", (_thisCommand, actionCommand) => {
@@ -220,10 +241,12 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
     await program.parseAsync([...argv], { from: "user" });
     return 0;
   } catch (error) {
-    if (error instanceof CommanderError && error.exitCode === 0) return 0;
+    if (error instanceof CommanderError && (error.exitCode === 0 || SHOWN_HELP.has(error.code))) return 0;
     const options = program.opts() as { format?: string; json?: boolean };
-    const format = options.json ? "json" : options.format === "json" ? "json" : "text";
-    const fields = errorFields(error);
+    const format = json || options.json ? "json" : options.format === "json" ? "json" : "text";
+    // Commander has already said what was wrong with the arguments.
+    if (error instanceof CommanderError && format !== "json") return error.exitCode === 0 ? 0 : 2;
+    const fields = error instanceof CommanderError ? { code: error.code, message: error.message.replace(/^error: /, "") } : errorFields(error);
     if (format === "json") deps.stderr.write(`${JSON.stringify({ success: false, error: fields })}\n`);
     else deps.stderr.write(`Error ${fields.code}: ${fields.message}${fields.details === undefined ? "" : `\n${JSON.stringify(fields.details, null, 2)}`}\n`);
     return fields.status === 403 ? 3 : fields.status === 401 ? 3 : 2;

@@ -44,7 +44,7 @@ function renderSetupPlan(deps: CliDeps, input: { harness: string; profileId: str
   for (const command of input.report.installCommands) deps.stdout.write(`  ${command}\n`);
   deps.stdout.write("Rollback commands:\n");
   for (const command of input.report.rollbackCommands) deps.stdout.write(`  ${command}\n`);
-  deps.stdout.write(`Restart or reload ${input.harness === "claude-code" ? "Claude Code" : "Codex"} after installation to load the plugin. The first MCP connection will open Kintsugi browser sign-in.\n`);
+  deps.stdout.write(`Restart or reload ${input.harness === "claude-code" ? "Claude Code" : input.harness === "copilot" ? "GitHub Copilot" : "Codex"} after installation to load the plugin. The first MCP connection will open Kintsugi browser sign-in.\n`);
 }
 
 export interface SetupOptions {
@@ -217,7 +217,7 @@ async function runInit(deps: CliDeps, command: Command, projectArgument: string 
   const { found, unsupported } = await findClients(deps);
   let chosen: string[];
   if (options.harness !== undefined) chosen = options.harness.split(",").map((value) => value.trim()).filter((value) => value !== "");
-  else if (found.length === 0) throw new CliError("PLUGIN_CLIENT_UNAVAILABLE", `No supported AI client was found on this machine (Claude Code, Codex)${unsupported.length === 0 ? "" : `; ${unsupported.join(", ")} is not supported yet`}`);
+  else if (found.length === 0) throw new CliError("PLUGIN_CLIENT_UNAVAILABLE", `No supported AI client was found on this machine (Claude Code, Codex, GitHub Copilot)${unsupported.length === 0 ? "" : `; ${unsupported.join(", ")} is not supported yet`}`);
   else if (options.all === true || found.length === 1 || !interactive) chosen = found.map((client) => client.id);
   else chosen = await deps.choose!({ message: "Which AI clients should Kintsugi set up?", options: found.map((client) => ({ value: client.id, label: client.label, hint: client.detail })), multiple: true, defaults: found.map((client) => client.id) });
   const clients = chosen.map((value) => {
@@ -271,7 +271,7 @@ export function registerPluginsCommand(program: Command, deps: CliDeps): void {
   program.command("init [project]")
     .description("Set up your AI clients for Kintsugi: choose the clients found on this machine, and global or this workspace")
     .option("--url <url>", "Kintsugi installation URL (default: the one this CLI was installed from)")
-    .option("-H, --harness <clients>", "Clients to set up, comma separated: claude, codex, codex-desktop (default: choose)")
+    .option("-H, --harness <clients>", "Clients to set up, comma separated: claude, codex, codex-desktop, copilot (default: choose)")
     .option("--all", "Set up every client found, without asking")
     .option("--scope <scope>", "global (every workspace) or workspace (this folder only; Claude Code)")
     .option("-y, --yes", "Accept the defaults without asking")
@@ -279,7 +279,7 @@ export function registerPluginsCommand(program: Command, deps: CliDeps): void {
     .action(async function(this: Command, project: string | undefined) { await runInit(deps, this, project); });
 
   program.command("connect <client> [project]")
-    .description("Connect one AI client (claude, codex or codex-desktop) to a Kintsugi project (the short form of init -H)")
+    .description("Connect one AI client (claude, codex, codex-desktop or copilot) to a Kintsugi project (the short form of init -H)")
     .option("--url <url>", "Kintsugi installation URL (default: the one this CLI was installed from)")
     .option("--verbose", "Print the files written and the native commands")
     .action(async function(this: Command, client: string, project: string | undefined) {
@@ -294,7 +294,7 @@ export function registerPluginsCommand(program: Command, deps: CliDeps): void {
   plugins.command("setup")
     .description("Prepare or install the project-scoped Kintsugi connector plugin (the long form of connect)")
     .option("--install-mode <mode>", "Install mode: native-cli or desktop-ui", "native-cli")
-    .requiredOption("--harness <harness>", "Harness: claude-code or codex")
+    .requiredOption("--harness <harness>", "Harness: claude-code, codex or copilot")
     .requiredOption("--url <canonical-url>", "Canonical Kintsugi installation URL")
     .action(async function(this: Command) {
       const options = this.optsWithGlobals() as SetupOptions;

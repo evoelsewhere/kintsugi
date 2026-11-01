@@ -101,7 +101,7 @@ export function MemberConnectPanel({ projectId, canManage, canRead }: { projectI
           <div className="flex flex-wrap items-center gap-2 px-3.5 py-3 [box-shadow:inset_2px_0_0_0_var(--ds-accent)]">
             <div className="min-w-0 flex-1">
               <p className="text-[13px] font-medium text-text">Three commands</p>
-              <p className="mt-0.5 text-[12px] text-text-muted">Install the Kintsugi CLI first (<Link className="text-accent hover:underline" to="/guideline/install-the-cli">guide</Link>). <code>init</code> lists the clients it finds (Claude Code, Codex) and asks which to set up, and whether for every workspace or only the current one.</p>
+              <p className="mt-0.5 text-[12px] text-text-muted">Install the Kintsugi CLI first (<Link className="text-accent hover:underline" to="/guideline/install-the-cli">guide</Link>). <code>init</code> lists the clients it finds (Claude Code, Codex, GitHub Copilot) and asks which to set up, and whether for every workspace or only the current one.</p>
             </div>
           </div>
           <div className="flex flex-wrap items-end gap-2 px-3.5 pb-3.5">

@@ -2,7 +2,7 @@ import { lstat, mkdir, open, readFile, rename, rm, rmdir } from "node:fs/promise
 import { createHash, randomUUID } from "node:crypto";
 import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { assertClientCompatibility, versionAtLeast } from "./compatibility.js";
-import { KINTSUGI_PLUGIN_NAME, clientPluginName, generateConnectorPlugin, generateMemberPlugin, PluginSetupError, type ConnectorPluginInput, type HarnessClient } from "./generate.js";
+import { CONNECTOR_DESCRIPTION, KINTSUGI_PLUGIN_NAME, clientPluginName, generateConnectorPlugin, generateMemberPlugin, PluginSetupError, type ConnectorPluginInput, type HarnessClient } from "./generate.js";
 
 /** Where the client installs the plugins: for the user everywhere, or only for the workspace the command runs in. */
 export type InstallScope = "user" | "project" | "local";
@@ -135,7 +135,7 @@ export function generateConnectorMarketplace(target: HarnessClient, version: str
         description: "Local Kintsugi plugins.",
         owner: { name: "Kintsugi" },
         plugins: [
-          { name: pluginName, source: pluginPath, description: "Read-only Kintsugi task context and workflow evidence.", version },
+          { name: pluginName, source: pluginPath, description: CONNECTOR_DESCRIPTION, version },
           ...members.map((member) => ({ name: clientPluginName(member.name), source: `./plugins/${target}/${clientPluginName(member.name)}`, description: member.description ?? `Kintsugi plugin ${member.name}`, version: member.version })),
         ],
       }, null, 2)}\n`,
@@ -170,7 +170,7 @@ export function generateConnectorMarketplace(target: HarnessClient, version: str
       owner: { name: "Kintsugi" },
       metadata: { description: "Local Kintsugi plugins.", version },
       plugins: [
-        { name: pluginName, source: pluginPath, description: "Read-only Kintsugi task context and workflow evidence.", version },
+        { name: pluginName, source: pluginPath, description: CONNECTOR_DESCRIPTION, version },
         ...members.map((member) => ({ name: clientPluginName(member.name), source: `./plugins/${target}/${clientPluginName(member.name)}`, description: member.description ?? `Kintsugi plugin ${member.name}`, version: member.version })),
       ],
     }, null, 2)}\n`,

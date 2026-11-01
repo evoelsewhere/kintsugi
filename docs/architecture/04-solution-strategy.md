@@ -7,7 +7,7 @@
 | 1 | **Separate the brain from the hands** | The Kintsugi Runtime (pi) does knowledge, assessment, planning and review. Members implement in their own harnesses | [0001](../decisions/0001-pi-as-kintsugi-runtime.md) |
 | 2 | **Self-hosted, single-host package** | Docker Compose, one installation per organization, no Kubernetes, no multi-tenancy | [0006](../decisions/0006-self-hosted-package.md) |
 | 3 | **Git is the source of truth** | Documents, deliverables, standards and work item state are files in Git; Postgres holds operational data + rebuildable indexes; many Git servers and repos | [0007](../decisions/0007-git-as-source-of-truth.md), [0012](../decisions/0012-work-items-as-files-in-git.md) |
-| 4 | **One datastore** | Postgres + pgvector for state, KB index, queue, events, audit | [0010](../decisions/0010-postgres-only.md) |
+| 4 | **One datastore** | Postgres for state, the Brain index, queue, events, audit (the pgvector image is unused, [ADR-0091](../decisions/0091-brain-vectorless-tree-index.md)) | [0010](../decisions/0010-postgres-only.md) |
 | 5 | **Isolate every runtime job** | One job workspace per job: read-only source and inputs, writes only to its output, cleared environment, limits, JobOutput hook before publishing; no OS sandbox | [0029](../decisions/0029-job-workspaces-instead-of-os-sandboxes.md) |
 | 6 | **Package assets once as agent plugins** | Claude Code plugin format (skills, agents, commands, hooks, MCP); generated marketplaces for Claude Code, Copilot CLI and Codex; fallback rendering elsewhere | [0005](../decisions/0005-canonical-asset-format.md), [0015](../decisions/0015-member-assets-as-agent-plugins.md) |
 | 7 | **Provider-agnostic runtime** | Every LLM provider pi supports, plus custom endpoints, configured in the portal | [0009](../decisions/0009-llm-provider-config.md) |
@@ -22,7 +22,7 @@
 | Language / monorepo | TypeScript, pnpm + Turborepo | ✅ [0002](../decisions/0002-typescript-monorepo.md) |
 | Agent runtime | pi SDK (`@earendil-works/pi-coding-agent`, exact pin, currently 1.3.0) in a Node runner | ✅ [0001](../decisions/0001-pi-as-kintsugi-runtime.md), [0004](../decisions/0004-runner-container-per-job.md), [0018](../decisions/0018-pin-pi-exact-version.md) |
 | Orchestration | pg-boss + state machine in Postgres | ✅ [0003](../decisions/0003-postgres-job-queue.md) |
-| Data | PostgreSQL 16+ with pgvector (text KB, no graph) | ✅ [0010](../decisions/0010-postgres-only.md), [0014](../decisions/0014-no-code-graph-no-agent-config.md) |
+| Data | PostgreSQL 16+ (the Brain: a vectorless tree index, no graph) | ✅ [0010](../decisions/0010-postgres-only.md), [0014](../decisions/0014-no-code-graph-no-agent-config.md) |
 | Live updates | Triggers + `LISTEN/NOTIFY` → SSE | ✅ [0010](../decisions/0010-postgres-only.md), [0059](../decisions/0059-live-updates-over-sse.md) |
 | Auth | Local username/password (argon2id), sessions, PATs; Entra ID later | ✅ [0008](../decisions/0008-authentication.md) |
 | API | REST + OpenAPI; NestJS 12 (ESM) + Standard Schema validation | ✅ [0016](../decisions/0016-nestjs-api-framework.md) |
