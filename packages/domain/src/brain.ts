@@ -35,7 +35,7 @@ export type BrainSummarySource = (typeof BRAIN_SUMMARY_SOURCES)[number];
 /** The id of the tree's root. A folder's id is its path with a trailing `/`, a document's its path, a section's `path#anchor`. */
 export const BRAIN_ROOT_ID = "/";
 /** Bumped when the builder changes what it produces, so every index is rebuilt once. */
-export const BRAIN_BUILDER_VERSION = 5;
+export const BRAIN_BUILDER_VERSION = 6;
 export const BRAIN_SUMMARY_MAX = 240;
 export const BRAIN_TITLE_MAX = 200;
 /** Larger files are left out, as the document read API refuses them (docs/reference/document-repo-read-path.md). */
@@ -48,6 +48,10 @@ export const BRAIN_MAX_NODES_PER_DOCUMENT = 2_000;
  * more keeps its total (`BrainTree.linkTotals`), so a read can still say how many there are (P-036).
  */
 export const BRAIN_MAX_LINKS_PER_NODE = 50;
+/** Labels kept of a page's front matter (ADR-0096 decision 3). */
+export const BRAIN_MAX_LABELS = 20;
+/** Links to a page that is not in the index, kept per tree; a repository with more has bigger problems than the report. */
+export const BRAIN_MAX_BROKEN_LINKS = 5_000;
 
 export interface BrainNode {
   id: string;
@@ -74,6 +78,15 @@ export interface BrainNode {
   children: number;
   /** Reference identifiers the node defines: a card's heading id, or a document's front matter `id`. */
   ids: string[];
+  /** Page attributes from front matter (ADR-0097 decision 1). A folder takes those of its home page (`README.md`). */
+  labels: string[];
+  /** Lowercased front matter `status` (`archived` among others), or null. */
+  status: string | null;
+  owner: string | null;
+  /** True for a page whose front matter says `type: template`; `template: <name>` names an origin and does not set it. */
+  template: boolean;
+  /** The key of the space (a home page's `key`) a folder or document is in, or null outside any space. */
+  space: string | null;
   /**
    * The last commit that changed the document, up to the indexed commit; for a folder or the root, the latest of
    * what it holds. Null for a section or a card (history is kept per file), and when the history is not known.
@@ -104,6 +117,13 @@ export interface BrainTree {
   skipped: number;
   /** The distinct outgoing links of each node that has more than `BRAIN_MAX_LINKS_PER_NODE`, of which the first are stored. */
   linkTotals: Record<string, number>;
+  /** Links to a Markdown page that is not in the index: the page that holds the link, and the path it points at. */
+  broken: BrainBrokenLink[];
+}
+
+export interface BrainBrokenLink {
+  from: string;
+  target: string;
 }
 
 export interface BrainSourceDocument {
@@ -124,7 +144,7 @@ export function isBrainIndexedPath(path: string): boolean {
   const segments = path.split("/");
   // An empty segment, `.`, `..` and hidden names all fail here.
   if (segments.some((segment) => segment === "" || segment.startsWith("."))) return false;
-  if (DOCUMENT_EXCLUDED_ROOTS.includes(segments[0] ?? "")) return false;
+  if (DOCUMENT_EXCLUDED_ROOTS.includes((segments[0] ?? "").toLowerCase())) return false;
   // The file's own name ends in `.md`, so only folders can match.
   return !segments.some((segment) => DOCUMENT_EXCLUDED_FOLDERS.includes(segment.toLowerCase()));
 }
@@ -222,6 +242,8 @@ export const brainAnchor = headingSlug;
 
 interface FrontMatter {
   fields: Map<string, string>;
+  /** Lists: the flow form `key: [a, b]` and the block form (`key:` then `  - "item"`); `fields` keeps the flow text. */
+  lists: Map<string, string[]>;
   /** Lines the front matter takes, including both `---` lines (0 when there is none). */
   lines: number;
 }
@@ -244,16 +266,42 @@ function scalar(raw: string): string {
 /** Scalar facts between two `---` lines at the top (docs/reference/document-formats.md); block lists are skipped. */
 function frontMatterOf(lines: readonly string[]): FrontMatter {
   const fields = new Map<string, string>();
-  if (lines[0]?.trim() !== "---") return { fields, lines: 0 };
+  const lists = new Map<string, string[]>();
+  if (lines[0]?.trim() !== "---") return { fields, lists, lines: 0 };
   const end = lines.findIndex((line, index) => index > 0 && line.trim() === "---");
-  if (end < 0 || end > 400) return { fields, lines: 0 };
+  if (end < 0 || end > 400) return { fields, lists, lines: 0 };
+  let block: string[] | undefined;
   for (const line of lines.slice(1, end)) {
+    const item = /^[ \t]*-[ \t]+(.*)$/.exec(line);
+    if (block !== undefined && item?.[1] !== undefined) {
+      block.push(scalar(item[1]));
+      continue;
+    }
+    block = undefined;
     const pair = /^([A-Za-z0-9_-]+):[ \t]*(.*)$/.exec(line);
     // An empty value (`title: ""` too) says nothing: the next source of the title or summary applies.
     const value = pair?.[2] === undefined ? "" : scalar(pair[2]);
-    if (pair?.[1] !== undefined && value !== "") fields.set(pair[1], value);
+    if (pair?.[1] === undefined) continue;
+    if (value !== "") fields.set(pair[1], value);
+    const raw = (pair[2] ?? "").trim();
+    if (raw === "") {
+      block = [];
+      lists.set(pair[1], block);
+    } else if (raw.startsWith("[") && raw.endsWith("]")) {
+      lists.set(pair[1], raw.slice(1, -1).split(",").map((entry) => scalar(entry)).filter((entry) => entry !== ""));
+    }
   }
-  return { fields, lines: end + 1 };
+  return { fields, lists, lines: end + 1 };
+}
+
+/** A page's labels: lowercased, only `a-z`, `0-9` and `-` kept, no empty or repeated one, at most `BRAIN_MAX_LABELS`. */
+export function brainLabels(values: readonly string[]): string[] {
+  const labels = new Set<string>();
+  for (const value of values) {
+    const label = value.toLowerCase().replace(/[^a-z0-9-]/g, "");
+    if (label !== "") labels.add(label);
+  }
+  return [...labels].slice(0, BRAIN_MAX_LABELS);
 }
 
 /** Front matter facts too opaque to help a reader decide where to look. */
@@ -507,6 +555,12 @@ function linksOf(fromId: string, fromPath: string, lines: readonly string[]): Pe
 interface DocumentNodes {
   nodes: BrainNode[];
   links: PendingLink[];
+  /** Front matter `key` (or `space`) of a home page: the space it makes. */
+  key: string | null;
+  /** Front matter `order`: the names of a folder's entries that come first. */
+  order: string[];
+  /** For each card, the GitHub-style slug of its heading text, which a link may name instead of the card's id. */
+  cardAliases: Array<[string, string]>;
 }
 
 /**
@@ -550,9 +604,15 @@ export function buildBrainDocument(path: string, text: string): DocumentNodes {
     subtreeTokens: brainTokens(lines.join("\n")),
     children: 0,
     ids: documentIds,
+    labels: brainLabels(front.lists.get("labels") ?? []),
+    status: front.fields.get("status")?.toLowerCase() ?? null,
+    owner: front.fields.get("owner") ?? null,
+    template: front.fields.get("type")?.toLowerCase() === "template",
+    space: null,
     changed: null,
   };
   const nodes: BrainNode[] = [document];
+  const cardAliases: Array<[string, string]> = [];
   const links: PendingLink[] = linksOf(path, path, ownLines);
 
   const slugger = createHeadingSlugger();
@@ -590,8 +650,14 @@ export function buildBrainDocument(path: string, text: string): DocumentNodes {
       subtreeTokens: brainTokens(lines.slice(heading.line, subtreeEndLine).join("\n")),
       children: 0,
       ids: id !== undefined ? [id] : [],
+      labels: [],
+      status: null,
+      owner: null,
+      template: false,
+      space: null,
       changed: null,
     };
+    if (id !== undefined) cardAliases.push([nodeId, headingSlug(heading.text)]);
     const own = lines.slice(heading.line + 1, ownEnd);
     const summary = summaryOfText(own) ?? (card?.[2] !== undefined && card[2] !== "" ? { summary: clip(card[2], BRAIN_SUMMARY_MAX), source: "text" as const } : undefined);
     if (summary !== undefined) {
@@ -626,7 +692,9 @@ export function buildBrainDocument(path: string, text: string): DocumentNodes {
     const note = `${status.charAt(0).toUpperCase()}${status.slice(1)}${replacedBy === undefined ? "" : ` by ${replacedBy}`}.`;
     document.summary = clip(document.summary === "" ? note : `${note} ${document.summary}`, BRAIN_SUMMARY_MAX);
   }
-  return { nodes, links };
+  if (document.template) document.summary = clip(document.summary === "" ? "Template." : `Template. ${document.summary}`, BRAIN_SUMMARY_MAX);
+  const order = front.lists.get("order") ?? [];
+  return { nodes, links, key: front.fields.get("key") ?? front.fields.get("space") ?? null, order, cardAliases };
 }
 
 /**
@@ -652,7 +720,7 @@ function sectionSummary(sections: readonly BrainNode[], named: boolean): Summary
 }
 
 /** Front matter statuses of a document that no longer holds: its summary starts with them. */
-const RETIRED_STATUSES = new Set(["superseded", "deprecated", "rejected", "retired", "withdrawn", "obsolete", "replaced"]);
+const RETIRED_STATUSES = new Set(["superseded", "deprecated", "rejected", "retired", "withdrawn", "obsolete", "replaced", "archived"]);
 
 function toNode(summary: Summary): Pick<BrainNode, "summary" | "summarySource"> {
   return { summary: summary.summary, summarySource: summary.source };
@@ -677,6 +745,23 @@ function readmeFirst(a: string, b: string): number {
  * README (or index) first among the documents, both in name order. Documents beyond `BRAIN_MAX_DOCUMENTS` are
  * left out and counted in `skipped`.
  */
+/**
+ * A folder's entries with the ones its home page lists in `order` first, in list order, the rest as they were. A name
+ * matches a folder of that name, else a document `<name>` or `<name>.md`; a folder wins when both match, a name that
+ * matches nothing is ignored and an entry is placed once (ADR-0097 decision 2).
+ */
+function withManualOrder<T extends { name: string; folder: boolean }>(entries: readonly T[], order: readonly string[]): T[] {
+  if (order.length === 0) return [...entries];
+  const base = (entry: T): string => entry.name.split("/").pop() ?? entry.name;
+  const placed = new Set<T>();
+  for (const wanted of order) {
+    const name = wanted.replace(/\/+$/, "");
+    const entry = entries.find((candidate) => candidate.folder && base(candidate) === name) ?? entries.find((candidate) => !candidate.folder && (base(candidate) === name || base(candidate) === `${name}.md`));
+    if (entry !== undefined) placed.add(entry);
+  }
+  return [...placed, ...entries.filter((entry) => !placed.has(entry))];
+}
+
 export function buildBrainTree(sources: readonly BrainSourceDocument[], rootTitle: string): BrainTree {
   const indexed = sources.filter((source) => isBrainIndexedPath(source.path)).sort((a, b) => a.path.localeCompare(b.path, "en"));
   const kept = indexed.slice(0, BRAIN_MAX_DOCUMENTS);
@@ -698,6 +783,11 @@ export function buildBrainTree(sources: readonly BrainSourceDocument[], rootTitl
     subtreeTokens: 0,
     children: 0,
     ids: [],
+    labels: [],
+    status: null,
+    owner: null,
+    template: false,
+    space: null,
     changed: null,
   };
   const folders = new Map<string, BrainNode>([[root.id, root]]);
@@ -713,6 +803,8 @@ export function buildBrainTree(sources: readonly BrainSourceDocument[], rootTitl
   };
 
   const documents: DocumentNodes[] = [];
+  const orderOf = new Map<string, string[]>();
+  const keyOf = new Map<string, string>();
   const folderChildren = new Map<string, Array<{ name: string; node: BrainNode; folder: boolean }>>();
   for (const source of kept) {
     const built = buildBrainDocument(source.path, source.text);
@@ -723,6 +815,8 @@ export function buildBrainTree(sources: readonly BrainSourceDocument[], rootTitl
     document.parentId = folder.id;
     document.changed = source.changed ?? null;
     documents.push(built);
+    if (built.order.length > 0) orderOf.set(source.path, built.order);
+    if (built.key !== null) keyOf.set(source.path, built.key);
     folderChildren.set(folder.id, [...(folderChildren.get(folder.id) ?? []), { name: source.path, node: document, folder: false }]);
   }
   for (const folder of folders.values()) {
@@ -744,9 +838,11 @@ export function buildBrainTree(sources: readonly BrainSourceDocument[], rootTitl
   const ordered = [...folders.values()].sort((a, b) => b.depth - a.depth);
   const labels = new Map<string, string>();
   for (const folder of ordered) {
-    const children = (folderChildren.get(folder.id) ?? []).sort((a, b) =>
+    const sorted = (folderChildren.get(folder.id) ?? []).sort((a, b) =>
       a.folder !== b.folder ? (a.folder ? -1 : 1) : a.folder ? a.name.localeCompare(b.name, "en") : readmeFirst(a.name, b.name),
     );
+    const home = sorted.find((child) => !child.folder && README_FILES.includes(child.name.split("/").pop()?.toLowerCase() ?? ""));
+    const children = withManualOrder(sorted, home === undefined ? [] : (orderOf.get(home.name) ?? []));
     children.forEach((child, ordinal) => {
       child.node.ordinal = ordinal;
     });
@@ -756,7 +852,7 @@ export function buildBrainTree(sources: readonly BrainSourceDocument[], rootTitl
       (latest, child) => (child.node.changed !== null && (latest === null || child.node.changed.at > latest.at) ? child.node.changed : latest),
       null,
     );
-    const readme = children.find((child) => !child.folder && README_FILES.includes(child.name.split("/").pop()?.toLowerCase() ?? ""));
+    const readme = home;
     const layout = folder.kind === "folder" ? describeDocumentFolder(folder.path) : undefined;
     const only = children.length === 1 && children[0]?.folder === false ? children[0].node : undefined;
     // Without a README, a folder says what it holds: its one document, or the names of its entries, so a reader
@@ -771,8 +867,23 @@ export function buildBrainTree(sources: readonly BrainSourceDocument[], rootTitl
             ? { summary: clip(contents === "" ? layout : `${layout} Holds: ${contents}.`, BRAIN_SUMMARY_MAX), source: "layout" }
             : summaryOfChildren(children.map((child) => labels.get(child.node.id) ?? (child.folder ? `${child.node.title}/` : child.node.title)));
     Object.assign(folder, toNode(summary));
+    // A folder that is a page takes the attributes of its home page (ADR-0096 decision 3).
+    if (readme !== undefined) Object.assign(folder, { labels: readme.node.labels, status: readme.node.status, owner: readme.node.owner });
     // A folder that holds one document is known by that document's title, next to its own name.
     if (only !== undefined && only.title !== folder.title) labels.set(folder.id, `${folder.title} (${only.title})`);
+  }
+
+  // Spaces: a home page's key makes its folder and everything below it a space, until another home page says otherwise.
+  const spaceOf = new Map<string, string | null>();
+  for (const folder of [...folders.values()].sort((a, b) => a.depth - b.depth)) {
+    const home = (folderChildren.get(folder.id) ?? []).find((child) => !child.folder && README_FILES.includes(child.name.split("/").pop()?.toLowerCase() ?? ""));
+    const space = (home === undefined ? undefined : keyOf.get(home.name)) ?? (folder.parentId === null ? null : (spaceOf.get(folder.parentId) ?? null));
+    spaceOf.set(folder.id, space);
+    folder.space = space;
+  }
+  for (const built of documents) {
+    const document = built.nodes[0];
+    if (document?.parentId !== null && document !== undefined) document.space = spaceOf.get(document.parentId ?? "") ?? null;
   }
 
   const nodes: BrainNode[] = [...folders.values()].sort((a, b) => a.depth - b.depth || a.id.localeCompare(b.id, "en"));
@@ -783,15 +894,20 @@ export function buildBrainTree(sources: readonly BrainSourceDocument[], rootTitl
   // A link may name a section in another case, and a card by the GitHub anchor of its heading
   // (`#rule-inv01-0001-late-fee`) rather than by its id.
   const headingAnchors = new Map<string, BrainNode>();
-  for (const node of nodes) {
-    const key = node.kind === "card" ? brainSectionId(node.path, headingSlug(node.title)) : undefined;
-    if (key !== undefined && !headingAnchors.has(key)) headingAnchors.set(key, node);
+  for (const built of documents) {
+    for (const [cardId, alias] of built.cardAliases) {
+      const card = byId.get(cardId);
+      const key = card === undefined ? undefined : brainSectionId(card.path, alias);
+      if (card !== undefined && key !== undefined && !headingAnchors.has(key)) headingAnchors.set(key, card);
+    }
   }
   const anchored = (path: string, anchor: string): BrainNode | undefined =>
     byId.get(brainSectionId(path, anchor)) ?? byId.get(brainSectionId(path, anchor.toLowerCase())) ?? headingAnchors.get(brainSectionId(path, anchor.toLowerCase()));
   const definers = new Map<string, string[]>();
   for (const node of nodes) for (const id of node.ids) definers.set(id, [...(definers.get(id) ?? []), node.id]);
   const links: BrainLink[] = [];
+  const broken: BrainBrokenLink[] = [];
+  const brokenSeen = new Set<string>();
   const seen = new Set<string>();
   const perNode = new Map<string, number>();
   const add = (fromId: string, toId: string, kind: BrainLink["kind"]): void => {
@@ -814,12 +930,19 @@ export function buildBrainTree(sources: readonly BrainSourceDocument[], rootTitl
       const exact = link.anchor !== undefined ? anchored(link.path, link.anchor) : undefined;
       const target = exact ?? byId.get(link.path) ?? byId.get(brainFolderId(link.path));
       if (target !== undefined) add(link.fromId, target.id, "link");
+      else if (/\.md$/i.test(link.path) && broken.length < BRAIN_MAX_BROKEN_LINKS) {
+        const from = parseBrainNodeId(link.fromId).path;
+        if (!brokenSeen.has(`${from}\n${link.path}`)) {
+          brokenSeen.add(`${from}\n${link.path}`);
+          broken.push({ from, target: link.path });
+        }
+      }
     }
   }
 
   root.children = (folderChildren.get(root.id) ?? []).length;
   const linkTotals = Object.fromEntries([...perNode].filter(([, count]) => count > BRAIN_MAX_LINKS_PER_NODE));
-  return { nodes, links, documents: documents.length, identifiers: definers.size, skipped: indexed.length - kept.length, linkTotals };
+  return { nodes, links, documents: documents.length, identifiers: definers.size, skipped: indexed.length - kept.length, linkTotals, broken };
 }
 
 // ---------------------------------------------------------------------------

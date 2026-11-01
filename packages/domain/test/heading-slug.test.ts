@@ -1,113 +1,143 @@
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import * as domain from "../src/index.js";
-import { brainAnchor } from "../src/brain.js";
+import { atxHeading } from "../src/brain.js";
 import { createHeadingSlugger, headingSlug, plainInlineText } from "../src/heading-slug.js";
 
-/** Headings the Brain's tests, its fixtures and the repository's documents use, and the shapes around them. */
-const HEADINGS = [
-  "Quy tắc làm tròn (v2)",
-  "`code` **bold**",
-  "Overview",
-  "Hello, World!",
-  "1. Introduction",
-  "API & Design",
-  "C++ / C#",
-  "a.b-c",
-  "snake_case_name",
-  "foo-bar",
-  "Emoji 🚀 title",
-  "Tiếng Việt: thiết kế",
-  "日本語の見出し",
-  "Заголовок документа",
-  "Café Über",
-  "[Link text](https://example.com/a_b) here",
-  "![alt](image.png) Figure",
-  "Use `<div>` tags",
-  "<span>Raw</span> html",
-  "**Bold** and __also bold__",
-  "Escaped \\* star \\# hash",
-  "Trailing hashes ##",
-  "  padded  ",
-  "(parenthesised)",
-  "Q&A",
-  "RULE-INV01-0001: Round half up",
-  "SEC-ORD-0002",
-  "COM-LOG-01",
-  "!!!",
-  "",
-  "  ",
-  "`",
-  "[",
-  "[a](",
-  "<",
+/**
+ * Pairs of heading and GitHub's anchor. Each anchor is what github-slugger makes of the heading's rendered text, taken
+ * from the library run against the rendering of the heading by a CommonMark renderer; none comes from this module.
+ */
+const GITHUB: Array<[string, string]> = [
+  ["Hello, World!", "hello-world"],
+  ["API & Design", "api--design"],
+  ["C++ / C#", "c--c"],
+  ["a.b-c", "ab-c"],
+  ["Emoji 🚀 title", "emoji--title"],
+  ["🚀", ""],
+  ["emoji ⚠️ warning", "emoji-️-warning"],
+  ["1. Introduction", "1-introduction"],
+  ["Quy tắc làm tròn (v2)", "quy-tắc-làm-tròn-v2"],
+  ["Tiếng Việt: thiết kế", "tiếng-việt-thiết-kế"],
+  ["日本語の見出し", "日本語の見出し"],
+  ["Заголовок документа", "заголовок-документа"],
+  ["Café Über", "café-über"],
+  ["`code` **bold**", "code-bold"],
+  ["**Bold** and __also bold__", "bold-and-also-bold"],
+  ["*emph* text and ~~strike~~", "emph-text-and-strike"],
+  ["[Link text](https://example.com/a_b) here", "link-text-here"],
+  ["![alt](image.png) Figure", "-figure"],
+  ["Title ![img](a.png)", "title-"],
+  ["Escaped \\* star \\# hash", "escaped--star--hash"],
+  ["foo `bar` baz", "foo-bar-baz"],
+  ["``double `tick` span``", "double-tick-span"],
+  ["Unclosed ` tick", "unclosed--tick"],
+  ["RULE-INV01-0001: Round half up", "rule-inv01-0001-round-half-up"],
+  // The differences the Brain's earlier rule had from GitHub
+  ["a  b", "a--b"],
+  ["Use `<div>` tag", "use-div-tag"],
+  ["<span>Raw</span> html", "raw-html"],
+  ["_emph_", "emph"],
+  ["_a_ and _b_", "a-and-b"],
+  ["snake_case_name", "snake_case_name"],
+  ["__init__ method", "init-method"],
+  ["x_1 and y_2", "x_1-and-y_2"],
+  ["`a_b` and _c_", "a_b-and-c"],
+  ["Café", "café"],
+  ["हिन्दी भाषा", "हिन्दी-भाषा"],
+  ["&amp; entity", "-entity"],
+  ["& entity", "-entity"],
+  ["İstanbul", "i̇stanbul"],
+  ["tab\there", "tabhere"],
+  ["Step 2: Configure (optional)", "step-2-configure-optional"],
+  ["[ref link][ref]", "ref-linkref"],
 ];
 
 describe("headingSlug", () => {
-  it("returns what the Brain's anchor returns today, on the headings the Brain meets", () => {
-    expect(HEADINGS.length).toBeGreaterThanOrEqual(20);
-    for (const heading of HEADINGS) expect(headingSlug(heading), JSON.stringify(heading)).toBe(brainAnchor(heading));
+  it("makes GitHub's anchor of the heading's rendered text", () => {
+    for (const [heading, github] of GITHUB) expect(headingSlug(heading), JSON.stringify(heading)).toBe(github === "" ? "section" : github);
   });
 
-  it("makes the anchor of ordinary headings", () => {
-    expect(headingSlug("Hello, World!")).toBe("hello-world");
-    expect(headingSlug("Quy tắc làm tròn (v2)")).toBe("quy-tắc-làm-tròn-v2");
-    expect(headingSlug("`code` **bold**")).toBe("code-bold");
-    expect(headingSlug("1. Introduction")).toBe("1-introduction");
-    expect(headingSlug("[Link text](https://example.com) here")).toBe("link-text-here");
-    expect(headingSlug("日本語の見出し")).toBe("日本語の見出し");
-    expect(headingSlug("RULE-INV01-0001: Round half up")).toBe("rule-inv01-0001-round-half-up");
+  it("falls back to section when nothing is left, which GitHub makes an empty anchor", () => {
+    for (const heading of ["", "  ", "!!!", "`", "<b></b>", "🚀"]) expect(headingSlug(heading), JSON.stringify(heading)).toBe("section");
   });
 
-  it("falls back to section when nothing is left", () => {
-    for (const heading of ["", "  ", "!!!", "`", "<b></b>", "![alt](x.png)"]) expect(headingSlug(heading), JSON.stringify(heading)).toBe("section");
+  it("keeps a space next to a dropped character as a hyphen, and none collapses", () => {
+    expect(headingSlug("Title ![img](a.png)")).toBe("title-");
+    expect(headingSlug("a  b   c")).toBe("a--b---c");
   });
 
-  it("reads a pathological line in linear time", () => {
-    for (const heading of ["[".repeat(100_000), "[a](".repeat(50_000), "<".repeat(100_000), " ".repeat(200_000) + "x", "`".repeat(100_000), "*_".repeat(50_000)]) {
+  it("reads a pathological line in bounded time", () => {
+    const lines = ["[".repeat(100_000), "[a](".repeat(50_000), "<".repeat(100_000), " ".repeat(200_000) + "x", "`".repeat(100_000), "*_".repeat(50_000), "_a ".repeat(50_000), "`a ".repeat(50_000)];
+    for (const heading of lines) {
       const started = Date.now();
       headingSlug(heading);
       expect(Date.now() - started).toBeLessThan(1_000);
     }
   });
+});
 
-  /**
-   * Where the anchor differs from GitHub's. `today` is what the Brain makes and keeps making until the alignment
-   * ticket; `github` is what GitHub makes of the heading. The gap is measured here, not fixed.
-   */
-  const KNOWN_DIFFERENCES: Array<{ name: string; heading: string; today: string; github: string }> = [
-    { name: "a double space", heading: "a  b", today: "a-b", github: "a--b" },
-    { name: "HTML inside a code span", heading: "Use `<div>` tag", today: "use-tag", github: "use-div-tag" },
-    { name: "_emphasis_", heading: "_emph_", today: "_emph_", github: "emph" },
-    { name: "a combining mark (NFD)", heading: "Café", today: "cafe", github: "café" },
-    { name: "vowel signs that are marks", heading: "हिन्दी भाषा", today: "हनद-भष", github: "हिन्दी-भाषा" },
-    { name: "an HTML entity", heading: "&amp; entity", today: "amp-entity", github: "entity" },
-    { name: "a letter that lowercases to letter and mark", heading: "İstanbul", today: "istanbul", github: "i̇stanbul" },
-  ];
+/** The rule the Brain used before: plain text first, trimmed, a space run collapsed, marks and `_` emphasis kept as is. */
+function earlierSlug(heading: string): string {
+  const slug = plainInlineText(heading)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s_-]/gu, "")
+    .trim()
+    .replace(/\s/g, "-");
+  return slug === "" ? "section" : slug;
+}
 
-  /** Headings where today's rule and GitHub's agree. */
-  const SAME_AS_GITHUB: Array<[string, string]> = [
-    ["Hello, World!", "hello-world"],
-    ["API & Design", "api--design"],
-    ["C++ / C#", "c--c"],
-    ["a.b-c", "ab-c"],
-    ["Emoji 🚀 title", "emoji--title"],
-    ["snake_case_name", "snake_case_name"],
-    ["1. Introduction", "1-introduction"],
-    ["Café Über", "café-über"],
-    ["Tiếng Việt: thiết kế", "tiếng-việt-thiết-kế"],
-    ["[Link text](https://example.com) here", "link-text-here"],
-    ["**Bold** and __also bold__", "bold-and-also-bold"],
-  ];
+/** The headings of the Markdown files under a folder, outside code fences. */
+function headingsUnder(folder: URL): string[] {
+  const found: string[] = [];
+  for (const name of readdirSync(folder)) {
+    if (name === "node_modules" || name.startsWith(".")) continue;
+    const child = new URL(name, folder);
+    if (statSync(child).isDirectory()) {
+      found.push(...headingsUnder(new URL(`${name}/`, folder)));
+      continue;
+    }
+    if (!name.endsWith(".md")) continue;
+    let fence: string | undefined;
+    for (const line of readFileSync(child, "utf8").split("\n")) {
+      const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1]?.[0];
+      if (marker !== undefined) {
+        fence = fence === undefined ? marker : fence === marker ? undefined : fence;
+        continue;
+      }
+      const heading = fence === undefined ? atxHeading(line) : undefined;
+      if (heading !== undefined) found.push(heading.text);
+    }
+  }
+  return found;
+}
 
-  it("equals GitHub's anchor where the two agree", () => {
-    for (const [heading, github] of SAME_AS_GITHUB) expect(headingSlug(heading), heading).toBe(github);
+describe("the anchors the rule changes, measured on the repository's own documents", () => {
+  const headings = [...new Set(["docs", "templates"].flatMap((folder) => headingsUnder(new URL(`../../../${folder}/`, import.meta.url))))];
+  const changed = headings.filter((heading) => earlierSlug(heading) !== headingSlug(heading));
+  /** A change that follows from the documented differences: a space next to a dropped character, or a tag or an escaped `<`. */
+  const explained = (heading: string): boolean =>
+    earlierSlug(heading).replaceAll("-", "") === headingSlug(heading).replaceAll("-", "") ||
+    /`[^`]*<[^`]*`/.test(heading) ||
+    heading.includes("\\<") ||
+    /<\/?[A-Za-z]/.test(heading) ||
+    /\p{M}/u.test(heading) ||
+    /(^|[^\p{L}\p{N}_])_[^\s_]/u.test(heading);
+
+  it("reads enough headings for the measure to mean something", () => {
+    expect(headings.length).toBeGreaterThan(500);
   });
 
-  it("differs from GitHub's anchor only in the named known differences", () => {
-    for (const { name, heading, today, github } of KNOWN_DIFFERENCES) {
-      expect(headingSlug(heading), name).toBe(today);
-      expect(today, name).not.toBe(github);
-    }
+  it("changes only the anchors of headings that hold one of the documented cases", () => {
+    expect(changed.filter((heading) => !explained(heading)), "an unexplained change").toEqual([]);
+    // The changes are rare, and every one is listed in the failure message when this fails.
+    expect(changed.length, changed.join(" | ")).toBeLessThan(headings.length / 20);
+  });
+
+  it("changes no anchor of a heading that starts with a reference id, as a card's heading does", () => {
+    const cards = headings.filter((heading) => /^[A-Z][A-Z0-9]{1,15}(?:-[A-Z0-9]{1,16})*-[0-9]{2,}[A-Z]?\b/.test(heading));
+    expect(cards.length).toBeGreaterThan(0);
+    expect(cards.filter((heading) => earlierSlug(heading) !== headingSlug(heading))).toEqual([]);
   });
 });
 
@@ -119,7 +149,7 @@ describe("plainInlineText", () => {
 });
 
 describe("createHeadingSlugger", () => {
-  it("numbers a repeated slug the way the Brain's builder does", () => {
+  it("numbers a repeated slug as GitHub does, taking the first free number", () => {
     const slugger = createHeadingSlugger();
     expect([slugger.slug("A"), slugger.slug("A"), slugger.slug("A-1")]).toEqual(["a", "a-1", "a-1-1"]);
     const again = createHeadingSlugger();
@@ -140,6 +170,14 @@ describe("createHeadingSlugger", () => {
     expect(slugger.slug("a")).toBe("a-2");
   });
 
+  it("numbers many repeats in linear time", () => {
+    const slugger = createHeadingSlugger();
+    const started = Date.now();
+    for (let repeat = 0; repeat < 20_000; repeat += 1) slugger.slug("Same");
+    expect(slugger.slug("Same")).toBe("same-20000");
+    expect(Date.now() - started).toBeLessThan(1_000);
+  });
+
   it("shares no state between two sluggers", () => {
     const first = createHeadingSlugger();
     const second = createHeadingSlugger();
@@ -151,5 +189,6 @@ describe("createHeadingSlugger", () => {
   it("is exported from the package with headingSlug", () => {
     expect(domain.headingSlug).toBe(headingSlug);
     expect(domain.createHeadingSlugger).toBe(createHeadingSlugger);
+    expect(domain.plainInlineText).toBe(plainInlineText);
   });
 });

@@ -4,10 +4,12 @@
 // depend on.
 
 import { describe, expect, it } from "vitest";
+import { isWikiEditablePath } from "../src/document-layout.js";
 import {
   BRAIN_ROOT_ID,
   type BrainNode,
   brainFolderId,
+  brainLabels,
   brainLines,
   brainSectionId,
   brainTokens,
@@ -34,6 +36,16 @@ describe("paths, ids and lines", () => {
     expect(isBrainIndexedPath("a/restricted.md")).toBe(true);
     for (const path of ["notes/a.txt", "a//b.md", "./a.md", "a/../b.md", ".github/a.md", "a/.hidden.md", "plugins/x/README.md", "scratch/x.md", "restricted/x.md", "a/restricted/x.md", "a/Restricted/x.md", "RESTRICTED/x.md", "a/identifiers/x.md"]) {
       expect(isBrainIndexedPath(path), path).toBe(false);
+    }
+  });
+
+  it("leaves out the reserved roots and the excluded folders in any case, as the wiki editor does", () => {
+    for (const path of ["Plugins/x.md", "PLUGINS/x/README.md", "SCRATCH/a/x.md", "Scratch/x.md", "Restricted/a.md", "x/Identifiers/a.md", "a/Restricted/b.md", "a/b/IDENTIFIERS/c.md"]) {
+      expect(isBrainIndexedPath(path), path).toBe(false);
+      expect(isWikiEditablePath(path), path).toBe(false);
+    }
+    for (const path of ["20-spaces/onb/a.md", "20-spaces/onb/README.md", "a/Plugins/x.md", "a/SCRATCH/x.md"]) {
+      expect(isBrainIndexedPath(path), path).toBe(true);
     }
   });
 
@@ -162,7 +174,7 @@ describe("headings", () => {
     ]);
     expect(nodes[1]?.summary).toBe("#NoSpace");
     // A heading mark or a fence inside a line is text, and a slug has no trailing dash.
-    expect(nodesOf("Note ## not a heading.\nUse ``` inline.\n\n## Done !").slice(1).map((node) => [node.title, node.anchor])).toEqual([["Done !", "done"]]);
+    expect(nodesOf("Note ## not a heading.\nUse ``` inline.\n\n## Done !").slice(1).map((node) => [node.title, node.anchor])).toEqual([["Done !", "done-"]]);
   });
 
   it("nest headings by level and give each its own lines and everything under it", () => {
@@ -343,5 +355,147 @@ describe("folders", () => {
     expect(node("b/").changed).toBeNull();
     expect(node("a/z.md").changed).toBeNull();
     expect(node(BRAIN_ROOT_ID).changed?.subject).toBe("day 20");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Wiki pages (ADR-0096, ADR-0097): attributes, spaces, manual order, broken links, card aliases
+// ---------------------------------------------------------------------------
+
+const page = (front: string[], body = "Text of the page."): string => ["---", ...front, "---", "", "# Page", "", body, ""].join("\n");
+const byPath = (tree: ReturnType<typeof treeOf>, path: string): BrainNode => {
+  const node = tree.nodes.find((candidate) => candidate.id === path);
+  if (node === undefined) throw new Error(`no node ${path}`);
+  return node;
+};
+
+describe("page attributes", () => {
+  it("reads labels from the flow and the block form, lowercased, cleaned, once each, at most twenty", () => {
+    const flow = documentOf(page(["labels: [Runbook, sev-1, 'On Call', runbook, \"\"]"]));
+    expect(flow.labels).toEqual(["runbook", "sev-1", "oncall"]);
+    const block = documentOf(page(["labels:", '  - "Runbook"', "  - sev1", "  - Données", "id: PAGE-ENG-0001"]));
+    expect(block.labels).toEqual(["runbook", "sev1", "donnes"]);
+    expect(block.ids).toEqual(["PAGE-ENG-0001"]);
+    const many = documentOf(page([`labels: [${Array.from({ length: 30 }, (_, index) => `l${index}`).join(", ")}]`]));
+    expect(many.labels).toHaveLength(20);
+    expect(documentOf(page(["title: x"])).labels).toEqual([]);
+    expect(brainLabels(["A b", "c_d", "e-f"])).toEqual(["ab", "cd", "e-f"]);
+  });
+
+  it("reads status and owner, and flags a template only by `type: template`", () => {
+    const archived = documentOf(page(["status: Archived", "owner: eng-manager", "supersededBy: PAGE-ENG-0002"]));
+    expect(archived.status).toBe("archived");
+    expect(archived.owner).toBe("eng-manager");
+    expect(archived.template).toBe(false);
+    expect(archived.summary).toBe("Archived by PAGE-ENG-0002. Text of the page.");
+    const template = documentOf(page(["type: template"]));
+    expect(template.template).toBe(true);
+    expect(template.summary).toBe("Template. Text of the page.");
+    // `template: <name>` names the template a page was made from; it is not the flag.
+    expect(documentOf(page(["template: incident-report"])).template).toBe(false);
+    expect(documentOf(page(["title: x"])).status).toBeNull();
+  });
+
+  it("gives sections and cards no page attributes", () => {
+    const nodes = nodesOf(["---", "labels: [a]", "status: archived", "---", "# Title", "", "## Part", "", "text", ""].join("\n"));
+    const section = nodes.find((node) => node.kind === "section");
+    expect(section?.labels).toEqual([]);
+    expect(section?.status).toBeNull();
+  });
+
+  it("gives a folder the labels, status and owner of its home page", () => {
+    const tree = treeOf({
+      "space/README.md": page(["key: ENG", "labels: [team]", "status: archived", "owner: lead"]),
+      "space/a.md": page(["labels: [x]"]),
+    });
+    const folder = byPath(tree, "space/");
+    expect(folder.labels).toEqual(["team"]);
+    expect(folder.status).toBe("archived");
+    expect(folder.owner).toBe("lead");
+    expect(byPath(tree, "space/a.md").labels).toEqual(["x"]);
+  });
+});
+
+describe("spaces", () => {
+  it("makes a home page's key the space of its folder and everything below, until another home page says otherwise", () => {
+    const tree = treeOf({
+      "00-project/README.md": page(["title: Project"]),
+      "20-spaces/eng/README.md": page(["key: ENG"]),
+      "20-spaces/eng/runbooks/a.md": page(["title: a"]),
+      "20-spaces/eng/sub/README.md": page(["key: SUB"]),
+      "20-spaces/eng/sub/b.md": page(["title: b"]),
+      "20-spaces/hr/README.md": page(["space: HR"]),
+    });
+    expect(byPath(tree, "00-project/").space).toBeNull();
+    expect(byPath(tree, "20-spaces/").space).toBeNull();
+    expect(byPath(tree, "20-spaces/eng/").space).toBe("ENG");
+    expect(byPath(tree, "20-spaces/eng/README.md").space).toBe("ENG");
+    expect(byPath(tree, "20-spaces/eng/runbooks/a.md").space).toBe("ENG");
+    expect(byPath(tree, "20-spaces/eng/sub/b.md").space).toBe("SUB");
+    expect(byPath(tree, "20-spaces/hr/README.md").space).toBe("HR");
+  });
+});
+
+describe("the manual order of a folder", () => {
+  const entries = (tree: ReturnType<typeof treeOf>, folder: string): string[] =>
+    tree.nodes.filter((node) => node.parentId === folder).sort((a, b) => a.ordinal - b.ordinal).map((node) => node.path.split("/").pop() ?? "");
+
+  it("puts the listed entries first, folders and documents mixed, in list order, and keeps the rest as they were", () => {
+    const tree = treeOf({
+      "s/README.md": page(["order: [zeta, deploy.md, runbooks, ghost, zeta]"]),
+      "s/alpha.md": page(["title: a"]),
+      "s/deploy.md": page(["title: d"]),
+      "s/runbooks/a.md": page(["title: r"]),
+      "s/zeta.md": page(["title: z"]),
+      "s/other/a.md": page(["title: o"]),
+    });
+    // Listed: zeta, deploy, runbooks. Left: today's order, folders first, then the home page, then documents by name.
+    expect(entries(tree, "s/")).toEqual(["zeta.md", "deploy.md", "runbooks", "other", "README.md", "alpha.md"]);
+  });
+
+  it("reads the block form and prefers a folder when a folder and a document share the name", () => {
+    const tree = treeOf({
+      "s/README.md": page(["order:", "  - guide", "  - intro"]),
+      "s/guide.md": page(["title: g"]),
+      "s/guide/a.md": page(["title: ga"]),
+      "s/intro.md": page(["title: i"]),
+    });
+    expect(entries(tree, "s/")).toEqual(["guide", "intro.md", "README.md", "guide.md"]);
+  });
+
+  it("changes nothing for a folder without a list", () => {
+    const tree = treeOf({ "s/README.md": page(["title: s"]), "s/b.md": page(["title: b"]), "s/a.md": page(["title: a"]), "s/z/x.md": page(["title: x"]) });
+    expect(entries(tree, "s/")).toEqual(["z", "README.md", "a.md", "b.md"]);
+  });
+});
+
+describe("links that lead nowhere", () => {
+  it("lists a link to a Markdown page that is not in the index, once per page and target", () => {
+    const tree = treeOf({
+      "a/one.md": page([], "See [gone](missing.md), [again](missing.md#x), [there](two.md), [pic](pic.png), [web](https://example.com/x.md), [up](../b/none.md)."),
+      "a/two.md": page([], "Back to [one](one.md#nope)."),
+      "restricted/secret.md": page(["title: s"]),
+      "a/three.md": page([], "A [secret](../restricted/secret.md)."),
+    });
+    expect(tree.broken).toEqual([
+      { from: "a/one.md", target: "a/missing.md" },
+      { from: "a/one.md", target: "b/none.md" },
+      { from: "a/three.md", target: "restricted/secret.md" },
+    ]);
+  });
+});
+
+describe("the GitHub alias of a card", () => {
+  it("is made from the heading as written, so a long heading is reached by its whole slug", () => {
+    const words = Array.from({ length: 60 }, (_, index) => `word${index}`).join(" ");
+    const heading = `RULE-ABC01-0001: ${words}`;
+    const full = `rule-abc01-0001-${words.replace(/ /g, "-")}`;
+    const tree = treeOf({
+      "r.md": ["# Rules", "", `## ${heading}`, "", "A rule.", ""].join("\n"),
+      "l.md": page([], `[the rule](r.md#${full})`),
+    });
+    const card = tree.nodes.find((node) => node.kind === "card");
+    expect(card?.title.length).toBeLessThan(heading.length);
+    expect(tree.links).toContainEqual({ fromId: "l.md", toId: card?.id, kind: "link" });
   });
 });

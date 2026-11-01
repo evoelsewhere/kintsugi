@@ -53,8 +53,21 @@ const BUNDLE_TEXT = /\.(?:md|txt|json|ya?ml|csv)$/i;
 const BRAIN_READ_CHARS = 24_000;
 const BRAIN_READ_CHILDREN = 30;
 
-/** A Brain node as the member contract shows it: its place in the tree is the breadcrumb. */
-const memberNode = <T extends BrainNode>({ parentId: _parent, ordinal: _ordinal, depth: _depth, ...node }: T): Omit<T, "parentId" | "ordinal" | "depth"> => node;
+/**
+ * A Brain node as the member contract shows it: its place in the tree is the breadcrumb, and the page attributes of
+ * builder 6 are not part of the contract yet (installed CLIs reject a field they do not know).
+ */
+const memberNode = <T extends BrainNode>({
+  parentId: _parent,
+  ordinal: _ordinal,
+  depth: _depth,
+  labels: _labels,
+  status: _status,
+  owner: _owner,
+  template: _template,
+  space: _space,
+  ...node
+}: T): Omit<T, "parentId" | "ordinal" | "depth" | "labels" | "status" | "owner" | "template" | "space"> => node;
 
 const sha256 = (value: string): string => createHash("sha256").update(value, "utf8").digest("hex");
 

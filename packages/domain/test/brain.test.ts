@@ -351,9 +351,9 @@ describe("links (T3-016)", () => {
   });
 });
 
-// The one heading slug (P2-006): the anchors the builder gives now are the ones it gave before it shared `headingSlug`.
-// The reference below is that code as it was, frozen; every section and card of the repository's own documents, its
-// templates and the eval fixtures must get the anchor it computes.
+// The one heading slug (P2-006, P2-009): since builder 6 the anchors are GitHub's. The reference below is the builder 5
+// rule, frozen; every section and card of the repository's own documents, its templates and the eval fixtures must get
+// the anchor it computes, except a heading where the two rules differ (a card keeps its id in every case).
 const legacyPlain = (text: string): string =>
   text
     .replace(/!\[[^[\]]*\]\([^)[]*\)/g, "")
@@ -384,8 +384,11 @@ describe("the anchors of sections and cards", () => {
       return name.toLowerCase().endsWith(".md") ? [`${prefix}${name}`] : [];
     });
 
-  it("are those the frozen reference computes, numbered the same way", () => {
+  it("differ from the builder 5 ones only where GitHub's rule differs from it, and a card keeps its id", () => {
     let checked = 0;
+    // Where GitHub's rule is not the builder 5 one: a double space, markup inside code or raw HTML, `_emphasis_`, combining marks.
+    const differs = /\s{2}|<|_|\p{M}/u;
+    const unexpected: string[] = [];
     for (const corpus of corpora) {
       const root = new URL(`../../../${corpus}/`, import.meta.url);
       for (const path of markdownUnder(root)) {
@@ -401,11 +404,13 @@ describe("the anchors of sections and cards", () => {
         for (const node of buildBrainDocument(path, text).nodes.slice(1)) {
           const heading = atxHeading(lines[(node.lineStart ?? 1) - 1] ?? "");
           const expected = unique(node.kind === "card" ? (node.ids[0] ?? "") : legacyAnchor(heading?.text ?? ""));
-          expect(node.anchor, `${corpus}/${path}:${node.lineStart}`).toBe(expected);
+          if (node.kind === "card") expect(node.anchor, `${corpus}/${path}:${node.lineStart}`).toBe(expected);
+          else if (node.anchor !== expected && !differs.test(heading?.text ?? "")) unexpected.push(`${corpus}/${path}:${node.lineStart} ${expected} -> ${node.anchor}`);
           checked += 1;
         }
       }
     }
     expect(checked).toBeGreaterThan(500);
+    expect(unexpected).toEqual([]);
   });
 });

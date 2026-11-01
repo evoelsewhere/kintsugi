@@ -1,14 +1,14 @@
 {
-  "builderVersion": 5,
-  "recorded": "kcp-integration a20bb69a",
+  "builderVersion": 6,
+  "recorded": "kcp-integration e1c07606 + P2-012",
   "report": {
-    "builderVersion": 5,
+    "builderVersion": 6,
     "stats": {
-      "documents": 37,
-      "nodes": 109,
+      "documents": 38,
+      "nodes": 111,
       "folders": 11,
-      "sections": 60,
-      "summarised": 108,
+      "sections": 61,
+      "summarised": 110,
       "links": {
         "resolved": 18,
         "unresolved": 1
@@ -23,8 +23,8 @@
         "id": "W01",
         "kind": "label",
         "scores": {
-          "attributeRecall": 0,
-          "attributePrecision": 0,
+          "attributeRecall": 1,
+          "attributePrecision": 1,
           "grepRecall": 1,
           "grepPrecision": 0.6666666666666666,
           "evidenceInNode": 1
@@ -41,8 +41,8 @@
         "id": "W02",
         "kind": "label",
         "scores": {
-          "attributeRecall": 0,
-          "attributePrecision": 0,
+          "attributeRecall": 1,
+          "attributePrecision": 1,
           "grepRecall": 1,
           "grepPrecision": 0.5,
           "evidenceInNode": 1
@@ -59,8 +59,8 @@
         "id": "W03",
         "kind": "label",
         "scores": {
-          "attributeRecall": 0,
-          "attributePrecision": 0,
+          "attributeRecall": 1,
+          "attributePrecision": 1,
           "grepRecall": 1,
           "grepPrecision": 1,
           "evidenceInNode": 1
@@ -77,8 +77,8 @@
         "id": "W04",
         "kind": "space",
         "scores": {
-          "attributeRecall": 0,
-          "attributePrecision": 0,
+          "attributeRecall": 1,
+          "attributePrecision": 1,
           "pathRecall": 1,
           "pathPrecision": 1,
           "evidenceInNode": 1
@@ -92,8 +92,8 @@
         "id": "W05",
         "kind": "space",
         "scores": {
-          "attributeRecall": 0,
-          "attributePrecision": 0,
+          "attributeRecall": 1,
+          "attributePrecision": 1,
           "pathRecall": 1,
           "pathPrecision": 1,
           "evidenceInNode": 1
@@ -107,7 +107,7 @@
         "id": "W06",
         "kind": "order",
         "scores": {
-          "listedFirst": 0,
+          "listedFirst": 1,
           "evidenceInNode": 1
         },
         "costs": {},
@@ -119,7 +119,7 @@
         "id": "W07",
         "kind": "order",
         "scores": {
-          "listedFirst": 0,
+          "listedFirst": 1,
           "evidenceInNode": 1
         },
         "costs": {},
@@ -131,7 +131,7 @@
         "id": "W08",
         "kind": "order",
         "scores": {
-          "listedFirst": 0,
+          "listedFirst": 1,
           "evidenceInNode": 1
         },
         "costs": {},
@@ -143,10 +143,10 @@
         "id": "W09",
         "kind": "retired",
         "scores": {
-          "summaryRecall": 0,
-          "summaryPrecision": 0,
-          "attributeRecall": 0,
-          "attributePrecision": 0,
+          "summaryRecall": 1,
+          "summaryPrecision": 1,
+          "attributeRecall": 1,
+          "attributePrecision": 1,
           "evidenceInNode": 1
         },
         "costs": {},
@@ -159,10 +159,10 @@
         "id": "W10",
         "kind": "template",
         "scores": {
-          "summaryRecall": 0,
-          "summaryPrecision": 0,
-          "attributeRecall": 0,
-          "attributePrecision": 0,
+          "summaryRecall": 1,
+          "summaryPrecision": 1,
+          "attributeRecall": 1,
+          "attributePrecision": 1,
           "evidenceInNode": 1
         },
         "costs": {},
@@ -253,8 +253,8 @@
         "id": "W17",
         "kind": "broken",
         "scores": {
-          "recall": 0,
-          "precision": 0,
+          "recall": 1,
+          "precision": 1,
           "evidenceInNode": 1
         },
         "costs": {},
@@ -334,7 +334,7 @@
         },
         "costs": {
           "levels": 3,
-          "tokensToDescend": 193
+          "tokensToDescend": 195
         },
         "citations": [
           "20-spaces/hr/leave-policy.md:14-17"
@@ -350,6 +350,24 @@
         "costs": {},
         "citations": [
           "20-spaces/ops/cache-purge.md:1-10"
+        ]
+      },
+      {
+        "id": "W24",
+        "kind": "label",
+        "scores": {
+          "attributeRecall": 1,
+          "attributePrecision": 1,
+          "grepRecall": 1,
+          "grepPrecision": 1,
+          "evidenceInNode": 1
+        },
+        "costs": {
+          "grepLines": 5
+        },
+        "citations": [
+          "20-spaces/hr/2019-expenses.md:1-10",
+          "20-spaces/ops/services/billing.md:1-11"
         ]
       }
     ]

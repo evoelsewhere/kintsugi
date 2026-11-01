@@ -22,7 +22,11 @@ def page(title, body, **front):
     lines = ['---']
     lines.append(f'title: {title}')
     for key, value in front.items():
-        if isinstance(value, list):
+        if isinstance(value, tuple):
+            # The block form docmd.py writes (docs/reference/document-formats.md).
+            lines.append(f'{key}:')
+            lines.extend(f'  - "{item}"' for item in value)
+        elif isinstance(value, list):
             lines.append(f'{key}: [{", ".join(value)}]')
         else:
             lines.append(f'{key}: {value}')
@@ -358,6 +362,12 @@ Checkout calls the payment gateway and the price endpoint. When the gateway fail
 depth: 1
 ```
 """, id='PAGE-OPS-0011', labels=['inventory', 'payments'], owner='payments-lead'))
+
+add('20-spaces/ops/services/billing.md', page('Billing service', """
+## Owner
+
+The finance team owns the billing service. It issues the invoices of the checkout orders.
+""", id='PAGE-OPS-0014', labels=('inventory', 'finance'), owner='finance-lead'))
 
 add('20-spaces/ops/cache-purge.md', page('Cache purge', """
 This page moved to [Cache flush](../eng/runbooks/cache-flush.md). Update your bookmarks.

@@ -287,7 +287,7 @@
       "expect": [
         {
           "from": "20-spaces/eng/onboarding/laptop-setup.md",
-          "target": "vpn-guide.md"
+          "target": "20-spaces/eng/onboarding/vpn-guide.md"
         }
       ],
       "evidence": [
@@ -391,6 +391,26 @@
         {
           "file": "20-spaces/ops/cache-purge.md",
           "match": "This page moved to"
+        }
+      ]
+    },
+    {
+      "id": "W24",
+      "kind": "label",
+      "question": "Which pages carry the label finance? (one of them writes its labels as a block list)",
+      "label": "finance",
+      "expect": [
+        "20-spaces/hr/2019-expenses.md",
+        "20-spaces/ops/services/billing.md"
+      ],
+      "evidence": [
+        {
+          "file": "20-spaces/hr/2019-expenses.md",
+          "match": "labels: [policy, finance]"
+        },
+        {
+          "file": "20-spaces/ops/services/billing.md",
+          "match": "- \"finance\""
         }
       ]
     }

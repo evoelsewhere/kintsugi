@@ -141,10 +141,19 @@ function frontOf(text: string): Front {
   const fields: Front = new Map();
   const lines = text.split("\n");
   if (lines[0] !== "---") return fields;
+  let block: string[] | undefined;
   for (const line of lines.slice(1, lines.indexOf("---", 1))) {
+    if (block !== undefined && line.trimStart().startsWith("- ")) {
+      block.push(line.trimStart().slice(2).replace(/^"|"$/g, ""));
+      continue;
+    }
+    block = undefined;
     const at = line.indexOf(":");
     const value = line.slice(at + 1).trim();
-    fields.set(line.slice(0, at), value.startsWith("[") ? value.slice(1, -1).split(",").map((item) => item.trim()) : value);
+    if (value === "") {
+      block = [];
+      fields.set(line.slice(0, at), block);
+    } else fields.set(line.slice(0, at), value.startsWith("[") ? value.slice(1, -1).split(",").map((item) => item.trim()) : value);
   }
   return fields;
 }
@@ -277,7 +286,7 @@ describe("the wiki eval's key fits its fixture", () => {
   });
 
   it("plants exactly the broken links the key names", () => {
-    const missing = [...wikiDocs].flatMap(([path, text]) => relativeLinks(path, text).filter((link) => !link.exists).map((link) => ({ from: path, target: link.raw })));
+    const missing = [...wikiDocs].flatMap(([path, text]) => relativeLinks(path, text).filter((link) => !link.exists).map((link) => ({ from: path, target: link.target })));
     expect(asked("W17").expect).toEqual(missing);
   });
 
