@@ -9,6 +9,26 @@ import { FILES, artifactRoot, bundleOf, createState, exists, temp } from "./supp
 import { writeFile } from "node:fs/promises";
 
 describe("member plugin distribution", () => {
+  it("says nothing was installed when the client refuses a plugin, without the connector-wide rollback", async () => {
+    const state = await createState({ "/api/member/v1/plugins/modernize": bundleOf("modernize", "1.0.0", FILES) });
+    state.runClientCommand.mockImplementation(async () => ({ exitCode: 1, stdout: "", stderr: "refused" }));
+    expect(await runCli(["plugins", "install", "modernize", "--harness", "claude-code", "--token-stdin"], state.deps)).toBe(2);
+    const stderr = state.stderr.join("");
+    expect(stderr).toContain("PLUGIN_SETUP_COMMAND_FAILED");
+    expect(stderr).toContain("Nothing was installed");
+    expect(stderr).not.toContain("roll back");
+    expect(stderr).not.toContain("plugin uninstall");
+  });
+
+  it("names the client the same way when it installs and removes a plugin", async () => {
+    const state = await createState({ "/api/member/v1/plugins/modernize": bundleOf("modernize", "1.0.0", FILES) });
+    expect(await runCli(["plugins", "install", "modernize", "--harness", "claude-code", "--token-stdin"], state.deps), state.stderr.join("")).toBe(0);
+    expect(await runCli(["remove", "modernize", "--harness", "claude-code", "--token-stdin"], state.deps), state.stderr.join("")).toBe(0);
+    expect(state.stdout.join("")).toContain("Installed modernize 1.0.0 in Claude Code");
+    expect(state.stdout.join("")).toContain("Removed modernize from Claude Code.");
+    expect(state.stdout.join("")).not.toContain("claude-code");
+  });
+
   it("lists what the member may install and what is installed", async () => {
     const state = await createState({ "/api/member/v1/plugins": { schemaVersion: "1", items: [{ name: "modernize", title: "Project context", version: "1.0.0", description: "d" }], limit: 100 } });
     expect(await runCli(["plugins", "list", "--token-stdin", "--json"], state.deps), state.stderr.join("")).toBe(0);
@@ -148,7 +168,7 @@ describe("short commands", () => {
 
     state.stdout.length = 0;
     expect(await runCli(["add", "modernize", "--token-stdin"], state.deps), state.stderr.join("")).toBe(0);
-    expect(state.stdout.join("")).toContain("Installed modernize 1.0.0 for claude-code");
+    expect(state.stdout.join("")).toContain("Installed modernize 1.0.0 in Claude Code");
     expect(await runCli(["remove", "modernize"], state.deps), state.stderr.join("")).toBe(0);
   });
 

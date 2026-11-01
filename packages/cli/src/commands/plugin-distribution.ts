@@ -25,7 +25,7 @@ import type { PluginBundle } from "@kintsugi/harness-sdk";
 import type { CliDeps } from "../cli.js";
 import { clientUnavailable } from "../client-version.js";
 import { CliError } from "../profile.js";
-import { HARNESS_TARGETS, artifactRootFor, assertWorkspace, clientPluginVersion, initializedHarnesses, normalizeHarness, readHarnessScope, runInstallSteps, type HarnessScope } from "./plugin-native.js";
+import { HARNESS_TARGETS, MEMBER_PLUGIN_RETRY, artifactRootFor, assertWorkspace, clientPluginVersion, initializedHarnesses, normalizeHarness, readHarnessScope, runInstallSteps, type HarnessScope } from "./plugin-native.js";
 import { apiFor, emit, projectId, selectedProfile, type CommandOptions } from "./shared.js";
 
 type HarnessName = keyof typeof HARNESS_TARGETS;
@@ -151,7 +151,7 @@ async function installInto(deps: CliDeps, native: Prepared, bundle: PluginBundle
     stateFile: serializePluginState(next),
   }));
   await pruneStalePluginFiles(native.artifactRoot, native.target, bundle.name, stale);
-  try { await runInstallSteps(deps, setup); } catch (error) {
+  try { await runInstallSteps(deps, setup, MEMBER_PLUGIN_RETRY); } catch (error) {
     // The client did not take the plugin: the record must not say it is installed, or the next try would ask it to update.
     await writeFile(join(native.artifactRoot, PLUGIN_STATE_PATH), serializePluginState(state), "utf8");
     throw error;
@@ -219,7 +219,7 @@ async function installAction(deps: CliDeps, command: Command, names: readonly st
   const lines = results.flatMap((result) => [
     ...result.installed.map((entry) => entry.status === "up-to-date"
       ? `${result.plugin} ${result.version} is up to date in ${LABELS[entry.harness]}.`
-      : `${entry.status === "installed" ? "Installed" : "Updated"} ${result.plugin} ${result.version} for ${entry.harness} (${entry.files} files${entry.skipped > 0 ? `, ${entry.skipped} not supported by this client` : ""}).`),
+      : `${entry.status === "installed" ? "Installed" : "Updated"} ${result.plugin} ${result.version} in ${LABELS[entry.harness]} (${entry.files} files${entry.skipped > 0 ? `, ${entry.skipped} not supported by this client` : ""}).`),
   ]);
   for (const note of new Set(results.flatMap((result) => result.installed.map((entry) => entry.note).filter((entry): entry is string => entry !== undefined)))) lines.push(note);
   if (results.some((result) => result.installed.some((entry) => entry.status !== "up-to-date"))) lines.push("Start a new client session to load it.");
@@ -275,7 +275,7 @@ export function registerPluginDistribution(plugins: Command, deps: CliDeps, name
         ? async (harness) => (await readPluginState(artifactRootFor(deps, profile.id, harness))).plugins[name] !== undefined
         : undefined);
       for (const harness of harnesses) await removeFrom(deps, await prepare(deps, profile.id, harness), name);
-      report(deps, this, { plugin: name, harnesses, removed: true, harness: harnesses[0] }, [...harnesses.map((harness) => `Removed ${name} from ${harness}.`), "Start a new client session to unload it."]);
+      report(deps, this, { plugin: name, harnesses, removed: true, harness: harnesses[0] }, [...harnesses.map((harness) => `Removed ${name} from ${LABELS[harness]}.`), "Start a new client session to unload it."]);
     });
 }
 

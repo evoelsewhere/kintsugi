@@ -85,9 +85,10 @@ function parseConfig(value: unknown): ProfileConfig {
     profiles[id] = profile;
   }
   const config: ProfileConfig = { schemaVersion: "1", profiles };
+  // An active profile that is not in the file (removed by hand) is dropped: `login` then names one again.
   if (record.activeProfile !== undefined) {
-    if (typeof record.activeProfile !== "string" || profiles[record.activeProfile] === undefined) throw new CliError("PROFILE_CONFIG_INVALID", "Kintsugi active profile does not exist");
-    config.activeProfile = record.activeProfile;
+    if (typeof record.activeProfile !== "string") throw new CliError("PROFILE_CONFIG_INVALID", "Kintsugi active profile is invalid");
+    if (profiles[record.activeProfile] !== undefined) config.activeProfile = record.activeProfile;
   }
   return config;
 }
@@ -114,6 +115,8 @@ export class FileProfileStore implements ProfileStore {
       return parseConfig(parsed);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return emptyConfig();
+      // Say which file, so the member can repair or remove it (KINTSUGI_CONFIG moves it).
+      if (error instanceof CliError && error.code === "PROFILE_CONFIG_INVALID") throw new CliError(error.code, `${error.message}: ${this.path}`);
       throw error;
     }
   }

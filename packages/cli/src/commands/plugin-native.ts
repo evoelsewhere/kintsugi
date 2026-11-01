@@ -23,7 +23,17 @@ export function rollbackInstructions(report: SetupReport): string {
   ].join("\n");
 }
 
-export async function runInstallSteps(deps: CliDeps, report: SetupReport): Promise<void> {
+/**
+ * What to do after a client refused a member plugin: the record was put back, so nothing changed and a plain retry is
+ * right. The connector-wide rollback would remove the connector and every other plugin.
+ */
+export const MEMBER_PLUGIN_RETRY = "Nothing was installed: the record of this client's plugins is as it was. Fix what the client reported above and run the command again.";
+
+/**
+ * Runs a setup's native client commands. A failure says how to recover: the connector setup prints its rollback; a
+ * member plugin (`recovery`) says what is true for it instead.
+ */
+export async function runInstallSteps(deps: CliDeps, report: SetupReport, recovery: string = rollbackInstructions(report)): Promise<void> {
   for (let index = 0; index < report.installSteps.length; index++) {
     const command = report.installSteps[index]!;
     if (deps.runClientCommand === undefined) throw new CliError("PLUGIN_SETUP_UNAVAILABLE", "This CLI has no native client command runner");
@@ -33,13 +43,13 @@ export async function runInstallSteps(deps: CliDeps, report: SetupReport): Promi
     } catch {
       throw new CliError(
         "PLUGIN_SETUP_COMMAND_FAILED",
-        `Native setup failed to start at command ${index + 1} of ${report.installSteps.length}. Completed ${index} of ${report.installSteps.length} commands.\n${rollbackInstructions(report)}`,
+        `Native setup failed to start at command ${index + 1} of ${report.installSteps.length}. Completed ${index} of ${report.installSteps.length} commands.\n${recovery}`,
       );
     }
     if (result.exitCode !== 0) {
       throw new CliError(
         "PLUGIN_SETUP_COMMAND_FAILED",
-        `Native setup stopped at command ${index + 1} of ${report.installSteps.length} (exit code ${result.exitCode}). Completed ${index} of ${report.installSteps.length} commands.\n${rollbackInstructions(report)}`,
+        `Native setup stopped at command ${index + 1} of ${report.installSteps.length} (exit code ${result.exitCode}). Completed ${index} of ${report.installSteps.length} commands.\n${recovery}`,
       );
     }
   }
