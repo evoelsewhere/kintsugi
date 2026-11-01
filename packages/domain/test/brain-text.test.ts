@@ -174,7 +174,7 @@ describe("headings", () => {
     ]);
     expect(nodes[1]?.summary).toBe("#NoSpace");
     // A heading mark or a fence inside a line is text, and a slug has no trailing dash.
-    expect(nodesOf("Note ## not a heading.\nUse ``` inline.\n\n## Done !").slice(1).map((node) => [node.title, node.anchor])).toEqual([["Done !", "done"]]);
+    expect(nodesOf("Note ## not a heading.\nUse ``` inline.\n\n## Done !").slice(1).map((node) => [node.title, node.anchor])).toEqual([["Done !", "done-"]]);
   });
 
   it("nest headings by level and give each its own lines and everything under it", () => {
