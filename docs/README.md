@@ -44,6 +44,7 @@ Start with [Your first modernization project](guides/first-project.md) for a wal
 **Decisions**
 - [Decision register and ADR index](decisions/README.md)
 - [ADR template](decisions/template.md)
+- [Research: Confluence parity](research/confluence-parity/README.md): how a Confluence-like project wiki would sit on the document repository and the Brain (proposed)
 
 **Reference**
 - [Glossary](reference/glossary.md)
