@@ -124,7 +124,7 @@ export function isBrainIndexedPath(path: string): boolean {
   const segments = path.split("/");
   // An empty segment, `.`, `..` and hidden names all fail here.
   if (segments.some((segment) => segment === "" || segment.startsWith("."))) return false;
-  if (DOCUMENT_EXCLUDED_ROOTS.includes(segments[0] ?? "")) return false;
+  if (DOCUMENT_EXCLUDED_ROOTS.includes((segments[0] ?? "").toLowerCase())) return false;
   // The file's own name ends in `.md`, so only folders can match.
   return !segments.some((segment) => DOCUMENT_EXCLUDED_FOLDERS.includes(segment.toLowerCase()));
 }

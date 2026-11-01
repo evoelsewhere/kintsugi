@@ -4,6 +4,7 @@
 // depend on.
 
 import { describe, expect, it } from "vitest";
+import { isWikiEditablePath } from "../src/document-layout.js";
 import {
   BRAIN_ROOT_ID,
   type BrainNode,
@@ -34,6 +35,16 @@ describe("paths, ids and lines", () => {
     expect(isBrainIndexedPath("a/restricted.md")).toBe(true);
     for (const path of ["notes/a.txt", "a//b.md", "./a.md", "a/../b.md", ".github/a.md", "a/.hidden.md", "plugins/x/README.md", "scratch/x.md", "restricted/x.md", "a/restricted/x.md", "a/Restricted/x.md", "RESTRICTED/x.md", "a/identifiers/x.md"]) {
       expect(isBrainIndexedPath(path), path).toBe(false);
+    }
+  });
+
+  it("leaves out the reserved roots and the excluded folders in any case, as the wiki editor does", () => {
+    for (const path of ["Plugins/x.md", "PLUGINS/x/README.md", "SCRATCH/a/x.md", "Scratch/x.md", "Restricted/a.md", "x/Identifiers/a.md", "a/Restricted/b.md", "a/b/IDENTIFIERS/c.md"]) {
+      expect(isBrainIndexedPath(path), path).toBe(false);
+      expect(isWikiEditablePath(path), path).toBe(false);
+    }
+    for (const path of ["20-spaces/onb/a.md", "20-spaces/onb/README.md", "a/Plugins/x.md", "a/SCRATCH/x.md"]) {
+      expect(isBrainIndexedPath(path), path).toBe(true);
     }
   });
 
