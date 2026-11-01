@@ -4,6 +4,8 @@ This changelog records the Kintsugi adaptation; it is not tied to a plugin manif
 
 ## Unreleased — Kintsugi adaptation
 
+- A job is told the network it really has. `reverse_engineering` 2.6.0: the workflow `harden-scan` says its finders have no shell and no network beyond the `web_search` and `web_fetch` tools a project may grant ([ADR-0079](../../../docs/decisions/0079-duckduckgo-agent-web-search.md), [ADR-0080](../../../docs/decisions/0080-public-web-fetch-and-expanded-research.md)), and the command `assess` says runtime jobs reach no production system instead of "no network and no MCP servers". Script steps keep "no network". No agent or skill changes.
+
 - A credential shown by its opening alone is masked too. `reverse_engineering` 2.6.0: `split_findings.py` masks a value whose only visible part is a well-known credential prefix (`sk…`, `gh...`, `xoxb-…`) and a value that looks like a credential followed by a single mask character (`sk-*`, `AKIA*`, `ghp_*`); `x = 2* y`, `skip...` and prose stay. No agent or skill changes.
 
 - A topology whose leaf files lack the repository folder still makes a catalog. `reverse_engineering` 2.6.0: `catalog_from_topology.py` reads a leaf file such as `cobol/X.cbl` as `<repository>/cobol/X.cbl` when exactly one legacy repository holds it, notes each such leaf in the ambiguities, and leaves a path that several repositories hold unclaimed. No agent or skill changes.

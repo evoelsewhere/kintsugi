@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createKernelGitTool } from "../src/kernel/git.js";
+import { createKernelGitTool, findUnlistedOption } from "../src/kernel/git.js";
 import { createTools } from "../src/kernel/tools.js";
 import { PathGuard } from "../src/kernel/paths.js";
 import { createWorkspace } from "./helpers.js";
@@ -307,5 +307,60 @@ describe("kernel git transports (T3-012)", () => {
   it("leaves remotes over the network alone", async () => {
     expect((await git({ args: ["remote", "add", "upstream", "https://example.invalid/team/repo.git"], cwd: work })).error).toBe(false);
     expect((await git({ args: ["remote", "set-url", "upstream", "git@example.invalid:team/repo.git"], cwd: work })).error).toBe(false);
+  });
+});
+
+describe("kernel git option allowlist (P-031)", () => {
+  const repo = join(workspace.out, "allowlist");
+
+  beforeAll(() => {
+    mkdirSync(tmp, { recursive: true });
+    mkdirSync(repo, { recursive: true });
+    execFileSync("git", ["init", "-q"], { cwd: repo });
+    writeFileSync(join(repo, "a.txt"), "one\ntwo\n");
+    execFileSync("git", ["add", "a.txt"], { cwd: repo });
+    execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t.invalid", "commit", "-q", "-m", "one"], { cwd: repo });
+    writeFileSync(join(repo, "a.txt"), "one\ntwo\nthree\n");
+    execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t.invalid", "commit", "-q", "-am", "two"], { cwd: repo });
+  });
+
+  it("runs what the code-reviewer reads a merge request with", async () => {
+    for (const args of [
+      ["diff", "--stat", "HEAD~1", "HEAD"],
+      ["diff", "--name-only", "HEAD~1"],
+      ["log", "--oneline", "-5"],
+      ["log", "-n", "1", "--format=%H %s"],
+      ["show", "--stat", "HEAD"],
+      ["blame", "-L", "1,2", "a.txt"],
+      ["status", "--short"],
+    ]) {
+      const { text, error } = await git({ args, cwd: repo });
+      expect(error, `${args.join(" ")}: ${text}`).toBe(false);
+    }
+  });
+
+  it("refuses an option its subcommand does not list, naming it and the allowed ones", async () => {
+    const { text } = await git({ args: ["log", "--output-indicator-new=x"], cwd: repo });
+    expect(text).toContain('git option "--output-indicator-new=x" is not allowed for "git log" here');
+    expect(text).toContain("allowed: -p, --patch");
+    for (const args of [["status", "--find-renames"], ["blame", "-q", "a.txt"], ["commit", "-qz", "-m", "x"], ["tag", "--cleanup=verbatim", "t"]]) {
+      expect((await git({ args, cwd: repo })).text, args.join(" ")).toMatch(/is not allowed for "git \w+" here/);
+    }
+  });
+
+  it("reads an option's value as a value, and the paths after -- as paths", () => {
+    expect(findUnlistedOption("log", ["-n", "5", "--format", "%s", "-3"])).toBeUndefined();
+    expect(findUnlistedOption("commit", ["-qm", "-x is a message", "--author", "A <a@b>"])).toBeUndefined();
+    expect(findUnlistedOption("diff", ["HEAD", "--", "--not-an-option"])).toBeUndefined();
+    expect(findUnlistedOption("branch", ["-vv"])).toBeUndefined();
+    expect(findUnlistedOption("worktree", ["add", "-q", "x"])).toBeUndefined();
+    expect(findUnlistedOption("log", ["--follow", "--exec=x"])).toBe("--exec=x");
+    expect(findUnlistedOption("pwn", ["-x"])).toBe("-x");
+  });
+
+  it("keeps the patch apply reads in the workspace", async () => {
+    const { text } = await git({ args: ["apply", "--check", join(workspace.outside, "token.txt")], cwd: repo });
+    expect(text).toContain("outside the job workspace");
+    expect(text).not.toContain("TOP_SECRET_VALUE");
   });
 });

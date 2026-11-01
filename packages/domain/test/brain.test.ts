@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   atxHeading,
+  BRAIN_MAX_LINKS_PER_NODE,
   BRAIN_ROOT_ID,
   brainAnchor,
   buildBrainDocument,
@@ -202,6 +203,24 @@ describe("buildBrainTree", () => {
       toId: "10-applications/billing/01-legacy/invoice/tax/spec.md#RULE-INV01-0001",
       kind: "id",
     });
+  });
+
+  it("stores at most BRAIN_MAX_LINKS_PER_NODE links of a node and keeps the total of one that has more (P-036)", () => {
+    const linking = (count: number) =>
+      buildBrainTree(
+        [
+          { path: "00-project/index.md", text: `# Index\n\n${Array.from({ length: count }, (_, n) => `- [Page ${n}](p${n}.md)`).join("\n")}` },
+          ...Array.from({ length: count }, (_, n) => ({ path: `00-project/p${n}.md`, text: `# Page ${n}\n\nText.` })),
+        ],
+        "x",
+      );
+    const from = (built: ReturnType<typeof linking>) => built.links.filter((link) => link.fromId === "00-project/index.md").length;
+    const atCap = linking(BRAIN_MAX_LINKS_PER_NODE);
+    expect(from(atCap)).toBe(BRAIN_MAX_LINKS_PER_NODE);
+    expect(atCap.linkTotals).toEqual({});
+    const over = linking(BRAIN_MAX_LINKS_PER_NODE + 1);
+    expect(from(over)).toBe(BRAIN_MAX_LINKS_PER_NODE);
+    expect(over.linkTotals).toEqual({ "00-project/index.md": BRAIN_MAX_LINKS_PER_NODE + 1 });
   });
 
   it("says what a folder without a README holds, by the titles of its one-document folders", () => {

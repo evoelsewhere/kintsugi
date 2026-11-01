@@ -145,8 +145,12 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     expireInSeconds: 60 * 60,
   });
   await ensureDocumentWriteQueue(boss);
-  // A write or a sync a stopped worker had taken is retried now, not after its expiry (DC-002).
-  await failStrandedQueueJobs(options.pool, boss, [GIT_SYNC_QUEUE, DOCUMENT_WRITE_QUEUE], log).catch((error: unknown) =>
+  // Created here, before the sweep below sees them (P-039); their workers start further down.
+  await ensureWorkspaceCleanupQueue(boss);
+  await ensureBrainIndexQueue(boss);
+  // A write, a sync, a cleanup or a Brain build a stopped worker had taken is retried now, not after its expiry (DC-002,
+  // P-039): the writes, syncs and builds run one per repository or project, so a stuck one blocks the next.
+  await failStrandedQueueJobs(options.pool, boss, [GIT_SYNC_QUEUE, DOCUMENT_WRITE_QUEUE, WORKSPACE_CLEANUP_QUEUE, BRAIN_INDEX_QUEUE], log).catch((error: unknown) =>
     log(`could not clear the queue jobs a stopped worker left: ${error instanceof Error ? error.message : String(error)}`),
   );
   await boss.work<{ repositoryId: string }>(GIT_SYNC_QUEUE, { localConcurrency: options.concurrency ?? 2 }, counted(async ([job]) => {
@@ -235,7 +239,6 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     await syncJobConcurrency();
   }
   // An admin removes a job workspace from Settings -> Sandbox & Agent (ADR-0058): the API asks, this process owns the disk.
-  await ensureWorkspaceCleanupQueue(boss);
   await boss.work<WorkspaceCleanupRequest>(WORKSPACE_CLEANUP_QUEUE, { localConcurrency: 1 }, counted(async ([job]) => {
     if (job === undefined) return;
     const outcome = await removeWorkspaceOnRequest({ storage: options.storage, store: jobStore, jobId: job.data.jobId });
@@ -243,7 +246,6 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
   }));
   // The Brain (ADR-0091): one build per project at a time; a build reads a commit, so it never waits for the mirror.
   const brainDeps = { pool: options.pool, repositories: store, storage: options.storage, log };
-  await ensureBrainIndexQueue(boss);
   await boss.work<BrainIndexRequest>(BRAIN_INDEX_QUEUE, { localConcurrency: 1 }, counted(async ([job]) => {
     if (job === undefined) return;
     await indexBrain(brainDeps, job.data.projectId);

@@ -34,7 +34,7 @@ export type BrainSummarySource = (typeof BRAIN_SUMMARY_SOURCES)[number];
 /** The id of the tree's root. A folder's id is its path with a trailing `/`, a document's its path, a section's `path#anchor`. */
 export const BRAIN_ROOT_ID = "/";
 /** Bumped when the builder changes what it produces, so every index is rebuilt once. */
-export const BRAIN_BUILDER_VERSION = 4;
+export const BRAIN_BUILDER_VERSION = 5;
 export const BRAIN_SUMMARY_MAX = 240;
 export const BRAIN_TITLE_MAX = 200;
 /** Larger files are left out, as the document read API refuses them (docs/reference/document-repo-read-path.md). */
@@ -42,7 +42,10 @@ export const BRAIN_MAX_FILE_BYTES = 2 * 1024 * 1024;
 export const BRAIN_MAX_DOCUMENTS = 20_000;
 /** Headings beyond this stay text of the node before them. */
 export const BRAIN_MAX_NODES_PER_DOCUMENT = 2_000;
-/** Distinct links kept per node; ids mentioned by many documents would otherwise dominate the link table. */
+/**
+ * Distinct links stored per node; ids mentioned by many documents would otherwise dominate the link table. A node with
+ * more keeps its total (`BrainTree.linkTotals`), so a read can still say how many there are (P-036).
+ */
 export const BRAIN_MAX_LINKS_PER_NODE = 50;
 
 export interface BrainNode {
@@ -98,6 +101,8 @@ export interface BrainTree {
   identifiers: number;
   /** Documents left out because the index reached its bound. */
   skipped: number;
+  /** The distinct outgoing links of each node that has more than `BRAIN_MAX_LINKS_PER_NODE`, of which the first are stored. */
+  linkTotals: Record<string, number>;
 }
 
 export interface BrainSourceDocument {
@@ -823,11 +828,11 @@ export function buildBrainTree(sources: readonly BrainSourceDocument[], rootTitl
   const add = (fromId: string, toId: string, kind: BrainLink["kind"]): void => {
     if (fromId === toId) return;
     const key = `${fromId}\n${toId}`;
-    const count = perNode.get(fromId) ?? 0;
-    if (seen.has(key) || count >= BRAIN_MAX_LINKS_PER_NODE) return;
+    if (seen.has(key)) return;
     seen.add(key);
-    perNode.set(fromId, count + 1);
-    links.push({ fromId, toId, kind });
+    const count = (perNode.get(fromId) ?? 0) + 1;
+    perNode.set(fromId, count);
+    if (count <= BRAIN_MAX_LINKS_PER_NODE) links.push({ fromId, toId, kind });
   };
   for (const built of documents) {
     for (const link of built.links) {
@@ -844,7 +849,8 @@ export function buildBrainTree(sources: readonly BrainSourceDocument[], rootTitl
   }
 
   root.children = (folderChildren.get(root.id) ?? []).length;
-  return { nodes, links, documents: documents.length, identifiers: definers.size, skipped: indexed.length - kept.length };
+  const linkTotals = Object.fromEntries([...perNode].filter(([, count]) => count > BRAIN_MAX_LINKS_PER_NODE));
+  return { nodes, links, documents: documents.length, identifiers: definers.size, skipped: indexed.length - kept.length, linkTotals };
 }
 
 // ---------------------------------------------------------------------------

@@ -192,6 +192,16 @@ export class PgBrainStore {
       await client.query("delete from knowledge.brain_node where project_id = $1", [projectId]);
       await insertNodes(client, projectId, tree.nodes);
       await insertLinks(client, projectId, tree.links);
+      // A node with more links than are stored keeps its total (P-036).
+      const totals = Object.entries(tree.linkTotals);
+      if (totals.length > 0) {
+        await client.query(
+          `update knowledge.brain_node n set outgoing_links = t.total
+             from unnest($2::text[], $3::int[]) as t(id, total)
+            where n.project_id = $1 and n.id = t.id`,
+          [projectId, totals.map(([id]) => id), totals.map(([, total]) => total)],
+        );
+      }
       const tokens = tree.nodes.find((node) => node.id === BRAIN_ROOT_ID)?.subtreeTokens ?? 0;
       await client.query(
         `update knowledge.brain_source
@@ -305,8 +315,14 @@ export class PgBrainStore {
           limit $3`,
         [projectId, id, limit],
       );
+    // A node whose links were capped when they were stored counts all of them (P-036).
     const count = (direction: "from" | "to") =>
-      this.db.query<{ count: string }>(`select count(*) from knowledge.brain_link where project_id = $1 and ${direction === "from" ? "from_id" : "to_id"} = $2`, [projectId, id]);
+      this.db.query<{ count: string }>(
+        direction === "from"
+          ? "select greatest((select count(*) from knowledge.brain_link where project_id = $1 and from_id = $2), (select coalesce(max(outgoing_links), 0) from knowledge.brain_node where project_id = $1 and id = $2)) as count"
+          : "select count(*) from knowledge.brain_link where project_id = $1 and to_id = $2",
+        [projectId, id],
+      );
     const [outgoing, incoming, outgoingTotal, incomingTotal] = await Promise.all([query("from"), query("to"), count("from"), count("to")]);
     const withKind = (row: NodeRow & { link_kind: BrainLink["kind"] }) => ({ ...toNode(row), linkKind: row.link_kind });
     return {

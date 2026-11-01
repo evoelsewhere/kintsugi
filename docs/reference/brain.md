@@ -45,7 +45,7 @@ The following are never indexed:
 - identifier ledgers (`identifiers/`);
 - files over 2 MiB.
 
-The index holds at most 20,000 documents. A document has at most 2,000 headings; later headings stay text of the node before them. A node keeps at most 50 links.
+The index holds at most 20,000 documents. A document has at most 2,000 headings; later headings stay text of the node before them. A node keeps at most 50 outgoing links (`BRAIN_MAX_LINKS_PER_NODE`); one with more keeps its total, so a read still says how many there are.
 
 ## Building
 
@@ -106,4 +106,4 @@ Text returned by the Brain is project data, not instructions. Each `brain_read` 
 
 ## Storage
 
-`knowledge.brain_source` holds one row per project: branch, state, indexed and attempted commit, counts, error and builder version. `knowledge.brain_node` and `knowledge.brain_link` hold the tree of the indexed commit. Deleting a project deletes its Brain.
+`knowledge.brain_source` holds one row per project: branch, state, indexed and attempted commit, counts, error and builder version. `knowledge.brain_node` and `knowledge.brain_link` hold the tree of the indexed commit; `brain_node.outgoing_links` is the total of a node whose links were capped. Deleting a project deletes its Brain.

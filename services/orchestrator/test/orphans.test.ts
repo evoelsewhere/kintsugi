@@ -1,11 +1,15 @@
 // Runs left `running` by a dead worker are failed when a worker starts, unless another worker is alive.
 
 import { randomUUID } from "node:crypto";
-import { hostname } from "node:os";
+import { mkdtemp, rm } from "node:fs/promises";
+import { hostname, tmpdir } from "node:os";
+import { join } from "node:path";
+import { CheckoutStorage } from "@kintsugi/git";
 import { PgBoss } from "pg-boss";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { INTERRUPTED, failOrphanedQueueJobs, failOrphanedRuns, failStrandedQueueJobs, sweepOrphanedRuns } from "../src/orphans.js";
-import { DOCUMENT_WRITE_QUEUE, JOB_RUN_QUEUE, QUEUE_SCHEMA, ensureDocumentWriteQueue, ensureJobRunQueue, sendJobRun } from "../src/queues.js";
+import { BRAIN_INDEX_QUEUE, DOCUMENT_WRITE_QUEUE, JOB_RUN_QUEUE, QUEUE_SCHEMA, WORKSPACE_CLEANUP_QUEUE, ensureBrainIndexQueue, ensureDocumentWriteQueue, ensureJobRunQueue, ensureWorkspaceCleanupQueue, sendJobRun } from "../src/queues.js";
+import { startWorker } from "../src/worker.js";
 import { createTestDatabase, hasDatabase, type TestDatabase } from "./support/database.js";
 
 function fakePool(alive: boolean, updated: number) {
@@ -160,5 +164,46 @@ describe.skipIf(!hasDatabase)("queue jobs a stopped worker left active (integrat
     // The queue retries a write (retryLimit 2), so another writer takes it at once instead of after its 30-min expiry.
     expect((await boss.getJobById(DOCUMENT_WRITE_QUEUE, stranded))?.state).toBe("retry");
     expect(logs[0]).toContain("document-write");
+  });
+});
+
+describe.skipIf(!hasDatabase)("a worker that starts over brain-index and cleanup jobs a stopped worker left (integration, P-039)", () => {
+  let db: TestDatabase;
+  let dataDir: string;
+
+  beforeAll(async () => {
+    db = await createTestDatabase();
+    dataDir = await mkdtemp(join(tmpdir(), "kintsugi-stranded-"));
+  });
+  afterAll(async () => {
+    await db?.drop();
+    if (dataDir !== undefined) await rm(dataDir, { recursive: true, force: true });
+  });
+
+  it("hands them back to the queue before it takes any job", async () => {
+    // A worker that took one job of each queue and stopped without finishing them.
+    const before = new PgBoss({ connectionString: db.url, schema: QUEUE_SCHEMA });
+    await before.start();
+    await ensureBrainIndexQueue(before);
+    await ensureWorkspaceCleanupQueue(before);
+    await before.send(BRAIN_INDEX_QUEUE, { projectId: "nobody" }, { singletonKey: "nobody" });
+    await before.send(WORKSPACE_CLEANUP_QUEUE, { jobId: randomUUID() });
+    const [brain] = await before.fetch(BRAIN_INDEX_QUEUE);
+    const [cleanup] = await before.fetch(WORKSPACE_CLEANUP_QUEUE);
+    await before.stop({ graceful: false });
+
+    const storage = new CheckoutStorage(dataDir);
+    const worker = await startWorker({ databaseUrl: db.url, pool: db.pool, storage, pollIntervalSeconds: 3600, log: () => undefined });
+    try {
+      const jobs = await db.pool.query<{ id: string; state: string; retry_count: number }>(`select id, state, retry_count from ${QUEUE_SCHEMA}.job where id = any($1)`, [[brain!.id, cleanup!.id]]);
+      const byId = new Map(jobs.rows.map((row) => [row.id, row]));
+      // The Brain build is retried (retryLimit 1), so the project's index is built again (pg-boss counts the retry when it
+      // hands the job out again); a cleanup has no retry.
+      const rebuilt = byId.get(brain!.id);
+      expect(rebuilt?.state === "retry" || (rebuilt?.retry_count ?? 0) >= 1, JSON.stringify(rebuilt)).toBe(true);
+      expect(byId.get(cleanup!.id)?.state).toBe("failed");
+    } finally {
+      await worker.stop();
+    }
   });
 });
