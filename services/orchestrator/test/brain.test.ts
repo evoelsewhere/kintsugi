@@ -147,6 +147,10 @@ describe.skipIf(!hasDatabase)("brain index (integration)", () => {
     // The labels are indexed: a lookup by a label is an `@>` on the column.
     const found = await db.pool.query<{ id: string }>("select id from knowledge.brain_node where project_id = 'shop' and labels @> array['runbook']::text[]");
     expect(found.rows.map((row) => row.id)).toEqual(["00-project/team/first.md"]);
+    expect((await store.byLabel("shop", "runbook", 10)).map((node) => node.id)).toEqual(["00-project/team/first.md"]);
+    expect(await store.byLabel("shop", "nothing", 10)).toEqual([]);
+    expect((await store.bySpace("shop", "TEAM", 10)).map((node) => node.id)).toEqual(["00-project/team/README.md", "00-project/team/first.md", "00-project/team/second.md"]);
+    expect(await store.bySpace("shop", "team", 10)).toEqual([]);
   });
 
   it("fails the build of a project without a document repository", async () => {

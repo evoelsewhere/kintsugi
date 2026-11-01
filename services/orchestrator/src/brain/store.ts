@@ -303,6 +303,28 @@ export class PgBrainStore {
     return result.rows.map(toNode);
   }
 
+  /** The documents that carry a label (stored lowercase), by path; uses the GIN index of `labels`. */
+  async byLabel(projectId: string, label: string, limit: number): Promise<BrainNode[]> {
+    const result = await this.db.query<NodeRow>(
+      `select ${NODE_COLUMNS} from knowledge.brain_node
+        where project_id = $1 and kind = 'document' and labels @> array[$2]::text[]
+        order by path collate "C" limit $3`,
+      [projectId, label, limit],
+    );
+    return result.rows.map(toNode);
+  }
+
+  /** The documents in the space of a key, by path. */
+  async bySpace(projectId: string, space: string, limit: number): Promise<BrainNode[]> {
+    const result = await this.db.query<NodeRow>(
+      `select ${NODE_COLUMNS} from knowledge.brain_node
+        where project_id = $1 and kind = 'document' and space = $2
+        order by path collate "C" limit $3`,
+      [projectId, space, limit],
+    );
+    return result.rows.map(toNode);
+  }
+
   /** The folder or document at a repository path, for a reader who pasted a path. */
   async byPath(projectId: string, path: string, limit: number): Promise<BrainNode[]> {
     const result = await this.db.query<NodeRow>(
