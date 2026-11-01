@@ -235,6 +235,15 @@ describe.skipIf(!hasDatabase)("document writer (integration)", () => {
     expect((await row(write.writeId))?.pr_url).toBeNull();
   });
 
+  it("runs a write again on the same branch when the queue retries it (DC-002)", async () => {
+    const write = request("plain-docs", { files: [{ path: "kintsugi.yaml", content: "schemaVersion: 1\nretried: true\n" }] });
+    const first = await writeDocument(deps, write);
+    expect(first).toMatchObject({ status: "committed", branch: `kintsugi/alice/${write.writeId}` });
+    // A worker stopped after the push: the retried job writes the same files to the same branch, and nothing fails.
+    expect(await writeDocument(deps, write)).toEqual(first);
+    expect(remote.git("plain-docs", "show", `kintsugi/alice/${write.writeId}:kintsugi.yaml`)).toBe("schemaVersion: 1\nretried: true\n");
+  });
+
   it("the worker runs queued writes, one per repository at a time", async () => {
     const worker = await startWorker({ databaseUrl: db.url, pool: db.pool, storage: deps.storage, pollIntervalSeconds: 3600, log: () => undefined });
     try {

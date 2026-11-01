@@ -13,7 +13,7 @@ import { PgBoss } from "pg-boss";
 import type { Pool } from "pg";
 import { DocumentWriteStore } from "./document-write/store.js";
 import { startHeartbeat } from "./heartbeat.js";
-import { failOrphanedQueueJobs, sweepOrphanedRuns } from "./orphans.js";
+import { failOrphanedQueueJobs, failStrandedQueueJobs, sweepOrphanedRuns } from "./orphans.js";
 import { watchPullRequests } from "./document-write/watch.js";
 import { writeDocument } from "./document-write/writer.js";
 import { RepositoryStore } from "./git-sync/repositories.js";
@@ -145,6 +145,10 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     expireInSeconds: 60 * 60,
   });
   await ensureDocumentWriteQueue(boss);
+  // A write or a sync a stopped worker had taken is retried now, not after its expiry (DC-002).
+  await failStrandedQueueJobs(options.pool, boss, [GIT_SYNC_QUEUE, DOCUMENT_WRITE_QUEUE], log).catch((error: unknown) =>
+    log(`could not clear the queue jobs a stopped worker left: ${error instanceof Error ? error.message : String(error)}`),
+  );
   await boss.work<{ repositoryId: string }>(GIT_SYNC_QUEUE, { localConcurrency: options.concurrency ?? 2 }, counted(async ([job]) => {
     if (job === undefined) return;
     // An empty repository is recorded as such; retrying cannot help until someone pushes, so the job ends and the next poll looks again.

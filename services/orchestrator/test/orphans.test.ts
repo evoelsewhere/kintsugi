@@ -4,8 +4,8 @@ import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import { PgBoss } from "pg-boss";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { INTERRUPTED, failOrphanedQueueJobs, failOrphanedRuns, sweepOrphanedRuns } from "../src/orphans.js";
-import { JOB_RUN_QUEUE, QUEUE_SCHEMA, ensureJobRunQueue, sendJobRun } from "../src/queues.js";
+import { INTERRUPTED, failOrphanedQueueJobs, failOrphanedRuns, failStrandedQueueJobs, sweepOrphanedRuns } from "../src/orphans.js";
+import { DOCUMENT_WRITE_QUEUE, JOB_RUN_QUEUE, QUEUE_SCHEMA, ensureDocumentWriteQueue, ensureJobRunQueue, sendJobRun } from "../src/queues.js";
 import { createTestDatabase, hasDatabase, type TestDatabase } from "./support/database.js";
 
 function fakePool(alive: boolean, updated: number) {
@@ -124,5 +124,41 @@ describe.skipIf(!hasDatabase)("queue jobs of runs a stopped worker left (integra
     expect(await state(stopped)).toBe("failed");
     expect(await state(live)).toBe("active");
     expect(logs).toHaveLength(1);
+  });
+});
+
+describe.skipIf(!hasDatabase)("queue jobs a stopped worker left active (integration, DC-002)", () => {
+  let db: TestDatabase;
+  let boss: PgBoss;
+
+  beforeAll(async () => {
+    db = await createTestDatabase();
+    boss = new PgBoss({ connectionString: db.url, schema: QUEUE_SCHEMA });
+    await boss.start();
+    await ensureDocumentWriteQueue(boss);
+  });
+  afterAll(async () => {
+    await boss?.stop({ graceful: false });
+    await db?.drop();
+  });
+
+  const takeWrite = async (repository: string): Promise<string> => {
+    await boss.send(DOCUMENT_WRITE_QUEUE, { writeId: randomUUID(), projectId: "demo" }, { singletonKey: repository });
+    const [job] = await boss.fetch(DOCUMENT_WRITE_QUEUE);
+    return job!.id;
+  };
+
+  it("leaves them alone while another worker beats, and hands them back for a retry once none does", async () => {
+    const stranded = await takeWrite("docs-a");
+    await db.pool.query("insert into workflow.worker_heartbeat (worker_id, host, pid, version, started_at) values ('other', 'another-host', 1, '0', now())");
+    expect(await failStrandedQueueJobs(db.pool, boss, [DOCUMENT_WRITE_QUEUE], () => undefined)).toBe(0);
+    expect((await boss.getJobById(DOCUMENT_WRITE_QUEUE, stranded))?.state).toBe("active");
+
+    await db.pool.query("update workflow.worker_heartbeat set stopped_at = now() where worker_id = 'other'");
+    const logs: string[] = [];
+    expect(await failStrandedQueueJobs(db.pool, boss, [DOCUMENT_WRITE_QUEUE], (message) => logs.push(message))).toBe(1);
+    // The queue retries a write (retryLimit 2), so another writer takes it at once instead of after its 30-min expiry.
+    expect((await boss.getJobById(DOCUMENT_WRITE_QUEUE, stranded))?.state).toBe("retry");
+    expect(logs[0]).toContain("document-write");
   });
 });

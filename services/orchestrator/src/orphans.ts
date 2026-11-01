@@ -24,14 +24,18 @@ function processExists(pid: number): boolean {
   }
 }
 
-/** Fails the `running` runs (started before `before`, when given) left by dead workers; undefined when another worker is alive. */
-async function sweep(pool: Pick<Pool, "query">, log: (message: string) => void, before?: unknown): Promise<number | undefined> {
+/** Whether a worker other than this process beats: another host's while it beats, one on this host while its process exists. */
+async function anotherWorkerAlive(pool: Pick<Pool, "query">): Promise<boolean> {
   const seen = await pool.query<{ host: string; pid: number }>(
     "select host, pid from workflow.worker_heartbeat where stopped_at is null and last_seen_at > now() - make_interval(secs => $1)",
     [ALIVE_SECONDS],
   );
-  // Another host's worker counts as alive while it beats; on this host its process must exist too.
-  if (seen.rows.some((row) => row.host !== hostname() || (row.pid !== process.pid && processExists(row.pid)))) return undefined;
+  return seen.rows.some((row) => row.host !== hostname() || (row.pid !== process.pid && processExists(row.pid)));
+}
+
+/** Fails the `running` runs (started before `before`, when given) left by dead workers; undefined when another worker is alive. */
+async function sweep(pool: Pick<Pool, "query">, log: (message: string) => void, before?: unknown): Promise<number | undefined> {
+  if (await anotherWorkerAlive(pool)) return undefined;
   // The interrupted attempt joins the run's history like any other end of an attempt, so a retry does not erase it (T2-012).
   const fail = `update workflow.job_run set status = 'failed', failure_reason = $1, finished_at = now(), attempts = ${attemptsWith("failed", "$1")} where status = 'running'`;
   const result = before === undefined ? await pool.query(fail, [INTERRUPTED]) : await pool.query(`${fail} and started_at < $2`, [INTERRUPTED, before]);
@@ -57,6 +61,26 @@ export async function failOrphanedQueueJobs(pool: Pick<Pool, "query">, boss: Pic
   await boss.fail(JOB_RUN_QUEUE, ids, { reason: INTERRUPTED });
   log(`${ids.length} job-run queue job(s) a stopped worker left active marked failed`);
   return ids.length;
+}
+
+/**
+ * Fails the jobs of `queues` a stopped worker left `active`, so pg-boss retries them now instead of after their expiry:
+ * a document write a stopped worker had taken kept every write to that document repository waiting for 30 min, since
+ * the queue runs one write per repository (DC-002). Called when a worker starts, before it takes any job, so no active
+ * job is its own. It assumes one worker per installation: while another worker beats, its jobs may be the active ones,
+ * so nothing is failed and they wait for their expiry as before. A retried write is safe: the writer pushes the same
+ * branch again and finds the pull request it opened. Returns how many.
+ */
+export async function failStrandedQueueJobs(pool: Pick<Pool, "query">, boss: Pick<PgBoss, "fail">, queues: readonly string[], log: (message: string) => void): Promise<number> {
+  if (queues.length === 0 || (await anotherWorkerAlive(pool))) return 0;
+  const active = await pool.query<{ id: string; name: string }>(`select id, name from ${QUEUE_SCHEMA}.job where name = any($1) and state = 'active'`, [queues]);
+  const byQueue = new Map<string, string[]>();
+  for (const row of active.rows) byQueue.set(row.name, [...(byQueue.get(row.name) ?? []), row.id]);
+  for (const [queue, ids] of byQueue) {
+    await boss.fail(queue, ids, { reason: "Interrupted: the worker stopped while this job was running." });
+    log(`${ids.length} ${queue} queue job(s) a stopped worker left active marked failed, to be retried`);
+  }
+  return active.rows.length;
 }
 
 /** Fails the `running` runs left by dead workers; returns how many. */
