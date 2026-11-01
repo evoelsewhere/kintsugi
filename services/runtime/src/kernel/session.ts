@@ -23,7 +23,6 @@ import { composeSystemPrompt } from "./policy.js";
 import { createWebSearchTools } from "./web-search.js";
 import { createMemoryTools } from "./memory.js";
 import { createResultTool } from "./result.js";
-import { withAvailableShell } from "./shell.js";
 import { normalizeTools, RESULT_TOOL, withAliases } from "./tool-names.js";
 import { createTools, type ToolContext } from "./tools.js";
 
@@ -66,9 +65,7 @@ export async function createJobSession(options: CreateJobSessionOptions): Promis
       { compaction: { enabled: true, ...compactionBudget(model.contextWindow) }, retry: { enabled: true, maxRetries: 2 }, cacheWarming: "off" },
       { projectTrusted: false },
     );
-    // A host without bash does not offer `shell` (T2-010): neither the tool nor the prompt's word about it.
-    const agent = { ...spec.agent, tools: withAvailableShell(spec.agent.tools) };
-    const systemPrompt = composeSystemPrompt(agent, spec.workspace);
+    const systemPrompt = composeSystemPrompt(spec.agent, spec.workspace);
     // codemode only for an agent that lists it (an agent without a tool list has every kernel tool).
     const onBlocked = options.onBlocked ?? (() => undefined);
     const hasCodemode = spec.agent.tools.includes(CODEMODE_TOOL);
@@ -92,7 +89,7 @@ export async function createJobSession(options: CreateJobSessionOptions): Promis
 
     // The same tools in the same order for every job of the agent: tool definitions open the cached prefix.
     // A job with a result schema also gets submit_result, last: the agent's own tools keep their order.
-    const tools = [...withAliases(normalizeTools(agent.tools)), ...(spec.resultSchema === undefined ? [] : [RESULT_TOOL])];
+    const tools = [...withAliases(normalizeTools(spec.agent.tools)), ...(spec.resultSchema === undefined ? [] : [RESULT_TOOL])];
     const toolContext: ToolContext = { cwd, searchDir: spec.workspace.readOnly[0]!, readOnly: spec.workspace.readOnly, outDir: spec.workspace.outDir, tmpDir: scratch, onOutput: options.onOutput, ...(options.onRead === undefined ? {} : { onRead: options.onRead }) };
     const { session } = await createAgentSession({
       cwd,
