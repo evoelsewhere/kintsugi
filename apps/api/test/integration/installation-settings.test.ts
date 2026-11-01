@@ -76,6 +76,26 @@ describe.skipIf(!hasDatabase)("installation settings: commit identity (integrati
         expect(JSON.stringify(refused.body)).toContain("Agent idle timeout must be 0 or between 30 and 3600");
         expect((await admin.request("PUT", "/admin/settings/sandbox", { body: { checkoutHours: 3 } })).status).toBe(400);
         expect((await admin.get<SandboxView>("/admin/settings/sandbox")).body.data?.checkoutHours).toBe(48);
+
+        // A limit the worker could not hold (its timers take at most 2147483 s) never gets stored: the settings stop far below.
+        for (const [field, value, rule] of [
+          ["agentTimeoutSec", 2_147_484, "Agent timeout must be 0 or between 60 and 86400"],
+          ["agentTimeoutSec", 86_401, "Agent timeout must be 0 or between 60 and 86400"],
+          ["scriptTimeoutSec", 2_147_484, "Script timeout must be between 10 and 86400"],
+          ["agentIdleTimeoutSec", 3_601, "Agent idle timeout must be 0 or between 30 and 3600"],
+          ["maxTurns", 2.5, "Turn limit must be a whole number"],
+          ["maxOutputBytes", 0, "Output limit must be between 1048576 and 10737418240"],
+          ["maxOutputBytes", 1_048_576.5, "Output limit must be a whole number"],
+        ] as const) {
+          const bad = await admin.request("PUT", "/admin/settings/sandbox", { body: { ...body, [field]: value } });
+          expect(bad.status, `${field}=${value}`).toBe(400);
+          expect(JSON.stringify(bad.body)).toContain(rule);
+        }
+        expect((await admin.get<SandboxView>("/admin/settings/sandbox")).body.data).toMatchObject({ agentTimeoutSec: 3600, maxTurns: 80 });
+        // 0 (no limit, or the watchdog off) and the upper bounds themselves are kept.
+        const edges = { ...body, agentTimeoutSec: 0, agentIdleTimeoutSec: 0, maxTurns: 0, scriptTimeoutSec: 86_400 };
+        expect((await admin.request("PUT", "/admin/settings/sandbox", { body: edges })).status).toBe(200);
+        expect((await admin.get<SandboxView>("/admin/settings/sandbox")).body.data).toMatchObject({ agentTimeoutSec: 0, agentIdleTimeoutSec: 0, maxTurns: 0, scriptTimeoutSec: 86_400 });
       });
     });
 });
