@@ -95,7 +95,7 @@ const overview: GuidePage = {
           <P>Plugins are the flows your project offers to its members. See what you may install, then install one into every client you set up.</P>
           <CodeBlock label="Install a plugin" code={"# What does my project offer?\nkintsugi plugins list\n\n# Install it into every client you set up\nkintsugi install plugin modernize --all\n\n# Later: bring it up to date\nkintsugi update modernize"} />
           <H3>Use it in your AI tool</H3>
-          <P>Start a new session in Claude Code or Codex. A plugin command is named after the plugin: for example <Code>/modernize:build billing/invoice my-project</Code> builds a unit (see <Link className="text-[var(--ds-accent)] hover:underline" to="/guideline/build-a-unit">Build a unit</Link>).</P>
+          <P>Start a new session in Claude Code, Codex or GitHub Copilot. A plugin command is named after the plugin: for example <Code>/modernize:build billing/invoice my-project</Code> builds a unit (see <Link className="text-[var(--ds-accent)] hover:underline" to="/guideline/build-a-unit">Build a unit</Link>).</P>
         </Step>
       </div>
       <H2>What to read next</H2>

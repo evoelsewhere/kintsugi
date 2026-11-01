@@ -117,8 +117,8 @@ describe("kintsugi install", () => {
     state.stdout.length = 0;
     state.runClientCommand.mockClear();
     expect(await runCli(["install", "plugin", "modernize", "--all", "--token-stdin"], state.deps), state.stderr.join("")).toBe(0);
-    expect(state.stdout.join("")).toContain("Installed modernize 1.0.0 for claude-code");
-    expect(state.stdout.join("")).toContain("Installed modernize 1.0.0 for codex");
+    expect(state.stdout.join("")).toContain("Installed modernize 1.0.0 in Claude Code");
+    expect(state.stdout.join("")).toContain("Installed modernize 1.0.0 in Codex");
     expect(await exists(join(artifactRoot(state.root, "claude-code", PROFILE), "plugins", "claude", "modernize", "commands", "build.md"))).toBe(true);
     expect(await exists(join(artifactRoot(state.root, "codex", PROFILE), "plugins", "codex", "modernize", "skills", "build-method", "SKILL.md"))).toBe(true);
 
@@ -131,8 +131,8 @@ describe("kintsugi install", () => {
     responses["/api/member/v1/plugins/modernize"] = bundleOf("modernize", "1.1.0", FILES);
     state.stdout.length = 0;
     expect(await runCli(["update", "--token-stdin"], state.deps), state.stderr.join("")).toBe(0);
-    expect(state.stdout.join("")).toContain("Updated modernize 1.1.0 for claude-code");
-    expect(state.stdout.join("")).toContain("Updated modernize 1.1.0 for codex");
+    expect(state.stdout.join("")).toContain("Updated modernize 1.1.0 in Claude Code");
+    expect(state.stdout.join("")).toContain("Updated modernize 1.1.0 in Codex");
     expect(state.runClientCommand.mock.calls.map((call) => (call as unknown[])[1] as string[]).some((args) => args[1] === "update")).toBe(true);
   });
 

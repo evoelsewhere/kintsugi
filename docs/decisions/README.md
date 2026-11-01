@@ -113,6 +113,7 @@ This page has two parts:
 | [0092](0092-least-privilege-for-built-in-agents.md) | Built-in agents list their tools, and none gets `shell` or `codemode` | Accepted (amends 0040) |
 | [0093](0093-job-processes-run-as-a-separate-user.md) | Job processes run as an OS user of their own, and provider credentials stay out of spawn environments | Accepted (amends 0029) |
 | [0094](0094-one-open-correction-per-specification.md) | One open correction per specification, shown on its gaps | Accepted (amends 0019, 0087) |
+| [0095](0095-remove-skeleton-modules.md) | Remove the API modules that kept their writes in memory | Accepted |
 
 ## Decision register
 
@@ -223,6 +224,7 @@ This page has two parts:
 | D106 | Tools of the built-in agents | 🟠 | Every built-in agent lists its tools: the file tools (`read`, `ls`, `grep`, `find`, `write`, `edit`) and `git` for the code review only; none gets `shell` or `codemode`; agents of the Agent Builder keep the tools an administrator chooses | M2 | ✅ [0092](0092-least-privilege-for-built-in-agents.md) |
 | D107 | Secrets out of reach of job processes | 🔴 | With `KINTSUGI_JOB_UID`/`KINTSUGI_JOB_GID` set, script steps, hooks and agent jobs run as a user of their own that cannot read the worker's environment; their output and scratch are handed to it per job; provider credentials reach the agent child on stdin only; unset, the worker warns; the Compose default and a non-superuser database role are follow-ups | M2 | ✅ [0093](0093-job-processes-run-as-a-separate-user.md) |
 | D108 | Several answers on one specification | 🟢 | A gap answer records the specification and gap it answers; while one correction of a specification is open, the next answer is refused naming its pull request; the Gaps view shows *Answer proposed · PR #n* and *View pull request*; the pull request body carries the answer and its evidence | M2 | ✅ [0094](0094-one-open-correction-per-specification.md) |
+| D109 | API modules without a store | 🟢 | The fifteen skeleton modules that kept writes in memory and that nothing called are removed with the two permissions only they checked (`setup.manage`, `governance.manage`); a module stores its data in Postgres from its first commit | M2 | ✅ [0095](0095-remove-skeleton-modules.md) |
 | D56 | Container build and deployment | 🔴 | GitHub Actions builds SHA-tagged app/worker images, publishes them to configurable GHCR by default, and deploys the Compose stack over pinned-host-key SSH | M0 | ✅ [0039](0039-github-actions-ghcr-deployment.md) |
 | D49 | Worker liveness | 🟠 | Each worker upserts `workflow.worker_heartbeat` every 15 s and marks itself stopped on shutdown; up = seen < 45 s ago (database clock); no HTTP probe, no pg-boss internals | M0 | ✅ [0030](0030-worker-heartbeat-in-postgres.md) |
 | D33 | Minimum host requirements | 🟢 | Linux, Docker 24+ (26+ for volume subpaths), Compose v2, 4 vCPU / 16 GB / 100 GB | M0 | 🟡 |

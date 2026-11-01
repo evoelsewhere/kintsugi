@@ -27,6 +27,7 @@ Installation-level settings come from `.env` ([`deploy/compose/.env.example`](..
 | `KINTSUGI_RUNTIME_MODE` | no | `pi` | `pi` runs agent jobs with the configured LLM providers; `mock` runs them without an LLM (development and demos) |
 | `KINTSUGI_PYTHON` | no | `python3` (`python` on Windows) | Python 3.12 interpreter for script steps and hooks |
 | `KINTSUGI_NODE` | no | the worker's Node | Node 22+ interpreter for `.js` script steps |
+| `KINTSUGI_JOB_UID`, `KINTSUGI_JOB_GID` | no | unset | Worker only, Linux: numeric user and group (never 0) that script steps, hooks and agent jobs run as, so they cannot read the worker's environment; the image has `kintsugi-job` (10002). Set both or neither: a half or malformed setting stops the worker; refused on Windows. Unset, jobs run as the worker's user and the worker logs a warning ([ADR-0093](../decisions/0093-job-processes-run-as-a-separate-user.md)) |
 
 Runtime jobs run in job workspaces under `KINTSUGI_DATA_DIR/jobs/` without an OS-level sandbox ([ADR-0029](../decisions/0029-job-workspaces-instead-of-os-sandboxes.md)): run the worker as an unprivileged user (never root) whose only writable location is its data directory. Memory and CPU are bounded by the worker container, not per job.
 
@@ -41,7 +42,7 @@ The settings of the environment jobs run in are set by an administrator in **Set
 | Script timeout (minutes) | `10` | Wall-clock limit of a script step; the process tree is killed when it is exceeded. 10 seconds to 24 hours |
 | Agent job timeout (minutes) | `45` | Wall-clock limit of an agent job; `0` = no limit |
 | Agent idle limit (minutes) | `5` | No sign of life from the model (text, thinking, tool-call arguments, tool calls) for this long and the job is stopped as stalled and tried once more; `0` turns the watchdog off. A tool call that is still running counts as a sign of life for at most 11 minutes (longer than any kernel tool's own timeout), so a hung call is stopped too |
-| Output limit (MB) | `50` | What a step may write to its output folder; a script that exceeds it is killed. 1 MB to 10 GB |
+| Output limit (MB) | `50` | What a step may write to its output and scratch folders together; a script step or an agent step that exceeds it is stopped (failure: output limit). 1 MB to 10 GB |
 | Turns per agent job | `150` | Assistant turns; `0` = no limit |
 | Cost per agent job (USD) | `10` | Model cost of the job, compaction summaries included; counted only for models whose prices are known. `0` = no limit |
 | Mark checkouts and inputs read-only on disk | on | A second line of defence beside the kernel's path guard; switch it off where changing the permissions of thousands of files is slow |
