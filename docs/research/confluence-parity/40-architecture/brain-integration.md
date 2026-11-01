@@ -44,6 +44,14 @@ Today folders come first, then documents (`README.md` or `index.md` first), each
 2. then the entries the list names, **folders and documents together**, in list order;
 3. then the entries it does not name, in today's order (folders, then documents, by name); names that match nothing are ignored.
 
+How a list entry names a sibling:
+
+- An entry matches a folder of that name, or a document `<entry>` or `<entry>.md`, so `deploy.md`, `deploy` and `runbooks` all work.
+- When an entry matches both a folder and a document (`runbooks/` and `runbooks.md`), both take its place, the folder first.
+- A sibling named twice keeps its first place; an entry that matches nothing is ignored.
+- The list is read in either front matter list form: a block list (`order:` then `  - "deploy.md"`, the documented form) or a flow list (`order: [deploy, runbooks]`).
+- A folder whose name starts with `_` (`_templates`) may be listed. It takes its place in the order but is still left out of the default tree when it holds only templates, under the archived and template rule below.
+
 The third rule keeps the order of every existing repository unchanged, since no README has `order:` today. Mixing folders and documents among listed entries is what lets a page with children sit between two leaf pages, as in a Confluence page tree, where `position` orders a page among its siblings.
 
 ### Summaries
