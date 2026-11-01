@@ -3,6 +3,7 @@
 
 import { Module } from "@nestjs/common";
 import { DocumentWritesModule } from "#modules/admin/document-writes/index.js";
+import { ProjectAccessModule } from "#modules/admin/project-access/index.js";
 import { ProjectsModule } from "#modules/admin/projects/index.js";
 import { CatalogModule } from "#modules/delivery/catalog/index.js";
 import { DocumentsModule } from "#modules/delivery/documents/index.js";
@@ -13,7 +14,7 @@ import { PortfolioController } from "./interface/portfolio.controller.js";
 
 /** monitoring · portfolio overview: the lifecycle position and the next decisions across applications. */
 @Module({
-  imports: [ProjectsModule, RuntimeJobsModule, DocumentsModule, CatalogModule, GatesModule, DocumentWritesModule],
+  imports: [ProjectAccessModule, ProjectsModule, RuntimeJobsModule, DocumentsModule, CatalogModule, GatesModule, DocumentWritesModule],
   controllers: [PortfolioController],
   providers: [PortfolioService],
 })

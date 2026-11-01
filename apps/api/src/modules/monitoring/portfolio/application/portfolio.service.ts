@@ -2,11 +2,13 @@
 // catalog, the gates and the pull requests waiting for a person, and composes where each
 // application stands, what to decide next and the unit funnel. A source that cannot be read for
 // one application (no catalog merged yet, a mirror still cloning) leaves that part empty instead
-// of failing the overview.
+// of failing the overview. It covers the projects the caller holds Project Access on and nothing else (ADR-0099
+// decision 4).
 
 import { Injectable } from "@nestjs/common";
 import type { ItemStatus } from "@kintsugi/domain";
 import { nowIso } from "#common/util/time.js";
+import { ProjectAccessService } from "#modules/admin/project-access/index.js";
 import { DocumentWritesService } from "#modules/admin/document-writes/index.js";
 import { type ProjectDetail, ProjectsService } from "#modules/admin/projects/index.js";
 import { CatalogService, type CatalogItemView } from "#modules/delivery/catalog/index.js";
@@ -49,15 +51,18 @@ export class PortfolioService {
     private readonly catalogs: CatalogService,
     private readonly gates: GatesService,
     private readonly writes: DocumentWritesService,
+    private readonly access: ProjectAccessService,
   ) {}
 
-  async overview(): Promise<PortfolioOverview> {
-    const projectList = (await this.projects.listProjects(PAGE)).items;
-    const [details, gates, pullRequests] = await Promise.all([
+  async overview(userId: string): Promise<PortfolioOverview> {
+    const readable = await this.access.readableProjectIds(userId);
+    const projectList = (await this.projects.listProjects(PAGE)).items.filter((project) => readable.includes(project.id));
+    const [details, allGates, pullRequests] = await Promise.all([
       Promise.all(projectList.map((project) => this.projects.getProject(project.id))),
       this.gates.list({}, PAGE),
-      this.writes.listAll({ statuses: ["pr-opened"] }, PAGE),
+      this.writes.listAll({ statuses: ["pr-opened"], projectIds: readable }, PAGE),
     ]);
+    const gates = { ...allGates, items: allGates.items.filter((gate) => readable.includes(gate.projectId)) };
 
     const entries = await Promise.all(details.flatMap((project) => project.applications.map((application) => this.#entry(project, application.id, application.name, gates.items))));
 

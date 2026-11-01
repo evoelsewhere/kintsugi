@@ -1,5 +1,5 @@
 // The lists that span projects show a user only what Project Access lets them read (ADR-0099 decision 4): the runs
-// overview, the document writes overview and, per project, the document writes of one project, which sits under
+// overview, the document writes overview, the portfolio overview and, per project, the document writes of one project, which sits under
 // admin/projects and so outside the scan of the projects/:id controllers.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -65,6 +65,18 @@ describe.skipIf(!hasDatabase)("cross-project lists and Project Access (integrati
     expect((await admin.get<Listed>("/document-writes")).body.data?.items.map((write) => write.projectId)).toEqual(["hidden"]);
   });
 
+  it("shows the portfolio overview only the applications and open pull requests of projects the user can access", async () => {
+    await app.db.query("insert into workflow.document_write (id, project_id, kind, message, status, pr_url) values ('pr-open', 'open', 'job-output', 'Open page', 'pr-opened', 'https://git.example/open/pull/1'), ('pr-hidden', 'hidden', 'job-output', 'Secret hidden page', 'pr-opened', 'https://git.example/hidden/pull/2')");
+    type Portfolio = { applications: Array<{ projectId: string }>; decisions: Array<{ projectId: string; documentWriteId?: string }> };
+    const visible = await reader.get<Portfolio>("/monitoring/portfolio");
+    expect(visible.status).toBe(200);
+    expect(visible.body.data?.applications.map((application) => application.projectId)).toEqual(["open"]);
+    expect(visible.body.data?.decisions.map((decision) => decision.documentWriteId)).toEqual(["pr-open"]);
+    expect(visible.raw).not.toMatch(/hidden/);
+    const { client: stranger } = await memberClient(app, admin, "portfolio-stranger", ["user"]);
+    expect((await stranger.get<Portfolio>("/monitoring/portfolio")).body.data).toMatchObject({ applications: [], decisions: [] });
+  });
+
   it("answers 403 to the document writes of one project without Project Access, and lists them with it", async () => {
     const denied = await reader.get("/admin/projects/hidden/document-writes");
     expect(denied.status).toBe(403);
@@ -72,6 +84,6 @@ describe.skipIf(!hasDatabase)("cross-project lists and Project Access (integrati
     expect(denied.raw).not.toContain("Secret page of hidden");
     const allowed = await reader.get<Listed>("/admin/projects/open/document-writes");
     expect(allowed.status).toBe(200);
-    expect(allowed.body.data?.items.map((write) => write.id)).toEqual(["w-open"]);
+    expect(allowed.body.data?.items.map((write) => write.id).sort()).toEqual(["pr-open", "w-open"]);
   });
 });
