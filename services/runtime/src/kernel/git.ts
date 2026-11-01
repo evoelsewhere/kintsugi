@@ -6,9 +6,8 @@
 // the job only reads — clone or init the repository there first. The environment is the job's
 // cleared one plus git hardening: no system or global configuration, no prompts, no pager,
 // neutral commit identity, hooks and fsmonitor pointed at nothing, and only network protocols
-// that cannot start a command. Repository configuration can still name a textconv driver; that
-// runs inside the same account with no secrets in the environment (ADR-0029), so it is residual
-// risk shared with the shell tool, not a new boundary.
+// that cannot start a command. The subcommands that render diffs or blame run with the
+// repository's external diff drivers and converters switched off (they are commands).
 
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -48,14 +47,21 @@ const FORBIDDEN_OPTIONS = [
   "--upload-pack", "--receive-pack", "--ext-diff", "--textconv", "--output", "--exec",
   // Another repository or a template from anywhere on disk, a git directory outside, a command that opens files (T3-003).
   "--reference", "--reference-if-able", "--separate-git-dir", "--template", "--open-files-in-pager",
+  // Submodules whose URLs the repository names (anywhere on disk, or a transport of its choosing); a file read from
+  // anywhere into a blame (`--contents`) or a message (`commit`, `tag`, `merge` `--file`); a patch that writes outside
+  // the working tree (`apply --unsafe-paths`) (P-004).
+  "--recurse-submodules", "--contents", "--unsafe-paths",
 ];
+
+/** Subcommands whose `--file` (`-F`, see below) reads a message from a file anywhere on disk (P-004). */
+const MESSAGE_FILE_SUBCOMMANDS = new Set(["commit", "tag", "merge"]);
 
 /**
  * Short options that start a command, by subcommand. git also takes them bundled (`-qu <cmd>`) or with the value
  * attached (`-u<cmd>`), so any single-dash argument that holds the letter before a value starts is refused. Long
  * options cannot be abbreviated (`--upload=<cmd>`): the environment tells git to refuse abbreviations.
  */
-const COMMAND_SHORT_OPTIONS: Readonly<Record<string, string>> = { clone: "u", rebase: "x", grep: "O" };
+const COMMAND_SHORT_OPTIONS: Readonly<Record<string, string>> = { clone: "u", rebase: "x", grep: "O", commit: "F", tag: "F", merge: "F" };
 
 /** `git config` only reads: one of these forms, and no file of its own choosing. */
 const CONFIG_READS = new Set(["--get", "--get-all", "--get-regexp", "--list", "-l", "get", "list"]);
@@ -70,7 +76,10 @@ const CLONE_VALUE_OPTIONS = new Set(["--depth", "--branch", "-b", "--origin", "-
 /** Subcommands that accept `--no-ext-diff` and `--no-textconv`, to keep repository-configured diff drivers and
  * converters (which are commands) out of diff rendering. An empty GIT_EXTERNAL_DIFF or `diff.external` does not
  * switch them off: git takes it as an external diff command named "" and every patch fails (T3-002). */
-const TEXTCONV_SUBCOMMANDS = new Set(["diff", "log", "show"]);
+const TEXTCONV_SUBCOMMANDS = new Set(["diff", "log", "show", "whatchanged"]);
+
+/** Subcommands that run a converter but take no `--no-ext-diff`: they get `--no-textconv` alone (P-004). */
+const TEXTCONV_ONLY_SUBCOMMANDS = new Set(["blame"]);
 
 const parameters = Type.Object({
   args: Type.Array(Type.String(), {
@@ -104,7 +113,7 @@ function findForbiddenOption(subcommand: string, args: readonly string[]): strin
   const short = COMMAND_SHORT_OPTIONS[subcommand];
   for (const arg of args) {
     const name = arg.includes("=") ? arg.slice(0, arg.indexOf("=")) : arg;
-    if (FORBIDDEN_OPTIONS.includes(name)) return arg;
+    if (FORBIDDEN_OPTIONS.includes(name) || (name === "--file" && MESSAGE_FILE_SUBCOMMANDS.has(subcommand))) return arg;
     if (short === undefined || !/^-[^-]/.test(arg)) continue;
     for (const letter of arg.slice(1)) {
       if (letter === short) return arg;
@@ -282,7 +291,11 @@ export function createKernelGitTool(cwd: string, guard: PathGuard, writeGuard: P
       const timeoutSec = clampTimeoutSec(params.timeout);
       const result = await runProcess({
         command: "git",
-        args: TEXTCONV_SUBCOMMANDS.has(subcommand) ? [subcommand, "--no-ext-diff", "--no-textconv", ...rest] : params.args,
+        args: TEXTCONV_SUBCOMMANDS.has(subcommand)
+          ? [subcommand, "--no-ext-diff", "--no-textconv", ...rest]
+          : TEXTCONV_ONLY_SUBCOMMANDS.has(subcommand)
+            ? [subcommand, "--no-textconv", ...rest]
+            : params.args,
         cwd: dir,
         env,
         timeoutMs: timeoutSec * 1000,

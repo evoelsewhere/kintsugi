@@ -3,7 +3,7 @@
 // read-only bit is set on every file and directory (on Windows only files honour it), the
 // kernel confines agent tools to the workspace and script steps get a cleared environment.
 
-import { chmod, lstat, readdir, rm } from "node:fs/promises";
+import { chmod, lchown, lstat, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 const READ_ONLY_FILE = 0o444;
@@ -44,6 +44,14 @@ export async function makeWritable(root: string): Promise<void> {
   await fix(root).catch((error: unknown) => {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   });
+}
+
+/**
+ * Hands the directories a job writes (its output and scratch) to the user its processes run as (ADR-0093), with what
+ * an earlier attempt left in them; the source and inputs stay the worker's, readable but not writable for that user.
+ */
+export async function grantToUser(dirs: readonly string[], user: { uid: number; gid: number }): Promise<void> {
+  for (const dir of dirs) await walk(dir, (path) => lchown(path, user.uid, user.gid));
 }
 
 /** Removes a workspace directory, read-only parts included. */

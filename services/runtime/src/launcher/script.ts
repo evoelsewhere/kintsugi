@@ -6,8 +6,8 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
-import { type ProcessResult, runProcess } from "./process.js";
-import { treeSize } from "./workspace.js";
+import { type JobUser, type ProcessResult, jobUser, runProcess } from "./process.js";
+import { grantToUser, treeSize } from "./workspace.js";
 
 export interface Interpreters {
   /** Python 3.12 executable (KINTSUGI_PYTHON); run as `python -I -B -X utf8`. */
@@ -49,6 +49,8 @@ export interface ScriptSpec {
   limits: ScriptLimits;
   interpreters: Interpreters;
   signal?: AbortSignal;
+  /** The user the script runs as; defaults to `jobUser()` of the worker's environment (ADR-0093). */
+  runAs?: JobUser;
 }
 
 export interface ScriptResult extends ProcessResult {
@@ -153,6 +155,8 @@ function command(spec: ScriptSpec): { command: string; args: string[] } {
 export async function runScript(spec: ScriptSpec): Promise<ScriptResult> {
   const sha256 = await sha256File(spec.file);
   const { command: executable, args } = command(spec);
+  const runAs = spec.runAs ?? jobUser();
+  if (runAs !== undefined) await grantToUser(spec.workspace.writable, runAs);
   const result = await runProcess({
     command: executable,
     args,
@@ -161,6 +165,7 @@ export async function runScript(spec: ScriptSpec): Promise<ScriptResult> {
     timeoutMs: spec.limits.timeoutSec * 1000,
     watch: { dir: spec.workspace.out, maxBytes: spec.limits.maxOutputBytes },
     ...(spec.signal === undefined ? {} : { signal: spec.signal }),
+    ...(runAs === undefined ? {} : { runAs }),
   }).catch((error: unknown) => {
     throw new Error(`could not start ${executable}: ${error instanceof Error ? error.message : String(error)}`);
   });

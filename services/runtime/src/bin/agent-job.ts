@@ -1,16 +1,18 @@
 // Agent job child process (ADR-0029): the worker starts one per agent job, in the job's
 // workspace, through the launcher (launcher/agent-process.ts). It reads one AgentChildInput
 // as JSON from stdin — the JobSpec and, for pi, the provider record with its API key and
-// inline secrets — and writes the job's JobEvents to stdout as JSON lines. Provider
-// environment credentials arrive in this process's environment only. Nothing is read from
-// or written to disk except through the kernel's confined tools.
+// inline secrets and environment credentials — and writes the job's JobEvents to stdout as JSON
+// lines. The environment credentials are put into this process's environment after it starts, so
+// they are not in the environment it was started with (`/proc/<pid>/environ`, ADR-0093); the
+// kernel's own processes get the cleared job environment, never these. Nothing is read from or
+// written to disk except through the kernel's confined tools.
 //
 // Not a command for people: use run-job.ts for development runs.
 
 import { WEB_SERVICE_TIMEOUT_MS } from "@kintsugi/domain";
 import { WebRequestError, type JobEvent } from "@kintsugi/runtime-sdk";
 import { createAgentRuntime } from "../agent-runtime.js";
-import type { AgentChildInput } from "../launcher/agent-process.js";
+import { type AgentChildInput, applyProviderEnvironment } from "../launcher/agent-process.js";
 import { createJobServiceIpcClient } from "../launcher/job-service-ipc.js";
 import { createMemoryIpcClient } from "../launcher/memory-ipc.js";
 import { buildModelRuntime } from "../launcher/model-runtime.js";
@@ -29,6 +31,7 @@ async function main(): Promise<void> {
   const input = JSON.parse(await readStdin()) as AgentChildInput;
   const { provider } = input;
   if (input.mode === "pi" && provider === undefined) throw new Error("no provider was passed to the agent job");
+  applyProviderEnvironment(provider);
   const memory = input.spec.memory === undefined ? undefined : createMemoryIpcClient();
   const web = input.spec.webSearch !== true && input.spec.webFetch !== true ? undefined : createJobServiceIpcClient("web-search", WEB_SERVICE_TIMEOUT_MS + 2000, (message) => new WebRequestError(message));
   try {

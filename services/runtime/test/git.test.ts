@@ -121,23 +121,53 @@ describe("kernel git diff", () => {
     const marker = join(workspace.root, "driver-ran.txt").replaceAll("\\", "/");
     execFileSync("git", ["config", "diff.external", `echo ran >'${marker}'; true`], { cwd: repo });
     execFileSync("git", ["config", "diff.probe.textconv", `echo ran >'${marker}'; cat`], { cwd: repo });
+    execFileSync("git", ["config", "diff.probe.command", `echo ran >'${marker}'; true`], { cwd: repo });
     writeFileSync(join(repo, ".gitattributes"), "*.txt diff=probe\n");
     try {
       // Plain git does run them: the probe is real.
       execFileSync("git", ["diff", "HEAD~1", "HEAD"], { cwd: repo, stdio: "ignore" });
       expect(existsSync(marker)).toBe(true);
       rmSync(marker);
+      execFileSync("git", ["blame", "a.txt"], { cwd: repo, stdio: "ignore" });
+      expect(existsSync(marker), "plain blame runs the converter").toBe(true);
+      rmSync(marker);
       for (const args of [["diff", "HEAD~1", "HEAD"], ["log", "-p", "-1"], ["show", "HEAD"]]) {
         const { text, error } = await git({ args, cwd: repo });
         expect(error, `${args.join(" ")}: ${text}`).toBe(false);
         expect(text).toContain("+two");
       }
+      const blame = await git({ args: ["blame", "a.txt"], cwd: repo });
+      expect(blame.error, blame.text).toBe(false);
+      expect(blame.text).toContain("two");
       expect(existsSync(marker)).toBe(false);
     } finally {
       execFileSync("git", ["config", "--unset", "diff.external"], { cwd: repo });
       execFileSync("git", ["config", "--unset", "diff.probe.textconv"], { cwd: repo });
+      execFileSync("git", ["config", "--unset", "diff.probe.command"], { cwd: repo });
       rmSync(join(repo, ".gitattributes"));
     }
+  });
+
+  it("refuses submodule recursion, files read into a blame or a message, and patches applied outside the tree (P-004)", async () => {
+    const secret = join(workspace.outside, "token.txt");
+    const cases: string[][] = [
+      ["clone", "--recurse-submodules", repo, join(workspace.out, "sub")],
+      ["fetch", "--recurse-submodules=yes"],
+      ["blame", "--contents", secret, "a.txt"],
+      ["commit", "-F", secret],
+      ["commit", "-qF", secret],
+      ["commit", `--file=${secret}`],
+      ["tag", "-F", secret, "t1"],
+      ["merge", "-F", secret, "HEAD"],
+      ["apply", "--unsafe-paths", "p.diff"],
+    ];
+    for (const args of cases) {
+      const { text } = await git({ args, cwd: repo });
+      expect(text, args.join(" ")).toContain("is not allowed");
+      expect(text, args.join(" ")).not.toContain("TOP_SECRET_VALUE");
+    }
+    // A message given inline still works.
+    expect((await git({ args: ["tag", "-m", "release", "t2"], cwd: repo })).error).toBe(false);
   });
 
   it("refuses to compare files outside a repository, with --no-index or with a path outside the workspace", async () => {
