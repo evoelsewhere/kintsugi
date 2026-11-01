@@ -4,7 +4,7 @@
 import { applicationInputPath, assessmentCatalogPath, standardsDir } from "@kintsugi/domain";
 import { describe, expect, it } from "vitest";
 import type { AgentStep, LeafStep, StageContext, StageStep } from "../src/jobs/plan.js";
-import { ASSESS } from "../src/jobs/plans/assess.js";
+import { ASSESS, CATALOG_EDITS_SCHEMA } from "../src/jobs/plans/assess.js";
 import { STOP, WORKSPACE } from "../src/jobs/plans/common.js";
 
 const context = (files: Record<string, string>, folders?: readonly string[]): StageContext => ({
@@ -74,6 +74,18 @@ describe("assess task wording", () => {
     expect(topology).toMatch(/Write the first version of \S+extract_topology\.py with write before your 20th tool call/);
     expect(topology).toContain("then refine it with edit rather than rewriting it");
     expect(topology).toContain("When the inventory lists about 50 files or fewer, read each file you need once, whole, with read, and never grep it afterwards");
+  });
+
+  it("gives the curation job a reading budget, the edit format inline and an empty list as a valid answer (T2-028)", async () => {
+    const curate = (await taskOf("catalog-curate", context({}, []))).replace(/\s+/g, " ");
+    expect(curate).toContain("Your reading budget is about 15 tool calls, and read, grep, ls, find, glob and memory_search all count.");
+    expect(curate).toMatch(/Read \{in\}\/\S+\/proposed\.json once, whole, with read, and never search it afterwards/);
+    expect(curate).toContain("Search memory at most twice.");
+    expect(curate).toContain("Call submit_result with {\"edits\": [...]}, the edits in order, before your 15th tool call.");
+    expect(curate).toContain("An empty edit list is a valid answer");
+    // Every operation the edits schema allows is shown with its fields, so the job never searches for the format.
+    const ops = ((CATALOG_EDITS_SCHEMA.properties as { edits: { items: { properties: { op: { enum: string[] } } } } }).edits.items.properties.op.enum);
+    for (const op of ops) expect(curate).toContain(`{"op": "${op}"`);
   });
 
   it("names the step's exact folders and says the root has no src/ or in/", () => {
