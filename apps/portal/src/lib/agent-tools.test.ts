@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { toolWarnings } from "./agent-tools";
 
 describe("tool warnings of the Agent Builder", () => {
-  it("warns for every tool that runs commands with the worker's account, and says when shell is not offered", () => {
+  it("warns for every tool that runs commands with the job's account, and says when shell is not offered", () => {
     const warnings = toolWarnings(["read", "shell", "git", "codemode"]);
     expect(warnings.map((warning) => warning.tool)).toEqual(["shell", "git", "codemode"]);
     for (const warning of warnings) {
-      expect(warning.text).toContain("worker's account");
+      expect(warning.text).toContain("with the job's account (the worker's own account unless job isolation is turned on, ADR-0093)");
       expect(warning.text).toContain("ADR-0093");
       expect(warning.text).toContain("Built-in agents do not get it.");
     }
