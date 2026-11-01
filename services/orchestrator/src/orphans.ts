@@ -4,8 +4,10 @@
 // unless another worker is alive (its heartbeat is fresh), whose runs they might be.
 
 import { hostname } from "node:os";
+import type { PgBoss } from "pg-boss";
 import type { Pool } from "pg";
 import { attemptsWith } from "./jobs/store.js";
+import { JOB_RUN_QUEUE, QUEUE_SCHEMA } from "./queues.js";
 
 /** A worker not seen for this long is dead (the API reports a worker up within 45 s). */
 const ALIVE_SECONDS = 45;
@@ -36,6 +38,25 @@ async function sweep(pool: Pick<Pool, "query">, log: (message: string) => void, 
   const count = result.rowCount ?? 0;
   if (count > 0) log(`${count} run(s) left running by a stopped worker marked failed`);
   return count;
+}
+
+/**
+ * Fails the job-run queue jobs a stopped worker left `active` whose run is no longer running (the sweep failed it, or it
+ * ended otherwise): the queue keeps such a job active until it expires, 4 h later, and the monitoring counts it as a job
+ * at work all that time (T2-022). A live worker's job always has a running run, so it is never touched. Returns how many.
+ */
+export async function failOrphanedQueueJobs(pool: Pick<Pool, "query">, boss: Pick<PgBoss, "fail">, log: (message: string) => void): Promise<number> {
+  const stale = await pool.query<{ id: string }>(
+    `select job.id from ${QUEUE_SCHEMA}.job job
+       where job.name = $1 and job.state = 'active'
+         and not exists (select 1 from workflow.job_run run where run.id::text = job.data->>'jobRunId' and run.status = 'running')`,
+    [JOB_RUN_QUEUE],
+  );
+  const ids = stale.rows.map((row) => row.id);
+  if (ids.length === 0) return 0;
+  await boss.fail(JOB_RUN_QUEUE, ids, { reason: INTERRUPTED });
+  log(`${ids.length} job-run queue job(s) a stopped worker left active marked failed`);
+  return ids.length;
 }
 
 /** Fails the `running` runs left by dead workers; returns how many. */
