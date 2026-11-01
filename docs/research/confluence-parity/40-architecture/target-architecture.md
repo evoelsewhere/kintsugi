@@ -22,7 +22,7 @@ flowchart LR
     DOCS["delivery/documents<br/>tree, file, attachment raw route, history"]:::ext
     BRAIN["delivery/brain<br/>tree, read, lookup, grep, ranked search"]:::ext
     DW["admin/document-writes<br/>publishPage, delete and move entries"]:::ext
-    MAPI["delivery/member-api<br/>Brain tools, page comments read"]:::ext
+    MAPI["delivery/member-api<br/>Brain tools, comments read"]:::ext
     AUTH["core/auth + permission catalog<br/>wiki.* codes"]:::ext
     AUD["governance/audit"]:::ext
     FEED["common/realtime<br/>change feed"]:::ext
@@ -71,12 +71,12 @@ Every module keeps the anatomy of [apps/api](../../../../apps/api/README.md): `d
 
 | Block | State | Domain | Application | Infrastructure | Interface | Schema |
 |---|---|---|---|---|---|---|
-| `delivery/wiki` | new | `Space` (a folder with a home page), `Page` (a Markdown document with front matter `id`, `title`, `labels`, `status`, `order`), `Draft`, `Comment` (anchor: page id, node id, quote, commit), `Watch`, `SpaceRule` (who may edit under a path prefix); ports `DraftStore`, `CommentStore`, `WatchStore`, `RuleStore`, `PageSource` (reads through documents and brain), `PagePublisher` (writes through document-writes) | `SpacesService`, `PagesService` (resolve id to path, render data), `DraftsService` (autosave, presence), `PublishService` (permission and rule check, three-way merge, move and rename with link rewrite, delete), `CommentsService` (re-anchoring), `WatchesService` | `Pg*Store` adapters; a three-way text merge adapter (a pure JavaScript library, no new service) | `WikiController` (spaces, pages, drafts, publish), `CommentsController`, `WatchesController`; zod DTOs | `knowledge` (`wiki_*` tables) |
+| `delivery/wiki` | new | `Space` (a folder with a home page), `Page` (a Markdown document with front matter `id`, `title`, `labels`, `status`; a folder's `README.md` also lists the `order:` of its entries), `Draft` and its `DraftAttachment`s, `Comment` (anchor: page id, node id, quote, commit), `Watch`, `SpaceRule` (who may edit under a path prefix); ports `DraftStore`, `CommentStore`, `WatchStore`, `RuleStore`, `PageSource` (reads through documents and brain), `PagePublisher` (writes through document-writes) | `SpacesService`, `PagesService` (resolve id to path, render data), `DraftsService` (autosave, presence), `PublishService` (permission and rule check, three-way merge, move and rename with link rewrite, delete), `CommentsService` (re-anchoring), `WatchesService` | `Pg*Store` adapters; a three-way text merge adapter (a pure JavaScript library, no new service) | `WikiController` (spaces, pages, drafts, publish), `CommentsController`, `WatchesController`; zod DTOs | `knowledge` (`wiki_*` tables) |
 | `core/notifications` | new | `Notification` (recipient, kind, subject, read flag, no page text); port `NotificationStore` | `NotificationsService` (create, list, mark read), used by other modules through `index.ts` | `PgNotificationStore`; a change-feed topic `notifications` with the user id as scope | `NotificationsController` (inbox), an SSE stream like the other live views | `core` |
 | `delivery/documents` | extended | `DocumentHistory` (commit, date, actor, message) | `history(path)` and `diff(a, b)` from the mirror, bounded and paged; `attachment(path)` | `git-mirror.reader.ts`: `log --follow`, `diff`, raw blob read | `GET documents/history`, `GET documents/diff`, `GET documents/raw` (allowlisted types, fixed `Content-Type`, `Content-Disposition`, `X-Content-Type-Options: nosniff`, a content security policy); every route checks Project Access | none (reads Git) |
 | `admin/document-writes` | extended | `DocumentWriteFile` gains `encoding: "base64"` (the worker has it) and a `delete` entry; a kind `page` | `publishPage(projectId, files, actor, options)` next to `proposeCorrection`: one open page write per page, like one open correction per specification ([ADR-0094](../../../decisions/0094-one-open-correction-per-specification.md)) | unchanged store; the queue payload carries deletes | unchanged | `workflow` (`document_write` gains the merge commit) |
 | `delivery/brain` | extended | search hit with rank | ranked search beside grep; labels, status and order in node data | `pg-brain.index.ts` reads the search index | `GET brain/search?q&space&label` | `knowledge` (owned by ADR-0097) |
-| `delivery/member-api` | extended | none | a read of a page's open comments (`page_comments`), recorded as member activity | none | `/api/member/v1/.../comments` | none |
+| `delivery/member-api` | extended | none | a read of the open comments of a page or node (`comments_list` in the local MCP bridge) | none | `GET /api/member/v1/comments?projectId&node` | none |
 | `core/auth` | extended | none | none | migration of the permission codes `wiki.comment`, `wiki.write`, `wiki.publish`, `wiki.manage` | none | `core` |
 | `governance/audit` | extended | new actions: `wiki.publish`, `wiki.page.delete`, `wiki.comment.delete`, `wiki.rule.set`, `wiki.rule.clear` | none | none | none | `governance` |
 | `monitoring/telemetry` | extended | page views per page and day, without user ids by default | aggregate and prune with the telemetry retention | none | none | `monitoring` |
@@ -87,14 +87,15 @@ Every module keeps the anatomy of [apps/api](../../../../apps/api/README.md): `d
 | Block | State | Change |
 |---|---|---|
 | `services/orchestrator/src/document-write` | extended | Deletes and renames (`git rm`, `git mv`) validated like writes; binary files from the API; the watch step records the merge commit it saw, so a squash merge can still be joined to the write and its actor |
-| `services/orchestrator/src/brain` | extended | Front matter `order`, `labels`, `status` and the page id kept on nodes; links it cannot follow recorded as broken instead of dropped; the search index written in the same transaction (ADR-0097); after a build of the default branch, the documents that changed are matched against `knowledge.wiki_watch` and notifications are recorded through the worker's outbox (`services/orchestrator/src/outbox`) so each change notifies once |
+| `services/orchestrator/src/brain` | extended | A folder `README.md`'s `order:` list orders its entries; `labels`, `status` and the page id kept on nodes; links it cannot follow recorded as broken instead of dropped; the search index written in the same transaction (ADR-0097); after a build of the default branch, the documents that changed are matched against `knowledge.wiki_watch` and notifications are recorded through the worker's outbox (`services/orchestrator/src/outbox`) so each change notifies once |
 | `services/orchestrator/src/git-sync` | unchanged | It already moves the mirror and requests a Brain build when the default branch moves |
 
 ### Packages
 
 | Block | State | Change |
 |---|---|---|
-| `packages/domain/src/document-layout.ts` | extended | The root `20-spaces/<space>/` and its helpers; `describeDocumentFolder` names a space (ADR-0096) |
+| `packages/domain/src/document-layout.ts` | extended | The root `20-spaces/<space>/` and its helpers; `describeDocumentFolder` names a space (ADR-0096); one predicate for the paths the wiki never edits (`_generated/`, `restricted/`, `plugins/`, `scratch/`, hidden folders, `identifiers/`) beside the Brain's indexed-path rule |
+| `packages/domain/src/brain.ts` | extended | `brainAnchor` exported as the one `headingSlug` used by the Brain, the portal renderer and the link checker |
 | `packages/domain` (new file `wiki-links.ts`) | new | Parse, resolve and rewrite relative Markdown links of a page, used by the publish path and the Brain builder, so both read links the same way |
 | `packages/domain/src/manifest.ts` | extended | `directPublishPaths` next to `autoCommitPaths` |
 | `packages/git/src/write.ts` | extended | Delete and rename entries, with the same `expectedHash` check per entry |
@@ -200,7 +201,7 @@ A notification holds the kind, the subject (page id, path, comment id) and the r
 
 ## The member surface
 
-Members' agents keep the five Brain tools; published pages are documents of the tree like any other ([ADR-0091](../../../decisions/0091-brain-vectorless-tree-index.md)). The Brain carries the page id, labels and status on the node, so `brain_lookup PAGE-OPS-0007` and a label filter work without a new tool. One read tool is added, `page_comments` (the open comment threads of a page, with their anchors), because comments are not in Git. Members write pages from their own Git clone and pull requests, as they write any document; the member API stays read-only ([ADR-0069](../../../decisions/0069-common-member-base-and-plugin-distribution.md)).
+Members' agents keep the five Brain tools; published pages are documents of the tree like any other ([ADR-0091](../../../decisions/0091-brain-vectorless-tree-index.md)). The Brain carries the page id, labels and status on the node, so `brain_lookup PAGE-OPS-0007` and a label filter work without a new tool. One read tool is added, `comments_list` (the open comment threads of a page or node, with their anchors, marked as project data), because comments are not in Git. Members write pages from their own Git clone and pull requests, as they write any document; the member API stays read-only ([ADR-0069](../../../decisions/0069-common-member-base-and-plugin-distribution.md)).
 
 ## Security
 
