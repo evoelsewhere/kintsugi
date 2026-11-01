@@ -220,7 +220,7 @@ describe.skipIf(!hasDatabase)("monitoring and cross-project reads (integration)"
   });
 
   it("the portfolio overview places each application in the lifecycle and lists what a person must decide", async () => {
-    const { client } = await memberClient(app, admin, "portfolio-viewer", ["user"]);
+    const { client } = await memberClient(app, admin, "portfolio-viewer", ["user"], ["alpha", "beta"]);
     const response = await client.get<{
       applications: Array<{ projectId: string; applicationId: string; phase: string; gate: { key: string; status: string } | null; assess: unknown; catalog: unknown; blocked?: string }>;
       decisions: Array<{ kind: string; title: string; projectId: string; gateId?: string; prUrl?: string }>;
