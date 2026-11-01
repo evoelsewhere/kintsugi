@@ -156,6 +156,19 @@ Wikis that keep pages in a database, and wikis built on a Git repository, make t
 | BookStack | Tags with an optional value, searched with `[name=value]` and boosted above normal content; filters such as `{created_by:me}` and `{type:page}`; revisions are cut off after a limit (100 by default) to keep the database small | [Searching content](https://www.bookstackapp.com/docs/user/searching/), [Content tags](https://www.bookstackapp.com/docs/user/tags/), [Other configuration](https://www.bookstackapp.com/docs/admin/other-config/) | Labels with a value (`team: payments`) are a later step; a revision limit is a cost of storing history in a database that Git does not have (DIS-48 stays Won't) |
 | Outline | History and restore (a restore creates a new version, revisions can be deleted for good), a trash that keeps deleted documents 30 days, search filters by collection, author and date and an option to include archived documents | [Revision history](https://docs.getoutline.com/s/guide/doc/revision-history-AiL6p22Ssq), [v0.38.0](https://www.getoutline.com/changelog/v0.38.0), [v0.28.0](https://www.getoutline.com/changelog/v0.28.0) | A restore as a new version is common ground (DIS-43); *include archived* is a switch in search (DIS-50, [DIS-US-19](user-stories.md)) |
 
+## Boundaries with the other tracks
+
+Rows that more than one track lists describe one feature; the track named owns the priority, the others point to it.
+
+| Feature | Owner of the row | Other track's row | Split |
+|---|---|---|---|
+| Archive a page | authoring `AUT-18` owns the action (menu, confirmation, children) | DIS-50, DIS-51 | this track owns the archived state: `status: archived`, hiding it from tree and search, the archived list and the restore into a chosen parent |
+| Delete, trash, restore | authoring `AUT-16`, `AUT-17` own the delete and the confirmation | DIS-46 | this track owns finding the deleted page in Git history and restoring it as a new write |
+| Version history, who changed what | this track (DIS-40 to DIS-45) | collaboration `COL-36` | `COL-36` points here; authorship in history depends on the write record |
+| Page analytics | this track (DIS-60 to DIS-63) | collaboration `COL-39` | `COL-39` points here; one report, one privacy default |
+| Content by label, recently updated macros | authoring `AUT-41` owns the macro | DIS-23 | this track owns the label data and the node query the macro reads |
+| Templates in the create dialog | authoring `AUT-11` owns the create flow | DIS-30 to DIS-34 | this track owns the template files, placeholders and blueprints |
+
 ## What is out of scope here
 
 - Editing, page tree, move and delete flows, drafts, macros and attachments: authoring (`../10-authoring/feature-matrix.md`).
