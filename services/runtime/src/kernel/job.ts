@@ -67,10 +67,18 @@ export function resultPreview(result: unknown): string | undefined {
 }
 
 /**
- * The call that halts a job as a `loop`: a model that asks a tool the same thing this many times and gets the same
- * answer each time is not going to find something new (QA-R1: one `glob` 449 times, `grep` of the same files 26 times).
+ * The call that halts a job as a `loop`: a model that asks a tool the same thing this many times, gets the same answer
+ * each time and learns nothing new in between is not going to find something new (QA-R1: one `glob` 449 times, `grep`
+ * of the same files 26 times).
  */
 export const LOOP_REPEATS = 12;
+
+/**
+ * How long a running tool call of the model counts as activity for the idle watchdog: a little more than the longest
+ * timeout a kernel tool takes (`shell` and `git`, 600 s). A call still open after that is hung, and the watchdog may
+ * stop the job, also when the job has no wall-clock limit.
+ */
+export const OPEN_CALL_ACTIVE_MS = 11 * 60_000;
 
 /**
  * The characters of thinking and text one turn may stream without a tool call completing; past them the turn is a loop
@@ -144,10 +152,15 @@ export class KernelJob implements JobHandle {
   /** What streamed since the turn started or a tool call last completed. */
   #runaway = { thinking: 0, toolArgs: 0, text: 0 };
   #progressAt = 0;
-  /** The model's own calls (not codemode's nested ones) while they run: the digest of tool and arguments. */
-  readonly #openCalls = new Map<string, { tool: string; key: string }>();
-  /** Per tool and arguments: the digest of the last answer and how many calls in a row of the job got it. */
+  /** The model's own calls (not codemode's nested ones) while they run: the digest of tool and arguments, and when it started. */
+  readonly #openCalls = new Map<string, { tool: string; key: string; startedAt: number }>();
+  /**
+   * Per tool and arguments: the digest of the last answer and how many calls got it since the job last learned something
+   * (a call and answer it had not seen before).
+   */
   readonly #repeats = new Map<string, { answer: string; count: number }>();
+  /** Every call and answer the model has seen, as digests. */
+  readonly #answered = new Set<string>();
 
   constructor(
     readonly jobId: string,
@@ -178,11 +191,16 @@ export class KernelJob implements JobHandle {
    * tool-call argument deltas that produce no JobEvent. The agent child turns it into liveness
    * lines for the launcher's idle watchdog. A compaction is one long model call with no events
    * while it runs, and a tool call of the model (a build in `shell`, say) sends none until it ends,
-   * so the job counts as working for as long as either lasts (T3-013): each tool has a timeout of
-   * its own, and the job's timeout stays the backstop.
+   * so the job counts as working while a compaction lasts and while a call runs (T3-013), for at
+   * most `OPEN_CALL_ACTIVE_MS` per call: past that the call is hung, and the idle watchdog counts
+   * from then on.
    */
   get lastActivityAt(): number {
-    return this.#compacting || this.#openCalls.size > 0 ? Date.now() : this.#lastEventAt;
+    const now = Date.now();
+    if (this.#compacting) return now;
+    let at = this.#lastEventAt;
+    for (const call of this.#openCalls.values()) at = Math.max(at, Math.min(now, call.startedAt + OPEN_CALL_ACTIVE_MS));
+    return at;
   }
 
   /** Runs the task on the session; resolves when the job has ended. */
@@ -319,7 +337,7 @@ export class KernelJob implements JobHandle {
       case "tool_execution_start": {
         const outer = outerCall(event.toolCallId, (event as { parentToolCallId?: string }).parentToolCallId);
         this.#beginTool(event.toolCallId, event.toolName, outer);
-        if (outer === undefined) this.#openCalls.set(event.toolCallId, { tool: event.toolName, key: digest(`${event.toolName} ${canonicalJson(event.args)}`) });
+        if (outer === undefined) this.#openCalls.set(event.toolCallId, { tool: event.toolName, key: digest(`${event.toolName} ${canonicalJson(event.args)}`), startedAt: Date.now() });
         this.events.push({ type: "tool.call", jobId: this.jobId, callId: event.toolCallId, tool: event.toolName, input: event.args, decision: "allowed" });
         return;
       }
@@ -465,14 +483,22 @@ export class KernelJob implements JobHandle {
 
   /**
    * Counts a call the model made that got the same answer as its last identical call, and halts the job as a `loop`
-   * at the `LOOP_REPEATS`th. A different answer starts the count again: a checklist listed again after an item was
-   * done, or a search after a memory write, repeats its arguments but not its answer. Blocked calls count too.
+   * at the `LOOP_REPEATS`th since the job last learned something. A different answer starts the count again: a
+   * checklist listed again after an item was done, or a search after a memory write, repeats its arguments but not its
+   * answer. A call or answer the model had not seen before starts every count again: a job that re-reads its checklist
+   * between new reads and writes is working, while one that cycles over the same calls and answers is not. Blocked
+   * calls count too.
    */
   #watchRepeats(callId: string, result: unknown, isError: boolean): void {
     const call = this.#openCalls.get(callId);
     if (call === undefined) return;
     this.#openCalls.delete(callId);
     const answer = digest(`${isError ? "error" : "ok"} ${resultText(result)}`);
+    const pair = `${call.key} ${answer}`;
+    if (!this.#answered.has(pair)) {
+      this.#answered.add(pair);
+      this.#repeats.clear();
+    }
     const seen = this.#repeats.get(call.key);
     const count = seen?.answer === answer ? seen.count + 1 : 1;
     this.#repeats.set(call.key, { answer, count });

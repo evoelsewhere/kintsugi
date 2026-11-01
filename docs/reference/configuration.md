@@ -40,7 +40,7 @@ The settings of the environment jobs run in are set by an administrator in **Set
 | Keep the results of a failed job (days) | `7` | Days the workspace of a failed or cancelled run, or of a run whose document write failed, is kept for inspection and retries. Outputs whose document write is committed, opened as a pull request, merged, closed or unchanged are deleted at once. 1 to 90 |
 | Script timeout (minutes) | `10` | Wall-clock limit of a script step; the process tree is killed when it is exceeded. 10 seconds to 24 hours |
 | Agent job timeout (minutes) | `45` | Wall-clock limit of an agent job; `0` = no limit |
-| Agent idle limit (minutes) | `5` | No sign of life from the model (text, thinking, tool-call arguments, tool calls) for this long and the job is stopped as stalled and tried once more; `0` turns the watchdog off |
+| Agent idle limit (minutes) | `5` | No sign of life from the model (text, thinking, tool-call arguments, tool calls) for this long and the job is stopped as stalled and tried once more; `0` turns the watchdog off. A tool call that is still running counts as a sign of life for at most 11 minutes (longer than any kernel tool's own timeout), so a hung call is stopped too |
 | Output limit (MB) | `50` | What a step may write to its output folder; a script that exceeds it is killed. 1 MB to 10 GB |
 | Turns per agent job | `150` | Assistant turns; `0` = no limit |
 | Cost per agent job (USD) | `10` | Model cost of the job, compaction summaries included; counted only for models whose prices are known. `0` = no limit |

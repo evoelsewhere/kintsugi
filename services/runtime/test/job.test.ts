@@ -2,9 +2,9 @@
 
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import type { AgentSession, AgentSessionEvent } from "@earendil-works/pi-coding-agent";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { TOOL_RESULT_PREVIEW_CHARS } from "@kintsugi/runtime-sdk";
-import { KernelJob, resultPreview } from "../src/kernel/job.js";
+import { KernelJob, OPEN_CALL_ACTIVE_MS, resultPreview } from "../src/kernel/job.js";
 import { agent, createWorkspace, fauxRuntime, jobSpec, runJob, sleep } from "./helpers.js";
 
 const workspace = createWorkspace();
@@ -128,5 +128,40 @@ describe("activity", () => {
     expect(await job.done).toMatchObject({ type: "job.completed" });
     expect(seen.during).toBeLessThan(100);
     expect(seen.after).toBeGreaterThanOrEqual(350);
+  });
+
+  it("stops counting a tool call that is still open past OPEN_CALL_ACTIVE_MS, so the idle watchdog can stop a hung job", async () => {
+    let clock = 1_000_000;
+    const now = vi.spyOn(Date, "now").mockImplementation(() => clock);
+    try {
+      let listener: ((event: AgentSessionEvent) => void) | undefined;
+      const seen: number[] = [];
+      const job = new KernelJob("job-1", jobSpec(workspace, agent([])), "0.0.0");
+      const session = {
+        subscribe: (next: (event: AgentSessionEvent) => void) => {
+          listener = next;
+          return () => undefined;
+        },
+        prompt: async () => {
+          const start = clock;
+          listener?.({ type: "tool_execution_start", toolCallId: "call-1", toolName: "mcp__docs__search", args: { query: "x" } } as AgentSessionEvent);
+          clock = start + OPEN_CALL_ACTIVE_MS - 1000;
+          seen.push(job.lastActivityAt - start);
+          clock = start + OPEN_CALL_ACTIVE_MS + 60_000;
+          seen.push(job.lastActivityAt - start);
+          listener?.({ type: "tool_execution_end", toolCallId: "call-1", toolName: "mcp__docs__search", result: { content: [{ type: "text", text: "ok" }] }, isError: false } as unknown as AgentSessionEvent);
+          listener?.({ type: "message_end", message: { role: "assistant", stopReason: "stop" } } as unknown as AgentSessionEvent);
+        },
+        abort: async () => undefined,
+        getContextUsage: () => undefined,
+        dispose: () => undefined,
+      } as unknown as AgentSession;
+      await job.run(session, () => undefined);
+      expect(await job.done).toMatchObject({ type: "job.completed" });
+      // Still open within the bound: working now. Past it: working until the bound, and idle from then on.
+      expect(seen).toEqual([OPEN_CALL_ACTIVE_MS - 1000, OPEN_CALL_ACTIVE_MS]);
+    } finally {
+      now.mockRestore();
+    }
   });
 });

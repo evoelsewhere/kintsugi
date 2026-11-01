@@ -34,9 +34,10 @@ describe("loop guard", () => {
   });
 
   it("counts repeats interleaved with other calls, whatever the order of the arguments' keys", async () => {
+    // ls comes first: the first read is then the last call the job had not seen, and the count runs from it.
     const steps = Array.from({ length: LOOP_REPEATS }, (_, index) => [
-      call("read", index % 2 === 0 ? { path: "hello.txt", offset: 1 } : { offset: 1, path: "hello.txt" }),
       call("ls", { path: "." }),
+      call("read", index % 2 === 0 ? { path: "hello.txt", offset: 1 } : { offset: 1, path: "hello.txt" }),
     ]).flat();
     const runtime = await fauxRuntime([...steps, done]);
     const { done: end } = await runJob(runtime, jobSpec(workspace, agent(["read", "ls"])));
@@ -92,6 +93,20 @@ describe("loop guard on a scripted session", () => {
     expect(await run(calls)).toMatchObject({ type: "job.completed" });
     const stuck = Array.from({ length: LOOP_REPEATS }, () => ({ tool: "scratchpad", args: { action: "list" }, answer: "items left: 3" }));
     expect(await run(stuck)).toMatchObject({ type: "job.failed", reason: "loop", error: "stopped: scratchpad was called with the same arguments 12 times" });
+  });
+
+  it("lets a job re-read an unchanged checklist as often as it likes while it reads and writes new things between", async () => {
+    const calls = Array.from({ length: 3 * LOOP_REPEATS }, (_, index) => [
+      { tool: "read", args: { path: "checklist.md" }, answer: "1. map the modules 2. write the catalog" },
+      { tool: "read", args: { path: `src/module-${index}.cbl` }, answer: `module ${index}` },
+    ]).flat();
+    expect(await run(calls)).toMatchObject({ type: "job.completed" });
+  });
+
+  it("halts a cycle over the same few calls that brings nothing new (QA-R1: grep of the same 7 files 26 times each)", async () => {
+    const files = Array.from({ length: 7 }, (_, index) => `src/file-${index}.cbl`);
+    const calls = Array.from({ length: LOOP_REPEATS + 1 }, () => files.map((path) => ({ tool: "grep", args: { pattern: "CALL", path }, answer: `${path}: 3 matches` }))).flat();
+    expect(await run(calls)).toMatchObject({ type: "job.failed", reason: "loop", error: "stopped: grep was called with the same arguments 12 times" });
   });
 
   it("leaves out the calls a codemode script makes; the codemode call itself counts", async () => {
