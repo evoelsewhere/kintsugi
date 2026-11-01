@@ -40,7 +40,7 @@ Taken from ADR-0099 and the data-model page of the architecture track (branches 
 | Kind | Name | Note |
 |---|---|---|
 | Permission codes | `wiki.comment`, `wiki.write`, `wiki.publish`, `wiki.manage` | Moderation of comments is part of `wiki.manage`; there is no separate moderation code (Q13) and no per-space comment level. |
-| Rule table | `knowledge.wiki_space_rule` | Settled by the architects (renamed in the data-model page and ADR-0096). Levels `edit` and `manage`; subjects user or access role. |
+| Rule table | `knowledge.wiki_restriction` | Settled by the architects (the final name after a rename and a revert). Levels `edit` and `manage`; subjects user or access role. |
 | Other tables | `knowledge.wiki_comment`, `knowledge.wiki_watch`, `core.notification` | |
 | Audit actions | `wiki-page.publish`, `wiki-page.delete`, `wiki-comment.delete`, `wiki-restriction.set`, `wiki-restriction.clear` | |
 | Agent read | `GET /api/member/v1/comments`, MCP tool `comments_list` | Q12. |
