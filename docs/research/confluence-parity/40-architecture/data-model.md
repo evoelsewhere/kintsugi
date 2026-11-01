@@ -158,7 +158,7 @@ Wiki state goes in the `knowledge` schema, which already holds the Brain (migrat
 | `knowledge.wiki_id_counter` | `(project_id, scope)` | `next` | A cache of Git, see [Identifiers](#identifiers) |
 | `knowledge.wiki_draft` | `id` | `project_id`, `user_id`, `page_key`, `path`, `new_path` (a move), `title`, `content` (Markdown), `base_commit`, `base_hash` (SHA-256 of the file at the base, the write's `expectedHash`), `revision`, `status` (`editing`, `publishing`, `published`, `discarded`), `document_write_id`, `created_at`, `updated_at`; unique `(project_id, user_id, page_key)` | Autosave bumps `revision` (a stale revision answers 409); rows touched in the last 2 minutes are the page's presence; dropped 30 days after publish or discard |
 | `knowledge.wiki_draft_attachment` | `id` | `draft_id`, `name`, `media_type`, `size`, `content` (bytea), `created_at` | The one place bytes sit in Postgres: a file pasted into a draft before it has a commit; same allowlist and 5 MiB per file, 20 MiB per draft; deleted with the draft or when its publish write is committed (the bytes move into the write); never indexed |
-| `knowledge.wiki_space_rule` | `(project_id, path_prefix, principal_kind, principal)` | `principal_kind` (`user`, `access-role`), `level` (`edit`, `manage`), `granted_by`, `granted_at` | Edit and publish rules per space, folder or page path; a rule covers its subtree, and a rule on a child adds to its parent's (a writer must satisfy both), a stated difference from Confluence; a path with no rule is editable by whoever holds `wiki.write` and Project Access; a grant never widens Project Access |
+| `knowledge.wiki_restriction` | `(project_id, path_prefix, principal_kind, principal)` | `principal_kind` (`user`, `access-role`), `level` (`edit`, `manage`), `granted_by`, `granted_at` | Edit restrictions (editing and publishing) per space, folder or page path; a restriction covers its subtree, and a restriction on a child adds to its parent's (a writer must satisfy both), a stated difference from Confluence; a path with no restriction is editable by whoever holds `wiki.write` and Project Access; a grant never widens Project Access |
 | `knowledge.wiki_comment` | `id` | `project_id`, `page_key`, `parent_id` (reply), `kind` (`footer`, `inline`), `anchor` (jsonb, below), `body` (Markdown, at most 32 KiB), `status` (`open`, `resolved`, `orphaned`), `resolved_by`, `resolved_at`, `author`, `created_at`, `edited_at`, `deleted_at` | Soft delete keeps the thread shape; deletion is audited |
 | `knowledge.wiki_mention` | `id` | `project_id`, `user_id`, `source_kind` (`comment`, `page`), `source_id` (comment id, or page key and commit), `created_at` | Page mentions are found at publish, in the added lines only |
 | `knowledge.wiki_watch` | `(user_id, project_id, target_kind, target)` | `target_kind` (`page`, `subtree`, `space`), `created_at` | A subtree or space watch is a path prefix |
@@ -180,7 +180,7 @@ erDiagram
   PROJECT ||--o{ WIKI_ID_COUNTER : allocates
   PROJECT ||--o{ WIKI_DRAFT : edits
   WIKI_DRAFT ||--o{ WIKI_DRAFT_ATTACHMENT : holds
-  PROJECT ||--o{ WIKI_SPACE_RULE : restricts
+  PROJECT ||--o{ WIKI_RESTRICTION : restricts
   PROJECT ||--o{ WIKI_COMMENT : discusses
   WIKI_COMMENT ||--o{ WIKI_COMMENT : "replies to"
   WIKI_COMMENT ||--o{ WIKI_MENTION : mentions
@@ -251,7 +251,7 @@ Decided in the authoring thread and proposed in [ADR-0096](../../../decisions/00
 ## Access
 
 - **Viewing** has one boundary: Project Access to the whole repository ([ADR-0062](../../../decisions/0062-coding-agent-context-and-project-access.md)). A view rule on one page of a Git repository is not a control: members' clones, the Git server and every mirror still hold the text, and each read path (tree, grep, links, folder summaries, changes) would need a filter that can leak. The portal's document routes today need a session only ([`documents.controller.ts`](../../../../apps/api/src/modules/delivery/documents/interface/documents.controller.ts), lines 1-4); wiki routes check Project Access, and the existing routes must too.
-- **Editing and publishing** are restricted per space, folder or page path in `knowledge.wiki_space_rule`, checked by the API on draft and on publish. That is a real control because every portal commit goes through the writer; branch protection or code owners on the Git server are the Git-level backstop for members' own pull requests.
+- **Editing and publishing** are restricted per space, folder or page path in `knowledge.wiki_restriction`, checked by the API on draft and on publish. That is a real control because every portal commit goes through the writer; branch protection or code owners on the Git server are the Git-level backstop for members' own pull requests.
 - **Direct publish** needs the path in `directPublishPaths` (`kintsugi.yaml`, reviewed) and the permission `wiki.publish`; everything else is a pull request.
 - **Secret content** is never a wiki page in Git. `restricted/` stays never committed, never served and never indexed; restricted pages as encrypted Postgres records are a later phase with an ADR of their own.
 
