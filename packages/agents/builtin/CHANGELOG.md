@@ -4,6 +4,8 @@ This changelog records the Kintsugi adaptation; it is not tied to a plugin manif
 
 ## Unreleased — Kintsugi adaptation
 
+- Built-in agents list their tools ([ADR-0092](../../../docs/decisions/0092-least-privilege-for-built-in-agents.md)). `reverse_engineering` 2.6.0: `legacy-analyst` 1.6.0, `business-rules-extractor` 1.5.0, `security-auditor` 1.3.0 and `understand-planner` 1.1.0 list `tools: [read, ls, grep, find, write, edit]` and say they have no `shell` and no `git`. `modernize` 5.4.0: `architecture-critic` 1.4.0, `contract-reviewer` 1.1.0, `design-reviewer` 1.5.0 and `designer` 2.4.0 list the same tools; `code-reviewer` 2.2.0 adds `git`, for the diff and the history of the merge request only. No built-in agent gets `shell` or `codemode`.
+
 - One writer of documents. `reverse_engineering` 2.5.0: `render_rules.py` keeps its check that a file stays inside `--out` and writes `BUSINESS_RULES.md`, the rule files, the identifier ledger and `DATA_OBJECTS.md` through `docmd.write_text` (LF ends, a final newline, the size limit, an atomic replace), as every other script does. No agent or skill changes.
 
 - Ids with a trailing newline are refused. `reverse_engineering` 2.5.0 and `modernize` 5.3.0: the id and path validators of both plugins' identical `paths.py` (unit segment, source folder, commit) and of `catalog_common.py` (module, item id, application) match to the true end of the text, so `core/invoice` followed by a newline is refused at validation, as the TypeScript twins refuse it, instead of failing the run's document write. No agent or skill changes.

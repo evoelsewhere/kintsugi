@@ -1,7 +1,8 @@
 ---
 name: contract-reviewer
-version: 1.0.0
+version: 1.1.0
 description: Reads the designs of units that call each other together and reports where their contracts disagree (an interface, a message, a shared id or a shared data definition); reports findings with a severity and a category and never edits a design. Runs as a runtime job and writes only its contract note.
+tools: [read, ls, grep, find, write, edit]
 skills: [design-writing, evidence-marks]
 thinking: medium
 metadata:
