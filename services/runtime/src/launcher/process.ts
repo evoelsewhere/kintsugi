@@ -94,6 +94,9 @@ export interface ProcessResult {
 
 const DEFAULT_CAPTURE = 64 * 1024;
 
+/** The longest timer Node keeps (2^31-1 ms, about 24.8 days); a longer one fires at once, so longer limits are held to it (T3-014). */
+export const MAX_TIMER_MS = 2 ** 31 - 1;
+
 /**
  * How long the output may stay open once the process has exited. A process it started inherits the pipes, and one
  * that left its tree (an orphan, a new session) is not reached by the kill, so waiting for the pipes to close alone
@@ -189,7 +192,7 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
       else killProcessTree(child.pid);
     };
     // timeoutMs <= 0 means no wall-clock limit.
-    const timer = options.timeoutMs > 0 ? setTimeout(() => stop("timeout"), options.timeoutMs) : undefined;
+    const timer = options.timeoutMs > 0 ? setTimeout(() => stop("timeout"), Math.min(options.timeoutMs, MAX_TIMER_MS)) : undefined;
     const onAbort = (): void => stop("aborted");
     options.signal?.addEventListener("abort", onAbort, { once: true });
     let checking = false;

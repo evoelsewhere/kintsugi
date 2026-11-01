@@ -19,7 +19,7 @@ import { createJobServiceHost } from "./job-service-host.js";
 import { EventStream } from "../event-stream.js";
 import { PI_ENGINE_ID, RUNTIME_VERSION } from "../version.js";
 import type { StoredProviderConfig } from "./model-runtime.js";
-import { type JobUser, type ProcessResult, jobUser, runProcess } from "./process.js";
+import { type JobUser, MAX_TIMER_MS, type ProcessResult, jobUser, runProcess } from "./process.js";
 import type { LoadedProvider } from "./provider-registry.js";
 import { jobEnvironment, redactText } from "./script.js";
 import { grantToUser } from "./workspace.js";
@@ -157,7 +157,7 @@ class ChildAgentJob implements JobHandle {
     this.#idle = setTimeout(() => {
       this.#stalledAfterSec = this.idleTimeoutSec;
       this.#abort.abort();
-    }, this.idleTimeoutSec * 1000);
+    }, Math.min(this.idleTimeoutSec * 1000, MAX_TIMER_MS));
     this.#idle.unref();
   }
 
