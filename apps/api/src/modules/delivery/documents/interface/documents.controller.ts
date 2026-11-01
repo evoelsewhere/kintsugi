@@ -14,8 +14,8 @@ import { type CompareQuery, compareQuerySchema, gapAnswerSchema } from "./docume
 import type { DocumentCompare } from "../domain/document.js";
 import { DocumentsService } from "../application/documents.service.js";
 import { StageResultsService } from "../application/stage-results.service.js";
-import type { DocumentFile, DocumentRefs, DocumentTree, StageHeadline, StageResults } from "../domain/document.js";
-import { type FileQuery, type ResultsQuery, type TreeQuery, type UnderstandResultsQuery, fileQuerySchema, resultsQuerySchema, treeQuerySchema, understandResultsQuerySchema } from "./document.dto.js";
+import type { DocumentFile, DocumentHistory, DocumentRefs, DocumentTree, StageHeadline, StageResults } from "../domain/document.js";
+import { type FileQuery, type HistoryQuery, type ResultsQuery, type TreeQuery, type UnderstandResultsQuery, fileQuerySchema, historyQuerySchema, resultsQuerySchema, treeQuerySchema, understandResultsQuerySchema } from "./document.dto.js";
 
 @ApiTags("delivery · documents")
 @Controller("projects/:id")
@@ -64,6 +64,16 @@ export class DocumentsController {
   @ApiOkResponse({ description: "The file content; 413 when larger than 2 MiB, 415 when binary." })
   file(@Param("id") id: string, @Query({ schema: fileQuerySchema }) query: FileQuery): Promise<DocumentFile> {
     return this.documents.file(id, query.ref, query.path);
+  }
+
+  @Get("documents/history")
+  @ApiOperation({
+    summary: "The versions of a file of the document repo: the commits that changed it, newest first, following renames; never restricted/ or .git",
+    description: "Each version has its commit, date, subject, actor (the Kintsugi-Actor trailer of a portal publish, else the commit author) and minor flag (the trailer Kintsugi-Minor: true). limit defaults to 50 (at most 200); pass the answer's next as before for the older versions. Only the newest 2,000 versions of a file are reached.",
+  })
+  @ApiOkResponse({ description: "The versions and the cursor of the next page; an empty list for a path no commit touched." })
+  history(@Param("id") id: string, @Query({ schema: historyQuerySchema }) query: HistoryQuery): Promise<DocumentHistory> {
+    return this.documents.history(id, query.ref, query.path, query.limit, query.before);
   }
 
   @Get("applications/:appId/stages/:stage/results")

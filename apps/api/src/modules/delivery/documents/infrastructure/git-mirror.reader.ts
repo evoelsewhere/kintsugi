@@ -5,10 +5,12 @@
 import { access } from "node:fs/promises";
 import { Injectable } from "@nestjs/common";
 import { CheckoutStorage, GitError, dataDirFromEnv, runGit } from "@kintsugi/git";
-import type { DiffFile, DocumentDiff, DocumentRepo, FileRead, GrepLine, MirrorBranch, TreeEntry } from "../domain/document.js";
+import type { DiffFile, DocumentDiff, DocumentRepo, FileRead, FileVersion, GrepLine, MirrorBranch, TreeEntry } from "../domain/document.js";
 import { DocumentRepoReader } from "../domain/document.ports.js";
 
 const TIMEOUT_MS = 30_000;
+/** The most versions of one file the history reads: the newest ones. */
+const HISTORY_SCAN_MAX = 2_000;
 
 @Injectable()
 export class GitMirrorDocumentReader extends DocumentRepoReader {
@@ -181,6 +183,32 @@ export class GitMirrorDocumentReader extends DocumentRepoReader {
       linesKnown = false;
     }
     return { from: resolved, files: [...files.values()], linesKnown };
+  }
+
+  async history(repo: DocumentRepo, commit: string, path: string, options: { limit: number; before?: string }): Promise<{ entries: FileVersion[]; more: boolean }> {
+    // The whole history of the file (up to HISTORY_SCAN_MAX versions) is read from the tip each time: `--follow` follows
+    // a rename only from the commit that has the path, so a page cannot start at an older commit under the new name.
+    // The path is literal (no glob). Fields end with a unit separator, a record with a record separator.
+    const format = ["%H", "%aI", "%an", "%ae", "%s", "%(trailers:only,unfold)"].join("%x1f");
+    const out = await this.git(repo, ["--literal-pathspecs", "log", "--follow", `-n${HISTORY_SCAN_MAX}`, `--format=${format}%x1e`, commit, "--", path]);
+    const entries: FileVersion[] = [];
+    for (const record of out.split("\x1e")) {
+      const [sha = "", date = "", authorName = "", authorEmail = "", subject = "", trailers = ""] = record.trim().split("\x1f");
+      if (sha === "") continue;
+      const trailer = (key: string): string | undefined => {
+        for (const line of trailers.split("\n")) {
+          const colon = line.indexOf(":");
+          if (colon > 0 && line.slice(0, colon).trim().toLowerCase() === key) return line.slice(colon + 1).trim();
+        }
+        return undefined;
+      };
+      const actor = trailer("kintsugi-actor");
+      entries.push({ sha, date: new Date(date).toISOString(), subject, authorName, authorEmail, trailerActor: actor === "" ? undefined : actor, trailerMinor: trailer("kintsugi-minor")?.toLowerCase() === "true" });
+    }
+    // The page starts after `before` when it is given (none when `before` is not a version of this file).
+    const from = options.before === undefined ? 0 : entries.findIndex((entry) => entry.sha === options.before) + 1;
+    if (options.before !== undefined && from === 0) return { entries: [], more: false };
+    return { entries: entries.slice(from, from + options.limit), more: entries.length > from + options.limit };
   }
 
   private async objectType(repo: DocumentRepo, commit: string, path: string): Promise<string | undefined> {
