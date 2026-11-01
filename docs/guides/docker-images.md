@@ -39,7 +39,7 @@ KINTSUGI_DATA_DIR=/srv/kintsugi/data
 KINTSUGI_BOOTSTRAP_ADMIN_USER=admin
 ```
 
-Set `KINTSUGI_SECRET_KEY` to a newly generated base64 32-byte key, `POSTGRES_PASSWORD` to a random hexadecimal password, and `KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD` to a unique password of at least eight characters. Generate values locally and paste them into `.env`:
+Set `KINTSUGI_SECRET_KEY` to a newly generated base64 32-byte key, `POSTGRES_PASSWORD` (the bootstrap superuser) and `POSTGRES_APP_PASSWORD` (the role the app and the worker connect as) to two different random hexadecimal passwords, and `KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD` to a unique password of at least eight characters. Generate values locally and paste them into `.env`:
 
 ```sh
 openssl rand -base64 32

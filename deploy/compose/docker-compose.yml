@@ -8,7 +8,9 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: postgres://kintsugi:${POSTGRES_PASSWORD}@postgres:5432/kintsugi
+      # The application's own role, not a superuser (see db-roles); the superuser password stays out of this container.
+      DATABASE_URL: postgres://kintsugi_app:${POSTGRES_APP_PASSWORD:?set POSTGRES_APP_PASSWORD in .env}@postgres:5432/kintsugi
+      POSTGRES_PASSWORD: ""
       KINTSUGI_DATA_DIR: /var/lib/kintsugi     # the API reads the document repo mirrors (read-only)
       KINTSUGI_PORTAL_DIR: /app/apps/portal/dist
       PORT: 3000
@@ -23,7 +25,7 @@ services:
     volumes:
       - kintsugi-data:/var/lib/kintsugi:ro   # API reads the worker's Git mirrors (ADR-0025)
     depends_on:
-      postgres: { condition: service_healthy }
+      db-roles: { condition: service_completed_successfully }
     networks: [backend]
 
   # Runs Git sync, the document repo writer and runtime jobs in job workspaces under
@@ -37,19 +39,51 @@ services:
     stop_grace_period: 60s
     env_file: .env
     environment:
-      DATABASE_URL: postgres://kintsugi:${POSTGRES_PASSWORD}@postgres:5432/kintsugi
+      DATABASE_URL: postgres://kintsugi_app:${POSTGRES_APP_PASSWORD:?set POSTGRES_APP_PASSWORD in .env}@postgres:5432/kintsugi
+      POSTGRES_PASSWORD: ""
       KINTSUGI_DATA_DIR: /var/lib/kintsugi
     volumes:
       - kintsugi-data:/var/lib/kintsugi             # git mirrors, document repo worktrees, job workspaces (ADR-0025, ADR-0029)
     depends_on:
-      postgres: { condition: service_healthy }
+      db-roles: { condition: service_completed_successfully }
     networks: [backend]                          # outbound: Git servers and the configured LLM providers
+
+  # Runs once on every start, as the bootstrap superuser `kintsugi`, and exits: makes sure the application's role
+  # `kintsugi_app` exists with POSTGRES_APP_PASSWORD and no SUPERUSER, CREATEDB, CREATEROLE, REPLICATION or BYPASSRLS,
+  # and that it owns the database and everything the application created in it (an installation from before this role
+  # existed is moved over on its first start). The app and the worker connect as `kintsugi_app` only.
+  db-roles:
+    image: pgvector/pgvector:pg16
+    restart: "no"
+    environment:
+      PGHOST: postgres
+      PGUSER: kintsugi
+      PGDATABASE: kintsugi
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      APP_PASSWORD: ${POSTGRES_APP_PASSWORD:?set POSTGRES_APP_PASSWORD in .env}
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        psql -X -q -v ON_ERROR_STOP=1 -v app_role=kintsugi_app -v "app_password=$${APP_PASSWORD}" <<'SQL'
+        select format('create role %I login', :'app_role') where not exists (select from pg_roles where rolname = :'app_role') \gexec
+        alter role :"app_role" with login nosuperuser nocreatedb nocreaterole noreplication nobypassrls password :'app_password';
+        select format('alter database %I owner to %I', current_database(), :'app_role') \gexec
+        select format('alter schema %I owner to %I', nspname, :'app_role') from pg_namespace where nspowner = current_user::regrole and nspname !~ '^pg_' and nspname <> 'information_schema' \gexec
+        select format('alter %s %I.%I owner to %I', case c.relkind when 'v' then 'view' when 'm' then 'materialized view' when 'f' then 'foreign table' else 'table' end, n.nspname, c.relname, :'app_role') from pg_class c join pg_namespace n on n.oid = c.relnamespace where c.relowner = current_user::regrole and c.relkind in ('r', 'p', 'v', 'm', 'f') and n.nspname !~ '^pg_' and n.nspname <> 'information_schema' \gexec
+        select format('alter sequence %I.%I owner to %I', n.nspname, c.relname, :'app_role') from pg_class c join pg_namespace n on n.oid = c.relnamespace where c.relowner = current_user::regrole and c.relkind = 'S' and n.nspname !~ '^pg_' and n.nspname <> 'information_schema' and not exists (select from pg_depend d where d.classid = 'pg_class'::regclass and d.objid = c.oid and d.deptype in ('a', 'i')) \gexec
+        select format('alter routine %s owner to %I', p.oid::regprocedure, :'app_role') from pg_proc p join pg_namespace n on n.oid = p.pronamespace where p.proowner = current_user::regrole and p.prokind in ('f', 'p') and n.nspname !~ '^pg_' and n.nspname <> 'information_schema' \gexec
+        select format('alter %s %s owner to %I', case t.typtype when 'd' then 'domain' else 'type' end, t.oid::regtype, :'app_role') from pg_type t join pg_namespace n on n.oid = t.typnamespace where t.typowner = current_user::regrole and n.nspname !~ '^pg_' and n.nspname <> 'information_schema' and (t.typtype in ('e', 'd', 'r') or (t.typtype = 'c' and (select relkind from pg_class where oid = t.typrelid) = 'c')) \gexec
+        SQL
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [backend]
 
   postgres:
     image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_DB: kintsugi
+      # The bootstrap superuser, for db-roles and maintenance only; the application connects as kintsugi_app.
       POSTGRES_USER: kintsugi
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:

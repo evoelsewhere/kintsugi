@@ -79,7 +79,7 @@ Add these repository secrets:
 | `SSH_PASSWORD` | Password for the SSH account |
 | `SSH_KNOWN_HOSTS` | The verified known-hosts entry for the host and port |
 | `KINTSUGI_SECRET_KEY` | Optional; base64-encoded 32-byte encryption key for first install |
-| `POSTGRES_PASSWORD` | Optional; at least 32 hexadecimal characters for first install |
+| `POSTGRES_PASSWORD` | Optional; at least 32 hexadecimal characters for first install (the bootstrap superuser; the app connects as `kintsugi_app` with `POSTGRES_APP_PASSWORD`, which the workflow generates) |
 | `KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD` | Optional; at least 8 letters, digits, dots, underscores, or hyphens for first install |
 
 Each deploy pulls new images tagged with the commit. Before pulling, the workflow checks the free space where Docker keeps its images (`KINTSUGI_MIN_FREE_GB`); below it, it removes the Kintsugi images no container uses and checks again, and stops with the numbers when it is still short. After a successful start it removes the images the stack no longer uses (only those carrying this repository's `org.opencontainers.image.source` label, never other images on the host); an older version is pulled again by its tag.
@@ -122,4 +122,5 @@ Build and transfer the image tarballs into a local registry, set `KINTSUGI_REGIS
 ## Upgrade and backup
 
 - **Upgrade**: deploy a commit through GitHub Actions. For manual upgrades, authenticate to GHCR with a read-only package token, then run `docker compose pull && docker compose up -d --wait` in the deployment directory. Database migrations run on app start.
+- **Upgrading to the application's database role**: the app and the worker no longer connect as the Postgres superuser `kintsugi` but as `kintsugi_app`. The deploy workflow adds `POSTGRES_APP_PASSWORD` to an existing `.env` once, and on the next start the one-shot `db-roles` service creates the role and gives it the database and everything the app made in it (schemas, tables, sequences, functions, types); no data moves. For a manual upgrade, add the line yourself before `docker compose up -d --wait`: `printf 'POSTGRES_APP_PASSWORD=%s\n' "$(openssl rand -hex 32)" >> .env`. To check it: `docker compose exec postgres psql -U kintsugi -d kintsugi -c "select pg_get_userbyid(datdba) from pg_database where datname = 'kintsugi'"` prints `kintsugi_app`. Keep `POSTGRES_PASSWORD`: the `db-roles` step and maintenance (`pg_dump`, `psql`) use the superuser.
 - **Backup**: back up the `pg-data` volume. Code and documents are in Git, and `KINTSUGI_DATA_DIR` is rebuilt from Git; back it up if it contains imported repositories that exist nowhere else.

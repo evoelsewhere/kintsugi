@@ -9,7 +9,7 @@ import { resolve } from "node:path";
 import { databaseUrlFromEnvironment } from "../../../../scripts/test-db-config.mjs";
 import pg from "pg";
 
-function serverUrl(): URL | undefined {
+export function serverUrl(): URL | undefined {
   const raw = databaseUrlFromEnvironment(process.env, resolve(import.meta.dirname, "../../../../.env"));
   return raw === undefined ? undefined : new URL(raw);
 }

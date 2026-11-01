@@ -4,7 +4,7 @@ The Docker Compose package for one Kintsugi installation. The app and worker ima
 
 | File | Purpose |
 |---|---|
-| `docker-compose.yml` | Services: `app`, `worker`, `postgres` |
+| `docker-compose.yml` | Services: `app`, `worker`, `postgres`, and `db-roles`, a one-shot step that runs as the bootstrap superuser on every start and makes the app's role `kintsugi_app` (no superuser) own the database |
 | `.env.example` | Template used to create a private `.env` on first deployment — see the [configuration reference](../../docs/reference/configuration.md) |
 
 The app and worker images are defined by [`Dockerfile.app`](../../Dockerfile.app) and [`Dockerfile.worker`](../../Dockerfile.worker). On first deploy, the workflow creates `.env` from GitHub Actions variables and secrets, generates any unset secrets on the host, and sets the file mode to `600`. It preserves stored secrets on later deployments and updates configured URL/bind/port variables plus the workflow-managed `KINTSUGI_REGISTRY` and `KINTSUGI_VERSION`.
