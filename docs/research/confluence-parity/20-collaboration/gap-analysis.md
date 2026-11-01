@@ -1,6 +1,6 @@
 # Collaboration and access: gap analysis
 
-> Research pack, area 20-collaboration (ticket BC-003). What Kintsugi has today for each row of the [feature matrix](feature-matrix.md), the gap and the smallest step that closes it, followed by the mapping of Confluence's permission levels onto Kintsugi's identity model, the state that cannot live in Git, and the recommendation on real-time co-editing. Facts about the code were read on the `master` branch at commit `07c2685c`; decisions of the architects are those of the thread `collab-constraints` (open questions).
+> Research pack, area 20-collaboration (ticket BC-003). What Kintsugi has today for each row of the [feature matrix](feature-matrix.md), the gap and the smallest step that closes it, followed by the mapping of Confluence's permission levels onto Kintsugi's identity model, the state that cannot live in Git, and the recommendation on real-time co-editing. Facts about the code were read on the `master` branch at commit `07c2685c`; decisions of the architects are those of the thread `collab-constraints` ([open questions](open-questions.md)).
 
 ## What Kintsugi has today
 
