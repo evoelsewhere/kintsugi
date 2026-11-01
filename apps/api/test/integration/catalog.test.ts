@@ -309,6 +309,33 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
     expect(ownGaps.body.data).toMatchObject({ stage: "gaps", empty: false, scope: { item: "billing/invoice" }, gapCounts: { total: 2 } });
     expect(ownGaps.body.data?.gaps[0]).toMatchObject({ id: "GAP-billing.invoice-01", item: "billing/invoice", where: "legacy/src/Invoice.java:41" });
     expect(ownGaps.body.data?.noSection).toBeUndefined();
+    expect(ownGaps.body.data?.gaps.some((gap) => "openWrite" in gap)).toBe(false);
+    // An answer waiting for review (ADR-0094): its gap shows the pull request, and a second answer on the same
+    // specification is refused, naming it, instead of opening a pull request that would conflict.
+    const spec = "10-applications/web/01-legacy/billing/invoice/spec.md";
+    await app.db.query(
+      "insert into workflow.document_write (id, project_id, kind, status, message, branch, pr_url, correction) values ('answer-1', 'shop', 'state-change', 'pr-opened', 'Resolve GAP-billing.invoice-01', 'kintsugi/admin/answer-1', 'https://git.example.invalid/org/docs/pulls/12', $1)",
+      [JSON.stringify({ path: spec, gap: "GAP-billing.invoice-01" })],
+    );
+    type OpenGaps = { gaps: Array<{ id: string; openWrite?: { id: string; status: string; prUrl?: string; prNumber?: number } }>; ref: { commit: string } };
+    for (const view of [`${base}?view=gaps`, `${base}?view=gaps&item=billing/invoice`]) {
+      const shown = (await admin.get<OpenGaps>(view)).body.data!;
+      expect(shown.gaps.map((gap) => [gap.id, gap.openWrite])).toEqual([
+        ["GAP-billing.invoice-01", { id: "answer-1", status: "pr-opened", prUrl: "https://git.example.invalid/org/docs/pulls/12", prNumber: 12 }],
+        ["GAP-billing.invoice-02", undefined],
+      ]);
+    }
+    const commit = (await admin.get<OpenGaps>(`${base}?view=gaps&item=billing/invoice`)).body.data!.ref.commit;
+    const second = await admin.request("POST", "/projects/shop/applications/web/understand/gaps/answer", {
+      body: { item: "billing/invoice", gap: "GAP-billing.invoice-02", commit, answer: "Monthly.", evidence: "Finance, 1 Nov", status: "resolved" },
+    });
+    expect(second.status).toBe(409);
+    expect(second.body.message).toBe("A correction for this specification is already open: PR #12. Review or merge it first.");
+    expect((await app.db.query("select count(*)::int as n from workflow.document_write where correction is not null")).rows[0]).toEqual({ n: 1 });
+    // Once its pull request is merged or closed, the gap shows what the specification says again.
+    await app.db.query("update workflow.document_write set status = 'merged' where id = 'answer-1'");
+    expect((await admin.get<OpenGaps>(`${base}?view=gaps&item=billing/invoice`)).body.data!.gaps.some((gap) => gap.openWrite !== undefined)).toBe(false);
+    await app.db.query("delete from workflow.document_write where id = 'answer-1'");
     // A specification written before the table has no section: no gaps, and the view says so.
     const oldGaps = await admin.get<GapsView>(`${base}?view=gaps&item=billing/rates`);
     expect(oldGaps.body.data).toMatchObject({ gaps: [], noSection: true, gapCounts: { total: 0 } });

@@ -3,7 +3,7 @@
 import type { Segment } from "@/components/results/charts";
 import { CHART_COLOR } from "@/components/results/chart-colors";
 import type { StatusTone } from "@/components/ui/status-dot";
-import type { Severity } from "@/lib/api/documents";
+import type { Gap, Severity } from "@/lib/api/documents";
 
 const number = new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 });
 
@@ -72,3 +72,12 @@ export function segmentsOf(tallies: Tally[], color?: (key: string) => string | u
 }
 
 export const percentOf = (part: number, total: number): string => (total === 0 ? "0%" : `${Math.round((part / total) * 100)}%`);
+
+/** Where a gap stands: an answer waiting for review (ADR-0094) comes first, then what its specification says. */
+export function gapState(gap: Pick<Gap, "openWrite">, resolved: boolean): { label: string; tone: StatusTone } {
+  if (gap.openWrite !== undefined) {
+    const pr = gap.openWrite.prNumber === undefined ? (gap.openWrite.prUrl === undefined ? "" : " · PR") : ` · PR #${gap.openWrite.prNumber}`;
+    return { label: `Answer proposed${pr}`, tone: "blue" };
+  }
+  return resolved ? { label: "Resolved", tone: "green" } : { label: "Open", tone: "orange" };
+}
