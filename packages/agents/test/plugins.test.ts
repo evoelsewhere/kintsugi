@@ -61,6 +61,16 @@ describe("built-in plugins", () => {
     }
   });
 
+  it("tells a job it has no network only with the web tools a project may grant (ADR-0079, ADR-0080)", async () => {
+    const plugins = await loadBuiltinPlugins();
+    const harden = (await readBuiltinPluginFile(plugins, "reverse_engineering", "workflows/harden-scan.js"))!.replace(/\s+/g, " ");
+    expect(harden).toContain("no shell, and no network beyond the web_search and web_fetch tools when the project grants them");
+    expect(harden).not.toMatch(/no shell and no network|no shell, no network/);
+    const assess = (await readBuiltinPluginFile(plugins, "reverse_engineering", "commands/assess.md"))!.replace(/\s+/g, " ");
+    expect(assess).toContain("their only network is the public web search and pages a project may grant");
+    expect(assess).not.toContain("Runtime jobs have no network");
+  });
+
   it("covers every agent, command and workflow exactly once", async () => {
     const plugins = await loadBuiltinPlugins();
     for (const [kind, count] of [["agent", 9], ["command", 6], ["workflow", 3]] as const) {
