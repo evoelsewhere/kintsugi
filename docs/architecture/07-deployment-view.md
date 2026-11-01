@@ -21,7 +21,7 @@ Project's Docker host
 |---|---|---|
 | `kintsugi-app` | API, portal (static SPA), MCP server, CLI API | The only published port, behind the project's reverse proxy / TLS |
 | `kintsugi-worker` | pg-boss consumer, Git sync & writer, the Brain index, runtime jobs in job workspaces ([ADR-0029](../decisions/0029-job-workspaces-instead-of-os-sandboxes.md)) | Outbound to Git servers and LLM providers |
-| `postgres` | `pgvector/pgvector:pg16`; the only stateful service | Internal |
+| `postgres` | `pgvector/pgvector:pg16` (the pgvector extension is unused, [ADR-0091](../decisions/0091-brain-vectorless-tree-index.md)); the only stateful service | Internal |
 
 There is no per-job container, no Docker socket and no egress proxy: jobs run inside the worker container, each in its own job workspace, without OS-level isolation.
 

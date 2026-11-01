@@ -118,7 +118,7 @@ Four pillars on a shared core. Modules talk through APIs and events, so any of t
 **Core platform**
 
 - **Workflow Orchestrator.** pg-boss job queue and a phase / stage / gate state machine driven by the application's pipeline definition. Retries, fan-out per wave.
-- **Knowledge Hub.** Sources stay in Git; text chunks and embeddings (pgvector) live in Postgres. No code graph and no language parsers: the engine stays small.
+- **Knowledge Hub.** Sources stay in Git; the Brain indexes the document repository as a vectorless tree that members' agents reason over, with no embeddings ([ADR-0091](docs/decisions/0091-brain-vectorless-tree-index.md)). No code graph and no language parsers: the engine stays small.
 - **Standards & Assets.** Reads `kintsugi.yaml`, `01-standards/` and `plugins/` from the document repository at a fixed commit and combines them with built-in assets for each job.
 - **Kintsugi Runtime.** A generic agent kernel that knows no agent. Each job carries its [agent definition](docs/reference/runtime-agents.md), so built-in agents and the ones admins create in the Agent Builder run the same way.
 - **Harness Hub.** The member API, the local MCP bridge and plugin distribution to members' assistants.
@@ -189,7 +189,7 @@ The threat model and its known limits are stated plainly in [Security](docs/arch
 
 ## Deployment
 
-Kintsugi ships as a **self-hosted Docker Compose package**: an app container (API, member API and portal), a worker container (orchestrator, Git sync and writer, ingestion, runtime launcher) and PostgreSQL with pgvector. Only the app is exposed.
+Kintsugi ships as a **self-hosted Docker Compose package**: an app container (API, member API and portal), a worker container (orchestrator, Git sync and writer, the Brain index, runtime launcher) and PostgreSQL. Only the app is exposed.
 
 ![Deployment: one host runs the app, worker and PostgreSQL with pgvector under Docker Compose; only the app is exposed, and the worker reaches Git servers and LLM providers outbound](assets/diagrams/deployment.png)
 

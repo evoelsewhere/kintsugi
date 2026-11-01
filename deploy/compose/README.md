@@ -4,7 +4,7 @@ The Docker Compose package for one Kintsugi installation. The app and worker ima
 
 | File | Purpose |
 |---|---|
-| `docker-compose.yml` | Services: `app`, `worker`, `postgres` |
+| `docker-compose.yml` | Services: `app`, `worker`, `postgres`, and `db-roles`, a one-shot step that runs as the bootstrap superuser on every start and makes the app's role `kintsugi_app` (no superuser) own the database |
 | `docker-compose.isolated.yml` | Override that runs job processes as a user of their own ([ADR-0093](../../docs/decisions/0093-job-processes-run-as-a-separate-user.md)) |
 | `probe-job-isolation.sh` | Checks on this host that a job process cannot read the worker's secrets |
 | `.env.example` | Template used to create a private `.env` on first deployment — see the [configuration reference](../../docs/reference/configuration.md) |

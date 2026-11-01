@@ -183,7 +183,12 @@ jobs:
             [[ -n "$http_bind" ]] && set_env KINTSUGI_HTTP_BIND "$http_bind"
             [[ -n "$http_port" ]] && set_env KINTSUGI_HTTP_PORT "$http_port"
           fi
-          for key in KINTSUGI_PUBLIC_URL KINTSUGI_SECRET_KEY POSTGRES_PASSWORD KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD KINTSUGI_DATA_DIR; do
+          # The application's database role (non-superuser): a new password for a new .env, and once for an installation
+          # from before the role existed; db-roles creates the role with it on the next start.
+          if ! grep -Eq "^POSTGRES_APP_PASSWORD=.+$" "$install_dir/.env"; then
+            set_env POSTGRES_APP_PASSWORD "$(openssl rand -hex 32)"
+          fi
+          for key in KINTSUGI_PUBLIC_URL KINTSUGI_SECRET_KEY POSTGRES_PASSWORD POSTGRES_APP_PASSWORD KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD KINTSUGI_DATA_DIR; do
             if ! grep -Eq "^${key}=.+$" "$install_dir/.env"; then
               echo "Set $key in $install_dir/.env before deploying." >&2
               exit 1

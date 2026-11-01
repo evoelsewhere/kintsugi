@@ -39,6 +39,7 @@ Kintsugi is a TypeScript monorepo (pnpm + Turborepo) for an AI-driven migration 
 
 ## Commands
 - `pnpm install` · `pnpm lint` · `pnpm typecheck` · `pnpm build` · `pnpm test` · `make dev` (API on :3000 and the worker, both with rebuild + restart; portal on :5173)
+- `pnpm docs:links`: every relative link and anchor in `docs/`, `templates/` and the READMEs resolves (`scripts/check-doc-links.mjs`; external URLs are not fetched). Run it after changing documentation.
 
 ## Security
 - Run runtime jobs and script steps only in their job workspace: source and inputs read-only, writes only to the job's output and scratch directories, no credentials in the environment (ADR-0029).
