@@ -119,7 +119,7 @@ Page ids follow the shape of [ADR-0075](../../../decisions/0075-compact-stable-d
 Allocation differs from the rule and finding ledgers on purpose. Those are allocated by one job per unit, so a Markdown ledger never sees two writers; wiki pages are created by many people at once, and a ledger file would conflict on every second publish. So:
 
 - `knowledge.wiki_id_counter (project_id, scope, next)` hands out the next number in a transaction;
-- the counter is a cache of Git, not a truth: when it is missing or behind, it is set to the highest `PAGE-<scope>-n` in `brain_node.ids` plus the ids of open writes, plus one;
+- the counter is a cache of Git, not a truth: when it is missing or behind, it is set to the highest `PAGE-<KEY>-n` in `brain_node.ids` plus the ids of open writes, plus one;
 - the writer refuses a publish whose `id` is already defined by another path at the base commit, and the Brain build reports two documents that define the same id (both stay readable; `brain_lookup` returns both, as it does today for any id).
 
 A page written outside the portal (a member's pull request) may have no id. It is still a page, addressed by path; it gets an id on its first portal save, and Postgres rows that point at it by path are re-keyed then.
@@ -155,7 +155,7 @@ Wiki state goes in the `knowledge` schema, which already holds the Brain (migrat
 
 | Table | Key | Columns | Notes |
 |---|---|---|---|
-| `knowledge.wiki_id_counter` | `(project_id, scope)` | `next` | A cache of Git, see [Identifiers](#identifiers) |
+| `knowledge.wiki_id_counter` | `(project_id, key)` | `next` | A cache of Git, see [Identifiers](#identifiers) |
 | `knowledge.wiki_draft` | `id` | `project_id`, `user_id`, `page_key`, `path`, `new_path` (a move), `title`, `content` (Markdown), `base_commit`, `base_hash` (SHA-256 of the file at the base, the write's `expectedHash`), `revision`, `status` (`editing`, `publishing`, `published`, `discarded`), `document_write_id`, `created_at`, `updated_at`; unique `(project_id, user_id, page_key)` | Autosave bumps `revision` (a stale revision answers 409); rows touched in the last 2 minutes are the page's presence; dropped 30 days after publish or discard |
 | `knowledge.wiki_draft_attachment` | `id` | `draft_id`, `name`, `media_type`, `size`, `content` (bytea), `created_at` | The one place bytes sit in Postgres: a file pasted into a draft before it has a commit; same allowlist and 5 MiB per file, 20 MiB per draft; deleted with the draft or when its publish write is committed (the bytes move into the write); never indexed |
 | `knowledge.wiki_restriction` | `(project_id, path_prefix, principal_kind, principal)` | `principal_kind` (`user`, `access-role`), `level` (`edit`, `manage`), `granted_by`, `granted_at` | Edit restrictions (editing and publishing) per space, folder or page path; a restriction covers its subtree, and a restriction on a child adds to its parent's (a writer must satisfy both), a stated difference from Confluence; a path with no restriction is editable by whoever holds `wiki.write` and Project Access; a grant never widens Project Access |
