@@ -4,7 +4,7 @@
 
 ## How it works
 
-Each question has its options, the analyst's default and the decision with the board thread post it came from. Q1 to Q7 were put to the architects in the thread `authoring-constraints` and decided at 23:37 by the solution architect for the platform, consistent with the answer of the solution architect for the Brain at 23:36. Q8 to Q12 came out of the user stories and are in the thread `authoring-followups`; the Brain architect agreed with all five and the platform architect, who owns them, decides by 00:50. Their status below is the one at the time of writing. The stories reference a question as `(Q#)` where a criterion depends on it.
+Each question has its options, the analyst's default and the decision with the board thread post it came from. Q1 to Q7 were put to the architects in the thread `authoring-constraints` and decided at 23:37 by the solution architect for the platform, consistent with the answer of the solution architect for the Brain at 23:36. Q8 to Q12 came out of the user stories and are in the thread `authoring-followups`; the platform architect decided all five at 23:45, on the Brain architect's answer. The stories reference a question as `(Q#)` where a criterion depends on it.
 
 | Id | Question | Features it touches | ADR it meets | Status |
 |---|---|---|---|---|
@@ -15,11 +15,11 @@ Each question has its options, the analyst's default and the decision with the b
 | Q5 | How does a page keep its identity when it moves or is renamed? | AUT-13, AUT-14, AUT-49, AUT-50, AUT-53, AUT-54 | ADR-0042, ADR-0075 | decided |
 | Q6 | What is a space? | AUT-01 to AUT-10 | ADR-0028, ADR-0051 | decided |
 | Q7 | How are pages exported as PDF or Word? | AUT-55 to AUT-57 | ADR-0010 (new dependency) | decided |
-| Q8 | Do move, rename and delete need operations in the write contract? | AUT-13 to AUT-16, AUT-54 | ADR-0019 | agreed by the Brain, owner pending |
-| Q9 | Where is an image kept before its draft is published? | AUT-44, AUT-45 | ADR-0010, ADR-0042 | agreed by the Brain, owner pending |
-| Q10 | How is the order of sibling pages stored? | AUT-05 | ADR-0042 | agreed by the Brain, owner pending |
-| Q11 | Which documents may the wiki edit? | AUT-12, AUT-33 | ADR-0019 | agreed by the Brain, owner pending |
-| Q12 | Do the Brain and the portal use the same heading anchors? | AUT-28, AUT-50 | ADR-0091 | agreed by the Brain, owner pending |
+| Q8 | Do move, rename and delete need operations in the write contract? | AUT-13 to AUT-16, AUT-54 | ADR-0019 | decided |
+| Q9 | Where is an image kept before its draft is published? | AUT-44, AUT-45 | ADR-0010, ADR-0042 | decided |
+| Q10 | How is the order of sibling pages stored? | AUT-05 | ADR-0042 | decided |
+| Q11 | Which documents may the wiki edit? | AUT-12, AUT-33 | ADR-0019 | decided |
+| Q12 | Do the Brain and the portal use the same heading anchors? | AUT-28, AUT-50 | ADR-0091 | decided |
 
 ## Decided
 
@@ -65,36 +65,36 @@ Each question has its options, the analyst's default and the decision with the b
 - **Decision.** Phase 1 offers Markdown export (a page, or a space as an archive of its folder at a commit) and the browser's print-to-PDF with a print stylesheet. Server-side PDF and Word need a new dependency in the worker image and an ADR of their own, so they are deferred.
 - **Source:** same thread, both posts.
 
-## Agreed, owner's decision pending
+## Decided in the follow-up thread
 
-These are in the thread `authoring-followups`, owner the solution architect for the platform, decide by 00:50. The solution architect for the Brain answered at 23:44 and agreed with every default, with the refinements below; the analyst's default applies when the owner does not answer.
+These are in the thread `authoring-followups`. The solution architect for the Brain answered at 23:44 and the owner, the solution architect for the platform, decided at 23:45: the Brain architect's answer on all five, which the notes below state. Edge cases the decision leaves to ADR-0098 are in the concern post of 23:47 (a second publish while a pull request is open, a move against open page writes, the 500-file cap on a subtree move, one `headingSlug`).
 
 ### Q8: Do move, rename and delete need operations in the write contract?
 
 - **Facts:** a file entry of a write carries `path`, `content`, `createOnly` and `expectedHash` and no operation (`apps/api/src/modules/admin/document-writes/domain/document-write.ts:50`); the low-level `FileWrite` has none either (`packages/git/src/write.ts:46-53`); a write holds at most 500 files, 5 MiB per file and 50 MiB per write ([write path](../../../reference/document-repo-write-path.md), step 2).
 - **Options:** (a) add an operation per file (`write`, `delete`, `rename from`), keep the 500-file cap and refuse a move over it with the count; (b) express a move as two writes; (c) leave move and delete to Git.
-- **Default and Brain answer:** (a), recorded in ADR-0098. Each entry keeps `expectedHash`, so a delete or rename of a file someone changed meanwhile fails like a write. One commit per move, so Git sees the rename and `brain_changes` reports `renamed`.
+- **Decision (Brain answer, adopted):** (a), recorded in ADR-0098; a move larger than the cap is refused with the count. Each entry keeps `expectedHash`, so a delete or rename of a file someone changed meanwhile fails like a write. One commit per move, so Git sees the rename and `brain_changes` reports `renamed`.
 
 ### Q9: Where is an image kept before its draft is published?
 
 - **Facts:** drafts are in Postgres (Q1) and binaries stay out of Postgres (Q3); a pasted image has to be shown before there is a commit.
 - **Options:** (a) bounded binary rows in the draft table until publish; (b) refuse the paste until the page exists in Git; (c) commit the image alone first.
-- **Default and Brain answer:** (a), as a bounded Postgres exception: a draft-attachment table with the same allowlist, 5 MiB per file and 20 MiB per draft, deleted with the draft or when its publish write is committed, never served outside the draft's editor and never indexed.
+- **Decision (Brain answer, adopted):** (a), as a bounded Postgres exception: a draft-attachment table with the same allowlist, 5 MiB per file and 20 MiB per draft, deleted with the draft or when its publish write is committed, never served outside the draft's editor and never indexed.
 
 ### Q10: How is the order of sibling pages stored?
 
 - **Facts:** Q6 puts the order in front matter; reordering one page would then change every sibling.
 - **Options:** (a) `order` per page with gaps; (b) one `order:` list in the folder's `README.md`; (c) numeric file-name prefixes.
-- **Default and Brain answer:** (b). The list holds entry names of that folder (`deploy.md`, `runbooks`); listed entries come first in list order, folders and documents mixed, then the unlisted ones as today (folders, then documents, by name); unknown names are ignored; a folder without a README has no manual order. A move or rename rewrites the old and the new parent's list in the same write. The Brain builder reads it ([ADR-0091](../../../decisions/0091-brain-vectorless-tree-index.md), amended in ADR-0097); no existing repository has `order:`, so nothing changes for them.
+- **Decision (Brain answer, adopted):** (b). The list holds entry names of that folder (`deploy.md`, `runbooks`); listed entries come first in list order, folders and documents mixed, then the unlisted ones as today (folders, then documents, by name); unknown names are ignored; a folder without a README has no manual order. A move or rename rewrites the old and the new parent's list in the same write. The Brain builder reads it ([ADR-0091](../../../decisions/0091-brain-vectorless-tree-index.md), amended in ADR-0097); no existing repository has `order:`, so nothing changes for them.
 
 ### Q11: Which documents may the wiki edit?
 
 - **Facts:** many documents are written by jobs (`_generated/`, the specification and rules of a unit, the design sets); today a person edits one only through a gap answer.
 - **Options:** (a) any Markdown except `_generated/` and `restricted/`, job-written documents always by pull request; (b) only `20-spaces/`; (c) everything.
-- **Default and Brain answer:** (a) with more exclusions. Never editable in the wiki: `_generated/`, `restricted/`, `plugins/`, `scratch/`, hidden folders and the identifier ledgers `identifiers/` (a hand edit breaks the allocation of [ADR-0075](../../../decisions/0075-compact-stable-document-reference-ids.md)). Job-written documents (`01-legacy/<module>/<unit>/*`, design sets, unit cards) show a banner and always go by pull request. The list lives in `packages/domain/src/document-layout.ts` next to `isBrainIndexedPath` so that the two never drift.
+- **Decision (Brain answer, adopted):** (a) with more exclusions. Never editable in the wiki: `_generated/`, `restricted/`, `plugins/`, `scratch/`, hidden folders and the identifier ledgers `identifiers/` (a hand edit breaks the allocation of [ADR-0075](../../../decisions/0075-compact-stable-document-reference-ids.md)). Job-written documents (`01-legacy/<module>/<unit>/*`, design sets, unit cards) show a banner and always go by pull request. The list lives in `packages/domain/src/document-layout.ts` next to `isBrainIndexedPath` so that the two never drift.
 
 ### Q12: Do the Brain and the portal use the same heading anchors?
 
 - **Facts:** the Brain gives a section the GitHub-style anchor of its heading, `brainAnchor` (`packages/domain/src/brain.ts:239`); the portal renders headings without an id (`apps/portal/src/components/results/markdown.tsx:13-16`).
 - **Options:** (a) one slug function in `packages/domain` used by the Brain builder, the portal renderer and the link checker; (b) two functions kept in step by a test.
-- **Default and Brain answer:** (a). The function exists; it is exported once as `headingSlug` and the portal and the link checker import it. Duplicates are numbered by the Brain builder as GitHub does.
+- **Decision (Brain answer, adopted):** (a). The function exists; it is exported once as `headingSlug` and the portal and the link checker import it. Duplicates are numbered by the Brain builder as GitHub does.
