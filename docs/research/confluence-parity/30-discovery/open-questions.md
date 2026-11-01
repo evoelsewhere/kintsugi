@@ -4,7 +4,7 @@
 
 Part of the [feature matrix](feature-matrix.md) and the [gap analysis](gap-analysis.md). The constraints behind the questions: the document repo is Markdown only ([ADR-0042](../../../decisions/0042-markdown-only-document-repo-by-bounded-context.md)), Git is the source of truth ([ADR-0007](../../../decisions/0007-git-as-source-of-truth.md)), Postgres is the only datastore ([ADR-0010](../../../decisions/0010-postgres-only.md)), and the Brain is a vectorless tree whose history is not indexed ([ADR-0091](../../../decisions/0091-brain-vectorless-tree-index.md)).
 
-Where the decisions are written as architecture: target architecture (`../40-architecture/target-architecture.md`), constraints and fit (`../40-architecture/constraints-and-fit.md`), data model (`../40-architecture/data-model.md`), Brain integration (`../40-architecture/brain-integration.md`).
+Where the decisions are written as architecture: [target architecture](../40-architecture/target-architecture.md), [constraints and fit](../40-architecture/constraints-and-fit.md), [data model](../40-architecture/data-model.md), [Brain integration](../40-architecture/brain-integration.md).
 
 ## Q1 Ranked search
 
