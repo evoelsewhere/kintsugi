@@ -7,9 +7,10 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, PayloadTooLargeException, UnsupportedMediaTypeException } from "@nestjs/common";
 import { assertSafeRepoPath, GitError } from "@kintsugi/git";
 import { DocumentWritesService } from "#modules/admin/document-writes/index.js";
+import { InstallationSettingsService } from "#modules/admin/settings/index.js";
 import { type ProjectDetail, ProjectsService } from "#modules/admin/projects/index.js";
 import { JobRunsService, type JobRunView } from "#modules/delivery/runtime-jobs/index.js";
-import { type DocumentDiff, type DocumentFile, type DocumentRef, type DocumentRefs, type DocumentRepo, type DocumentTree, type GrepLine, MAX_DOCUMENT_BYTES, type MirrorBranch, diffFileWithin } from "../domain/document.js";
+import { type DocumentDiff, type DocumentFile, type DocumentHistory, type FileVersion, type HistoryEntry, type DocumentRef, type DocumentRefs, type DocumentRepo, type DocumentTree, type GrepLine, MAX_DOCUMENT_BYTES, type MirrorBranch, diffFileWithin } from "../domain/document.js";
 import { DocumentRepoReader } from "../domain/document.ports.js";
 import { parseUnifiedDiff } from "../domain/unified-diff.js";
 import type { DocumentCompare } from "../domain/document.js";
@@ -63,6 +64,7 @@ export class DocumentsService {
     private readonly runs: JobRunsService,
     private readonly writes: DocumentWritesService,
     private readonly reader: DocumentRepoReader,
+    private readonly settings: InstallationSettingsService,
   ) {}
 
   /** The project's document repo mirror; 404 for an unknown project, 409 without a repo or mirror. */
@@ -214,6 +216,31 @@ export class DocumentsService {
       path: dir,
       entries: entries.filter((entry) => isServable(entry.path)).sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "dir" ? -1 : 1)),
     };
+  }
+
+  /**
+   * The versions of a file at a ref: the commits that changed it, newest first, across renames. A path with no
+   * commits has an empty list; `before` (a commit of the mirror) continues after it.
+   */
+  async history(projectId: string, ref: string | undefined, path: string, limit: number, before: string | undefined): Promise<DocumentHistory> {
+    const file = servablePath(path, false);
+    const context = await this.context(projectId);
+    const resolved = await this.resolve(context, ref);
+    if (before !== undefined && !(await this.reader.hasCommit(context.repo, before))) throw new NotFoundException(`Commit ${before} is not in the document repo mirror`);
+    const found = await this.reader.history(context.repo, resolved.commit, file, { limit, ...(before === undefined ? {} : { before }) });
+    // The trailers of a commit are believed only when Kintsugi made it: its author is the commit identity (docs/reference/
+    // document-repo-commit-conventions.md). A member's own commit may write any trailer.
+    const identity = await this.settings.commitIdentity();
+    const kintsugi = (version: FileVersion): boolean => version.authorName === identity.name && version.authorEmail.toLowerCase() === identity.email.toLowerCase();
+    const entries: HistoryEntry[] = found.entries.map((version) => ({
+      sha: version.sha,
+      date: version.date,
+      subject: version.subject,
+      actor: kintsugi(version) ? (version.trailerActor ?? version.authorName) : version.authorName,
+      minor: kintsugi(version) && version.trailerMinor,
+    }));
+    const last = entries[entries.length - 1];
+    return { ...resolved, path: file, followsRenames: true, entries, next: found.more && last !== undefined ? last.sha : null };
   }
 
   /** A text file at a ref (at most MAX_DOCUMENT_BYTES). */

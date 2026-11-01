@@ -24,6 +24,15 @@ const commitSchema = z.string().regex(/^([0-9a-f]{40}|[0-9a-f]{64})$/, "must be 
 export const compareQuerySchema = z.object({ path: z.string().min(1).max(1000), from: commitSchema, to: commitSchema });
 export type CompareQuery = z.infer<typeof compareQuerySchema>;
 
+/** `?ref&path&limit&before` of a file's history: `before` is the `next` of the previous page. */
+export const historyQuerySchema = z.object({
+  ref: refSchema,
+  path: z.string().min(1).max(1000),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  before: z.string().regex(/^([0-9a-f]{40}|[0-9a-f]{64})$/, "must be a commit id").optional(),
+});
+export type HistoryQuery = z.infer<typeof historyQuerySchema>;
+
 /** `?ref&compare` of a stage's results; compare=true adds the previous run's counts. */
 export const resultsQuerySchema = z.object({
   ref: refSchema,

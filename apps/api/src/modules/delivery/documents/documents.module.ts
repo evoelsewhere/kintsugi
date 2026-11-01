@@ -5,6 +5,7 @@
 import { Module } from "@nestjs/common";
 import { DocumentWritesModule } from "#modules/admin/document-writes/index.js";
 import { ProjectAccessModule } from "#modules/admin/project-access/index.js";
+import { InstallationSettingsModule } from "#modules/admin/settings/index.js";
 import { ProjectsModule } from "#modules/admin/projects/index.js";
 import { RuntimeJobsModule } from "#modules/delivery/runtime-jobs/index.js";
 import { GapAnswersService } from "./application/gap-answers.service.js";
@@ -16,7 +17,7 @@ import { DocumentsController } from "./interface/documents.controller.js";
 
 /** delivery · documents (ADR-0025, ADR-0028): the document repo as the mirror holds it, and stage results. */
 @Module({
-  imports: [ProjectAccessModule, ProjectsModule, RuntimeJobsModule, DocumentWritesModule],
+  imports: [ProjectAccessModule, ProjectsModule, RuntimeJobsModule, DocumentWritesModule, InstallationSettingsModule],
   controllers: [DocumentsController],
   providers: [GapAnswersService, DocumentsService, StageResultsService, { provide: DocumentRepoReader, useClass: GitMirrorDocumentReader }],
   exports: [DocumentsService, StageResultsService],

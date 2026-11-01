@@ -1,7 +1,7 @@
 // Port of document repo reads: the mirror Kintsugi keeps of a project's document repository
 // (ADR-0025), read-only. Implemented over the git CLI (packages/git).
 
-import type { DocumentDiff, DocumentRepo, FileRead, GrepLine, MirrorBranch, TreeEntry } from "./document.js";
+import type { DocumentDiff, DocumentRepo, FileRead, FileVersion, GrepLine, MirrorBranch, TreeEntry } from "./document.js";
 
 export abstract class DocumentRepoReader {
   /** Whether the mirror exists (the worker clones it on the first sync). */
@@ -35,4 +35,10 @@ export abstract class DocumentRepoReader {
    * when given; undefined when `from` is not a commit of the mirror.
    */
   abstract diff(repo: DocumentRepo, from: string, to: string, under: string | undefined): Promise<DocumentDiff | undefined>;
+  /**
+   * The commits that changed a file, newest first, following renames; at most `limit` entries and whether older ones
+   * exist. `before` is a version of the file: the page starts after it (none when it is not one). Only the newest
+   * 2,000 versions are read.
+   */
+  abstract history(repo: DocumentRepo, commit: string, path: string, options: { limit: number; before?: string }): Promise<{ entries: FileVersion[]; more: boolean }>;
 }

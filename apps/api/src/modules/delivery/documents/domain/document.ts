@@ -92,6 +92,46 @@ export interface DocumentCompare {
   hunks: CompareHunk[];
 }
 
+/** A commit that changed a file as Git records it: the author and the trailers are what the commit says, not yet trusted. */
+export interface FileVersion {
+  sha: string;
+  date: string;
+  subject: string;
+  authorName: string;
+  authorEmail: string;
+  /** The value of the `Kintsugi-Actor` trailer, when the commit has one. */
+  trailerActor: string | undefined;
+  /** The commit has the trailer `Kintsugi-Minor: true`. */
+  trailerMinor: boolean;
+}
+
+/** One version of a file: a commit that changed it (ADR-0096 decision 5). */
+export interface HistoryEntry {
+  sha: string;
+  /** The commit's author date. */
+  date: string;
+  /** The first line of the commit message: the version comment. */
+  subject: string;
+  /**
+   * The `Kintsugi-Actor` trailer of a commit Kintsugi made (its author is the commit identity), else the author's name.
+   * Anyone can write a trailer in a commit of their own, so no other commit's trailer is believed.
+   */
+  actor: string;
+  /** The commit is Kintsugi's own and carries the trailer `Kintsugi-Minor: true`. */
+  minor: boolean;
+}
+
+/** The versions of a file, newest first; `next` is the `before` of the following page when there are older ones. */
+export interface DocumentHistory {
+  ref: string;
+  commit: string;
+  path: string;
+  /** Renames of the file are followed: earlier versions under its old paths are listed. */
+  followsRenames: true;
+  entries: HistoryEntry[];
+  next: string | null;
+}
+
 /** What reading a file at a commit found. */
 export type FileRead =
   | { status: "ok"; size: number; content: string }
