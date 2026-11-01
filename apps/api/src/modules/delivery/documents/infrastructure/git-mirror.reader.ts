@@ -92,6 +92,11 @@ export class GitMirrorDocumentReader extends DocumentRepoReader {
     return { status: "ok", size, content };
   }
 
+  async patch(repo: DocumentRepo, from: string, to: string, path: string): Promise<string> {
+    // The path is literal (no glob); no external diff driver or text conversion runs on the repository's attributes.
+    return this.git(repo, ["-c", "core.quotePath=false", "--literal-pathspecs", "diff", "--unified=3", "--no-color", "--no-ext-diff", "--no-textconv", "--no-renames", from, to, "--", path]);
+  }
+
   async grep(repo: DocumentRepo, commit: string, terms: readonly string[], options: { ignoreCase: boolean; under?: string; limit: number }): Promise<{ matches: GrepLine[]; truncated: boolean }> {
     // Fixed strings over the Markdown files only: their blobs are in the mirror, and a pattern cannot backtrack.
     // Several terms must all be on the same line.

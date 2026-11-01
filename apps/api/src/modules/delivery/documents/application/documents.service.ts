@@ -11,6 +11,8 @@ import { type ProjectDetail, ProjectsService } from "#modules/admin/projects/ind
 import { JobRunsService, type JobRunView } from "#modules/delivery/runtime-jobs/index.js";
 import { type DocumentDiff, type DocumentFile, type DocumentRef, type DocumentRefs, type DocumentRepo, type DocumentTree, type GrepLine, MAX_DOCUMENT_BYTES, type MirrorBranch, diffFileWithin } from "../domain/document.js";
 import { DocumentRepoReader } from "../domain/document.ports.js";
+import { parseUnifiedDiff } from "../domain/unified-diff.js";
+import type { DocumentCompare } from "../domain/document.js";
 
 /** A project's document repo, ready to read: the mirror and its default branch. */
 export interface DocumentContext {
@@ -231,5 +233,39 @@ export class DocumentsService {
         throw new UnsupportedMediaTypeException(`${file} is not a text file`);
     }
     return { ...resolved, path: file, size: read.size, content: read.content };
+  }
+
+  /**
+   * One file at two commits of the mirror: its unified diff, or none when the text is the same. A side where the file
+   * does not exist counts as empty (the file is added or deleted); 404 when neither has it, and a side that is too
+   * large or not text is refused as `file` refuses it.
+   */
+  async compare(projectId: string, path: string, from: string, to: string): Promise<DocumentCompare> {
+    const file = servablePath(path, false);
+    const context = await this.context(projectId);
+    for (const commit of [from, to]) {
+      if (!(await this.reader.hasCommit(context.repo, commit))) throw new NotFoundException(`Commit ${commit} is not in the document repo mirror`);
+    }
+    const side = async (commit: string): Promise<string | undefined> => {
+      const read = await this.reader.read(context.repo, commit, file, MAX_DOCUMENT_BYTES);
+      switch (read.status) {
+        case "missing":
+          return undefined;
+        case "not-a-file":
+          throw new BadRequestException(`${file} is a directory at ${commit}; list it with /documents/tree`);
+        case "too-large":
+          throw new PayloadTooLargeException(`${file} is ${read.size} bytes at ${commit}; the documents API serves files up to ${MAX_DOCUMENT_BYTES} bytes`);
+        case "binary":
+          throw new UnsupportedMediaTypeException(`${file} is not a text file`);
+        case "ok":
+          return read.content;
+      }
+    };
+    const [older, newer] = [await side(from), await side(to)];
+    if (older === undefined && newer === undefined) throw new NotFoundException(`${file} does not exist at either commit`);
+    const status = older === undefined ? "added" : newer === undefined ? "deleted" : older === newer ? "unchanged" : "modified";
+    const hunks = status === "unchanged" ? [] : parseUnifiedDiff(await this.reader.patch(context.repo, from, to, file));
+    const lines = hunks.flatMap((hunk) => hunk.lines);
+    return { path: file, from, to, status, added: lines.filter((line) => line.type === "add").length, removed: lines.filter((line) => line.type === "del").length, hunks };
   }
 }

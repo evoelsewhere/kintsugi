@@ -5,6 +5,7 @@
 
 import type { CatalogRule, DataObject, Finding, Gap, GapCounts, Inventory, SecurityReport, Table, TopoDomainEdge, TopoEdge, TopoFlow, TraceUnit } from "@kintsugi/agents/reader";
 import type { RuleId, RulesReviewRecord } from "@kintsugi/domain";
+import type { CompareHunk } from "./unified-diff.js";
 
 /** The mirror of a project's document repository (ADR-0025). */
 export interface DocumentRepo {
@@ -69,6 +70,8 @@ export interface DocumentTree {
   entries: TreeEntry[];
 }
 
+export type { CompareHunk, CompareLine } from "./unified-diff.js";
+
 export interface DocumentFile {
   ref: string;
   commit: string;
@@ -76,6 +79,17 @@ export interface DocumentFile {
   size: number;
   /** The file's text. The document repository holds Markdown (ADR-0042); front matter is part of it. */
   content: string;
+}
+
+/** One file at two commits: its unified diff, with old and new line numbers. */
+export interface DocumentCompare {
+  path: string;
+  from: string;
+  to: string;
+  status: "unchanged" | "added" | "deleted" | "modified";
+  added: number;
+  removed: number;
+  hunks: CompareHunk[];
 }
 
 /** What reading a file at a commit found. */
