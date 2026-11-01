@@ -15,9 +15,9 @@ import { useLoader } from "@/lib/use-loader";
 import { useNow } from "@/lib/use-now";
 import { RunActions, type RunActionProps } from "./run-actions";
 import { RunAttempts } from "./run-attempts";
-import { humanize, isProblem, logLine, statsByStep, useRunEvents, withDescendants } from "./run-events";
+import { isProblem, logLine, statsByStep, useRunEvents, withDescendants } from "./run-events";
 import { RunLog } from "./run-log";
-import { type ConsoleFilter, eventStepLabels, filterRunEvents, stepsForAttempt } from "./run-model";
+import { type ConsoleFilter, eventStepLabels, filterRunEvents, stepNames, stepsForAttempt } from "./run-model";
 import { RunOutput } from "./run-output";
 import { RunOverview } from "./run-overview";
 import { StepList, type StepsContext } from "./run-steps";
@@ -90,13 +90,7 @@ function RunWorkspace({
   const apiLabels = useMemo(() => {
     const result = new Map<string, string>();
     for (const siblings of [stepsForAttempt(run, attempt), ...Object.values(children)]) {
-      const seen = new Map<string, number>();
-      for (const step of siblings) {
-        const n = (seen.get(step.name) ?? 0) + 1;
-        seen.set(step.name, n);
-        const suffix = siblings.filter((candidate) => candidate.name === step.name).length > 1 ? ` #${n}` : "";
-        result.set(step.id, humanize(step.name) + suffix);
-      }
+      for (const [id, name] of stepNames(siblings)) result.set(id, name);
     }
     return result;
   }, [run, attempt, children]);
