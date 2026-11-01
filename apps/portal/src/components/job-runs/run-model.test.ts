@@ -3,7 +3,7 @@ import type { JobRunEvent, JobRunView } from "@/lib/api/job-runs";
 vi.hoisted(() => {
   (globalThis as { localStorage?: unknown }).localStorage = { getItem: () => null, setItem: () => undefined, removeItem: () => undefined };
 });
-import { describeStepCounts, eventStepLabels, filterJobRuns, filterRunEvents, retryNotice, stepCounts, stepsForAttempt } from "./run-model";
+import { describeStepCounts, eventStepLabels, filterJobRuns, filterRunEvents, retryNotice, stepCounts, stepNames, stepsForAttempt } from "./run-model";
 import { timelineOf } from "./run-events";
 
 const job = (id: string, createdAt: string, extra: Partial<JobRunView> = {}): JobRunView => ({
@@ -145,5 +145,29 @@ describe("the retry notice", () => {
       "Reuses the steps whose inputs have not changed. Steps of Legacy analyst run again: it looks things up on the web, and what it finds may have changed.",
     );
     expect(retryNotice({ rerunsWebAgents: ["legacy-analyst"] }, true)).toBe("Starts again from the pinned source commits.");
+  });
+});
+
+describe("step names", () => {
+  const agent = (id: string, label?: string): JobRunView =>
+    job(id, "2026-10-25T00:00:00Z", { kind: "agent", name: "legacy-analyst", ...(label === undefined ? {} : { label }) });
+
+  it("names a step after its plan step and its agent", () => {
+    const names = stepNames([agent("a", "structure"), agent("b", "topology"), agent("c", "catalog-curate"), agent("d", "synthesis")]);
+    expect([...names.values()]).toEqual([
+      "Structure (legacy-analyst)",
+      "Topology (legacy-analyst)",
+      "Catalog curation (legacy-analyst)",
+      "Synthesis (legacy-analyst)",
+    ]);
+  });
+
+  it("keeps the numbered agent names of older runs without a plan step", () => {
+    const names = stepNames([agent("a"), agent("b"), job("c", "2026-10-25T00:00:00Z", { kind: "agent", name: "security-auditor" })]);
+    expect([...names.values()]).toEqual(["Legacy analyst #1", "Legacy analyst #2", "Security auditor"]);
+  });
+
+  it("numbers steps that run the same plan step again", () => {
+    expect([...stepNames([agent("a", "topology"), agent("b", "topology")]).values()]).toEqual(["Topology (legacy-analyst) #1", "Topology (legacy-analyst) #2"]);
   });
 });

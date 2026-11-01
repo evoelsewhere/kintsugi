@@ -9,8 +9,8 @@ import { Logger, StandardSchemaValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import type { NextFunction, Request, Response } from "express";
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { AppModule } from "./app.module.js";
+import { AuthService } from "#modules/core/auth/index.js";
 import { loadEnv, debugMcpEnabled } from "./common/config/env.js";
 import { ensureSchema, getPool } from "./common/db/pool.js";
 import { captureLogs, pgDebugLogSink } from "@kintsugi/domain";
@@ -18,6 +18,7 @@ import { HttpExceptionFilter } from "./common/filters/http-exception.filter.js";
 import { ResponseInterceptor } from "./common/interface/response.js";
 import { configureApiBodyParser } from "./common/interface/body-parser.js";
 import { configureSecurityHeaders } from "./common/interface/security-headers.js";
+import { configureApiDocs } from "./common/interface/api-docs.js";
 
 /** Local development configuration lives in .env (gitignored); the compose package passes env directly. */
 if (existsSync(".env")) process.loadEnvFile(".env");
@@ -58,13 +59,9 @@ async function bootstrap(): Promise<void> {
   app.useGlobalInterceptors(new ResponseInterceptor());
   app.useGlobalPipes(new StandardSchemaValidationPipe());
 
-  const openApi = new DocumentBuilder()
-    .setTitle("Kintsugi API")
-    .setDescription("REST API of the Kintsugi migration & modernization portal.")
-    .setVersion("0.0.0")
-    .addBearerAuth()
-    .build();
-  SwaggerModule.setup("api/docs", app, SwaggerModule.createDocument(app, openApi));
+  // The OpenAPI document and Swagger UI are for signed-in sessions only.
+  const auth = app.get(AuthService);
+  configureApiDocs(app, (token) => auth.authenticate(token));
 
   await app.listen(env.port);
 }

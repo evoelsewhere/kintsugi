@@ -5,7 +5,7 @@
 // written before the table existed has none: the view says so instead of showing an empty list as a clean bill.
 
 import { DEFAULT_GAP_SETTLER, GAP_SETTLERS, type GapSettler, gapIsResolved } from "@kintsugi/domain";
-import { CircleHelp } from "lucide-react";
+import { CircleHelp, ExternalLink } from "lucide-react";
 import { useState } from "react";
 import { InlineText } from "@/components/results/inline-text";
 import { StatusBadge } from "@/components/status-badges";
@@ -21,6 +21,7 @@ import { documentsApi } from "@/lib/api/documents";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/components/ui/toast";
 import { CountChip, Section } from "./results-parts";
+import { gapState } from "./results-format";
 
 const IMPACT_TONE: Record<GapImpact, StatusTone> = { blocking: "red", risk: "orange", note: "muted" };
 const IMPACT_NOTE: Record<GapImpact, string> = {
@@ -95,7 +96,7 @@ export function GapsResultsView({ results, projectId, onOpenItem }: { results: G
   const columns: Column<Gap>[] = [
     { id: "id", header: "ID", cell: (row) => <span className="font-mono text-[12px] whitespace-nowrap text-text">{row.id}</span>, sort: (row) => row.id },
     { id: "impact", header: "Impact", cell: (row) => <StatusBadge tone={IMPACT_TONE[row.impact]} label={row.impact} title={IMPACT_NOTE[row.impact]} />, sort: (row) => GAP_IMPACTS.indexOf(row.impact) },
-    { id: "status", header: "Status", cell: (row) => <StatusBadge tone={isResolved(row) ? "green" : "orange"} label={isResolved(row) ? "Resolved" : "Open"} />, sort: (row) => Number(isResolved(row)) },
+    { id: "status", header: "Status", cell: (row) => <StatusBadge {...gapState(row, isResolved(row))} />, sort: (row) => (row.openWrite === undefined ? Number(isResolved(row)) : 2) },
     { id: "kind", header: "Kind", cell: (row) => <span className="text-[12px] whitespace-nowrap text-text-secondary" title={KIND_NOTE[row.kind]}>{KIND_LABEL[row.kind]}</span>, sort: (row) => GAP_KINDS.indexOf(row.kind) },
     { id: "question", header: "Question", cell: (row) => <InlineText text={row.question} className="text-text" />, sort: (row) => row.question, search: (row) => `${row.id} ${row.question} ${row.where} ${row.item ?? ""} ${row.probe ?? ""}`, className: "min-w-[280px]" },
     {
@@ -111,7 +112,7 @@ export function GapsResultsView({ results, projectId, onOpenItem }: { results: G
     },
     { id: "where", header: "Where", cell: (row) => <InlineText text={row.where === "" ? "—" : row.where} className="font-mono text-[12px] text-text-muted" />, sort: (row) => row.where },
     { id: "answer", header: "Answer / evidence", cell: (row) => <span className="flex flex-col gap-1"><InlineText text={row.answer ?? "—"} className="text-text" />{row.evidence === undefined ? null : <InlineText text={row.evidence} className="text-[12px] text-text-muted" />}</span> },
-    ...(projectId !== undefined && can("documents.resolve") ? [{ id: "resolve", header: "", cell: (row: Gap) => <Button size="small" variant="ghost" disabled={row.item === undefined} onClick={() => edit(row)}>{isResolved(row) ? "Reopen / edit" : "Answer"}</Button> } satisfies Column<Gap>] : []),
+    ...(projectId !== undefined && can("documents.resolve") ? [{ id: "resolve", header: "", cell: (row: Gap) => <AnswerAction row={row} resolved={isResolved(row)} onEdit={edit} /> } satisfies Column<Gap>] : []),
     ...(gaps.some((gap) => gap.item !== undefined) && results.applicationId !== ""
       ? [
           {
@@ -171,5 +172,29 @@ export function GapsResultsView({ results, projectId, onOpenItem }: { results: G
         </div>
       </ConfirmDialog>
     </div>
+  );
+}
+
+/** Answer a gap, or follow the answer already proposed for it: one open correction per specification (ADR-0094). */
+function AnswerAction({ row, resolved, onEdit }: { row: Gap; resolved: boolean; onEdit: (gap: Gap) => void }): React.JSX.Element {
+  if (row.openWrite?.prUrl !== undefined) {
+    return (
+      <a href={row.openWrite.prUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 whitespace-nowrap text-[12px] text-accent hover:underline">
+        View pull request
+        <ExternalLink className="size-3.5" />
+      </a>
+    );
+  }
+  if (row.openWrite !== undefined) {
+    return (
+      <Button size="small" variant="ghost" disabled title="The writer has not opened its pull request yet">
+        Proposal queued
+      </Button>
+    );
+  }
+  return (
+    <Button size="small" variant="ghost" disabled={row.item === undefined} onClick={() => onEdit(row)}>
+      {resolved ? "Reopen / edit" : "Answer"}
+    </Button>
   );
 }

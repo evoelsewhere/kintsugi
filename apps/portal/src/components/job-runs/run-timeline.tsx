@@ -4,7 +4,8 @@ import { StatusDot } from "@/components/ui/status-dot";
 import type { JobRunView } from "@/lib/api/job-runs";
 import { formatDuration } from "@/lib/format";
 import { RUN_STATUS, styleOf } from "@/lib/status";
-import { humanize, timelineOf } from "./run-events";
+import { timelineOf } from "./run-events";
+import { stepNames } from "./run-model";
 
 /** A running step whose events look like a loop or a hung model turn; the reason is its title. */
 export function PossiblyStuck({ reason }: { reason: string }): React.JSX.Element {
@@ -29,14 +30,12 @@ export function StepTimeline({
   onSelect: (id: string) => void;
 }): React.JSX.Element {
   const { rows } = timelineOf(steps, now);
-  const seen = new Map<string, number>();
+  const names = stepNames(steps);
   return (
     <ol className="flex flex-col gap-1" aria-label="Execution timeline">
       {steps.map((step, index) => {
         const row = rows[index];
-        const n = (seen.get(step.name) ?? 0) + 1;
-        seen.set(step.name, n);
-        const label = humanize(step.name) + (steps.filter((s) => s.name === step.name).length > 1 ? ` #${n}` : "");
+        const label = names.get(step.id) ?? "";
         return (
           <li key={step.id}>
             <button

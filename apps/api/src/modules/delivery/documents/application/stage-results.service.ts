@@ -16,8 +16,10 @@ import {
   unitRulesPath,
   unitUnderstandingPath,
 } from "@kintsugi/domain";
+import type { Gap } from "@kintsugi/agents/reader";
+import { DocumentWritesService, pullRequestNumber } from "#modules/admin/document-writes/index.js";
 import { JobRunsService, type JobRunView } from "#modules/delivery/runtime-jobs/index.js";
-import { type DocumentRef, MAX_DOCUMENT_BYTES, RESULT_STAGES, type ResultStage, type StageFile, type StageHeadline, type StageResults } from "../domain/document.js";
+import { type DocumentRef, type GapOpenWrite, MAX_DOCUMENT_BYTES, RESULT_STAGES, type ResultStage, type StageFile, type StageHeadline, type StageResults } from "../domain/document.js";
 import { DocumentRepoReader } from "../domain/document.ports.js";
 import { type DocumentContext, DocumentsService } from "./documents.service.js";
 import {
@@ -59,6 +61,7 @@ export class StageResultsService {
     private readonly documents: DocumentsService,
     private readonly runs: JobRunsService,
     private readonly reader: DocumentRepoReader,
+    private readonly writes: DocumentWritesService,
   ) {}
 
   async results(projectId: string, applicationId: string, stage: string, ref: string | undefined, compare: boolean): Promise<StageResults> {
@@ -91,9 +94,11 @@ export class StageResultsService {
       case "harden":
         results = { stage, ...common, ...(await hardenResults(source, appDir)), restrictedRecords: runId === undefined ? 0 : await this.restrictedCount(projectId, runId), ...(runId === undefined ? {} : { runId }) };
         break;
-      case "gaps":
-        results = { stage, ...common, ...(await gapsResults(source, appDir)) };
+      case "gaps": {
+        const built = await gapsResults(source, appDir);
+        results = { stage, ...common, ...built, gaps: await this.withOpenWrites(projectId, applicationId, built.gaps) };
         break;
+      }
       case "understand": {
         // Work-item status is current on the default branch, not on the run's branch.
         const tip = await this.defaultBranchRef(context);
@@ -160,13 +165,30 @@ export class StageResultsService {
         return { stage: view, ...common, ...(await rulesResults(source, appDir)) };
       case "harden":
         return { stage: view, ...common, ...(await hardenResults(source, appDir)), restrictedRecords: 0 };
-      case "gaps":
-        return { stage: view, ...common, ...(await gapsResults(source, appDir, item)) };
+      case "gaps": {
+        const built = await gapsResults(source, appDir, item);
+        return { stage: view, ...common, ...built, gaps: await this.withOpenWrites(projectId, applicationId, built.gaps) };
+      }
       case "understand":
         return { stage: view, ...common, ...(await understandResults(source, appDir, applicationId, [], undefined, item)) };
       default:
         throw new BadRequestException(`View "${view}" is not an understand result`);
     }
+  }
+
+  /** Each gap with the open correction that answers it (ADR-0094), read from the document writes. */
+  async withOpenWrites(projectId: string, applicationId: string, gaps: Gap[]): Promise<Array<Gap & { openWrite?: GapOpenWrite }>> {
+    const open = await this.writes.openCorrections(projectId);
+    if (open.length === 0) return gaps;
+    return gaps.map((gap) => {
+      if (gap.item === undefined) return gap;
+      const [module = "", unit = ""] = gap.item.split("/");
+      const path = unitAsIsPath(applicationId, module, unit);
+      const write = open.find((candidate) => candidate.correction?.path === path && candidate.correction.gap === gap.id);
+      if (write === undefined) return gap;
+      const prNumber = pullRequestNumber(write.prUrl);
+      return { ...gap, openWrite: { id: write.id, status: write.status, ...(write.prUrl === undefined ? {} : { prUrl: write.prUrl }), ...(prNumber === undefined ? {} : { prNumber }) } };
+    });
   }
 
   /** The headline numbers of every result stage of an application, at each stage's default ref. */

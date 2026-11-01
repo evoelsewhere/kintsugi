@@ -4,9 +4,9 @@
 
 import { Injectable } from "@nestjs/common";
 import type { Pool } from "pg";
-import { getPool } from "#common/db/pool.js";
-import type { DocumentWriteFilter, DocumentWriteRecord, DocumentWriteStatus, NewDocumentWrite } from "../domain/document-write.js";
-import { DocumentWriteStore } from "../domain/document-write.ports.js";
+import { getPool, withTransaction } from "#common/db/pool.js";
+import type { DocumentWriteCorrection, DocumentWriteFilter, DocumentWriteRecord, DocumentWriteStatus, NewDocumentWrite } from "../domain/document-write.js";
+import { type CorrectionOutcome, DocumentWriteStore } from "../domain/document-write.ports.js";
 
 interface WriteRow {
   id: string;
@@ -22,11 +22,15 @@ interface WriteRow {
   actor: string | null;
   job_id: string | null;
   agent: string | null;
+  correction: DocumentWriteCorrection | null;
   created_at: Date;
   updated_at: Date;
 }
 
-const COLUMNS = "id, project_id, kind, status, message, branch, commit_sha, branch_commit_sha, pr_url, error, actor, job_id, agent, created_at, updated_at";
+const COLUMNS = "id, project_id, kind, status, message, branch, commit_sha, branch_commit_sha, pr_url, error, actor, job_id, agent, correction, created_at, updated_at";
+
+/** The SQL twin of `isOpenCorrection`. */
+const OPEN_CORRECTION = "correction is not null and (status = 'queued' or (branch is not null and status in ('committed', 'pr-opened')))";
 
 const optional = <K extends string>(key: K, value: string | null): { [P in K]?: string } => (value === null ? {} : ({ [key]: value } as { [P in K]?: string }));
 
@@ -45,6 +49,7 @@ function toRecord(row: WriteRow): DocumentWriteRecord {
     ...optional("actor", row.actor),
     ...optional("jobId", row.job_id),
     ...optional("agent", row.agent),
+    ...(row.correction === null ? {} : { correction: { path: row.correction.path, gap: row.correction.gap } }),
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
   };
@@ -58,10 +63,31 @@ export class PgDocumentWriteStore extends DocumentWriteStore {
 
   async create(write: NewDocumentWrite): Promise<DocumentWriteRecord> {
     const result = await this.#pool.query<WriteRow>(
-      `insert into workflow.document_write (id, project_id, kind, message, actor) values ($1, $2, $3, $4, $5) returning ${COLUMNS}`,
-      [write.id, write.projectId, write.kind, write.message, write.actor ?? null],
+      `insert into workflow.document_write (id, project_id, kind, message, actor, correction) values ($1, $2, $3, $4, $5, $6) returning ${COLUMNS}`,
+      [write.id, write.projectId, write.kind, write.message, write.actor ?? null, write.correction === undefined ? null : JSON.stringify(write.correction)],
     );
     return toRecord(result.rows[0]!);
+  }
+
+  async createCorrection(write: NewDocumentWrite & { correction: DocumentWriteCorrection }): Promise<CorrectionOutcome> {
+    return withTransaction(async (tx) => {
+      await tx.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [JSON.stringify(["document-correction", write.projectId, write.correction.path])]);
+      const open = await tx.query<WriteRow>(
+        `select ${COLUMNS} from workflow.document_write where project_id = $1 and correction->>'path' = $2 and ${OPEN_CORRECTION} order by created_at desc limit 1`,
+        [write.projectId, write.correction.path],
+      );
+      if (open.rows[0] !== undefined) return { open: toRecord(open.rows[0]) };
+      const result = await tx.query<WriteRow>(
+        `insert into workflow.document_write (id, project_id, kind, message, actor, correction) values ($1, $2, $3, $4, $5, $6) returning ${COLUMNS}`,
+        [write.id, write.projectId, write.kind, write.message, write.actor ?? null, JSON.stringify(write.correction)],
+      );
+      return { created: toRecord(result.rows[0]!) };
+    });
+  }
+
+  async openCorrections(projectId: string): Promise<DocumentWriteRecord[]> {
+    const result = await this.#pool.query<WriteRow>(`select ${COLUMNS} from workflow.document_write where project_id = $1 and ${OPEN_CORRECTION} order by created_at desc`, [projectId]);
+    return result.rows.map(toRecord);
   }
 
   async listForProject(projectId: string, limit: number, offset: number): Promise<{ items: DocumentWriteRecord[]; total: number }> {

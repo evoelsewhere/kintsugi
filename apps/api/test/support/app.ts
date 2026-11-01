@@ -70,6 +70,10 @@ async function bootTestApp(
     app.useGlobalFilters(new HttpExceptionFilter());
     app.useGlobalInterceptors(new ResponseInterceptor());
     app.useGlobalPipes(new StandardSchemaValidationPipe());
+    const { configureApiDocs } = await import("../../src/common/interface/api-docs.js");
+    const { AuthService } = await import("#modules/core/auth/index.js");
+    const auth = nest.get(AuthService);
+    configureApiDocs(nest, (token) => auth.authenticate(token));
     await app.listen(0, "127.0.0.1");
   } catch (error) {
     await app?.close();

@@ -308,6 +308,8 @@ export interface Gap {
   settledBy?: GapSettler;
   /** The concrete step that would settle it. */
   probe?: string;
+  /** An answer to it waiting for review (ADR-0094): its document write and pull request. */
+  openWrite?: { id: string; status: string; prUrl?: string; prNumber?: number };
 }
 
 export interface GapsResults extends ResultsBase {

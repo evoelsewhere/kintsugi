@@ -1,7 +1,7 @@
 // Application layer: sign-in, sessions and the bootstrap admin (ADR-0008).
 // The first admin comes from KINTSUGI_BOOTSTRAP_ADMIN_* — there is no default password.
 
-import { HttpException, HttpStatus, Injectable, OnApplicationBootstrap, UnauthorizedException } from "@nestjs/common";
+import { HttpException, HttpStatus, Injectable, Logger, OnApplicationBootstrap, ServiceUnavailableException, UnauthorizedException } from "@nestjs/common";
 import { loadBootstrapAdmin } from "#common/config/env.js";
 import type { UserRecord } from "#modules/admin/users/index.js";
 import { UsersService } from "#modules/admin/users/index.js";
@@ -19,6 +19,8 @@ export interface SessionUser {
 
 @Injectable()
 export class AuthService implements OnApplicationBootstrap {
+  readonly #logger = new Logger(AuthService.name);
+
   constructor(
     private readonly users: UsersService,
     private readonly roles: RolesService,
@@ -44,10 +46,16 @@ export class AuthService implements OnApplicationBootstrap {
       );
     }
     let user: UserRecord | undefined;
+    let checked = false;
     try {
       user = await this.users.validateCredentials(username, password);
+      checked = true;
+    } catch (error) {
+      // A store that failed is not a wrong password: the attempt is not counted, and the person is told to try again.
+      this.#logger.warn(`sign-in check failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw new ServiceUnavailableException("Sign-in is unavailable right now; try again in a moment");
     } finally {
-      this.throttle.end(username, user !== undefined);
+      this.throttle.end(username, checked ? user !== undefined : undefined);
     }
     if (user === undefined) throw new UnauthorizedException("Invalid username or password");
     return this.sessionUser(user);
