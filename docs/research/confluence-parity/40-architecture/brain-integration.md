@@ -38,21 +38,22 @@ New kinds would change the member tools' contract (`kind` is part of every tree 
 
 ### Sibling order
 
-Today folders come first, then documents (`README.md` or `index.md` first), each in name order. With wiki pages, the folder's `README.md` may carry `order:`, a list of entry names in the folder (decided in the board thread on authoring follow-ups, so a reorder changes one file):
+Today a folder's children are its folders by name, then its documents with `README.md` or `index.md` first and the rest by name. With wiki pages, the folder's `README.md` may carry `order:`, a list of entry names in the folder (decided in the board thread on authoring follow-ups, so a reorder changes one file):
 
-1. `README.md` / `index.md` first, as today (it is the parent page itself);
-2. then the entries the list names, **folders and documents together**, in list order;
-3. then the entries it does not name, in today's order (folders, then documents, by name); names that match nothing are ignored.
+1. the entries the list names come first, **folders and documents together**, in list order;
+2. then the entries it does not name, in today's order (folders, then the home page, then documents by name); names that match nothing are ignored.
+
+The home page keeps its place among the rest; the wiki shows it as the folder's own page, so its position among the children does not matter.
 
 How a list entry names a sibling:
 
 - An entry matches a folder of that name, or a document `<entry>` or `<entry>.md`, so `deploy.md`, `deploy` and `runbooks` all work.
-- When an entry matches both a folder and a document (`runbooks/` and `runbooks.md`), both take its place, the folder first.
+- When an entry matches both a folder and a document (`runbooks/` and `runbooks.md`), the folder takes the place and the document stays with the rest; list `runbooks.md` as well to place it.
 - A sibling named twice keeps its first place; an entry that matches nothing is ignored.
 - The list is read in either front matter list form: a block list (`order:` then `  - "deploy.md"`, the documented form) or a flow list (`order: [deploy, runbooks]`).
 - A folder whose name starts with `_` (`_templates`) may be listed. It takes its place in the order but is still left out of the default tree when it holds only templates, under the archived and template rule below.
 
-The third rule keeps the order of every existing repository unchanged, since no README has `order:` today. Mixing folders and documents among listed entries is what lets a page with children sit between two leaf pages, as in a Confluence page tree, where `position` orders a page among its siblings.
+The second rule keeps the order of every existing repository unchanged, since no README has `order:` today. Mixing folders and documents among listed entries is what lets a page with children sit between two leaf pages, as in a Confluence page tree, where `position` orders a page among its siblings.
 
 ### Summaries
 
