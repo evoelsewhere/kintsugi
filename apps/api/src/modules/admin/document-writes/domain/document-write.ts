@@ -10,6 +10,8 @@ export type DocumentWriteStatus = (typeof DOCUMENT_WRITE_STATUSES)[number];
 export interface DocumentWriteFilter {
   statuses?: readonly DocumentWriteStatus[];
   projectId?: string;
+  /** Only writes of these projects (the caller's Project Access); absent means every project. */
+  projectIds?: readonly string[];
 }
 
 /** The document and gap a correction answers (ADR-0094). */

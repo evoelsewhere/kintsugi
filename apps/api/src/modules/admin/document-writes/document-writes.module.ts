@@ -2,6 +2,7 @@
 // pg-boss queue bound to the domain ports. Projects come from the projects module.
 
 import { Module } from "@nestjs/common";
+import { ProjectAccessModule } from "#modules/admin/project-access/index.js";
 import { ProjectsModule } from "#modules/admin/projects/index.js";
 import { DocumentWritesService } from "./application/document-writes.service.js";
 import { DocumentRepoSkeleton, DocumentWriteQueue, DocumentWriteStore } from "./domain/document-write.ports.js";
@@ -13,7 +14,7 @@ import { DocumentWritesController } from "./interface/document-writes.controller
 
 /** admin · document repo writes (A1 + E6, ADR-0019): the API records and enqueues, the worker commits. */
 @Module({
-  imports: [ProjectsModule],
+  imports: [ProjectAccessModule, ProjectsModule],
   controllers: [DocumentWritesController, AllDocumentWritesController],
   providers: [
     DocumentWritesService,
