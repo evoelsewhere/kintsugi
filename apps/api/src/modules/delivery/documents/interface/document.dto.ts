@@ -19,6 +19,11 @@ export type TreeQuery = z.infer<typeof treeQuerySchema>;
 export const fileQuerySchema = z.object({ ref: refSchema, path: z.string().min(1).max(1000) });
 export type FileQuery = z.infer<typeof fileQuerySchema>;
 
+/** `?path&from&to` of the comparison of one file at two commits. */
+const commitSchema = z.string().regex(/^([0-9a-f]{40}|[0-9a-f]{64})$/, "must be a commit id");
+export const compareQuerySchema = z.object({ path: z.string().min(1).max(1000), from: commitSchema, to: commitSchema });
+export type CompareQuery = z.infer<typeof compareQuerySchema>;
+
 /** `?ref&compare` of a stage's results; compare=true adds the previous run's counts. */
 export const resultsQuerySchema = z.object({
   ref: refSchema,

@@ -23,6 +23,8 @@ export abstract class DocumentRepoReader {
    * listing of its directory at the same commit) saves looking the file up first.
    */
   abstract read(repo: DocumentRepo, commit: string, path: string, maxBytes: number, knownSize?: number): Promise<FileRead>;
+  /** The unified diff of one file between two commits of the mirror (3 lines of context), as `git diff` prints it. */
+  abstract patch(repo: DocumentRepo, from: string, to: string, path: string): Promise<string>;
   /**
    * The lines of the Markdown files at a commit that contain every one of `terms` (fixed strings, not patterns),
    * under `under` when given; at most `limit` lines, and whether more matched.

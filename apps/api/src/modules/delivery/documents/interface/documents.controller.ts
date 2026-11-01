@@ -10,7 +10,8 @@ import type { DocumentWriteRecord } from "#modules/admin/document-writes/index.j
 import { ProjectAccessGuard } from "#modules/admin/project-access/index.js";
 import { GapAnswersService } from "../application/gap-answers.service.js";
 import type { GapAnswer } from "../domain/gap-answer.js";
-import { gapAnswerSchema } from "./document.dto.js";
+import { type CompareQuery, compareQuerySchema, gapAnswerSchema } from "./document.dto.js";
+import type { DocumentCompare } from "../domain/document.js";
 import { DocumentsService } from "../application/documents.service.js";
 import { StageResultsService } from "../application/stage-results.service.js";
 import type { DocumentFile, DocumentRefs, DocumentTree, StageHeadline, StageResults } from "../domain/document.js";
@@ -39,6 +40,16 @@ export class DocumentsController {
   @ApiOkResponse({ description: "The default branch and the refs, newest first." })
   refs(@Param("id") id: string): Promise<DocumentRefs> {
     return this.documents.refs(id);
+  }
+
+  @Get("documents/compare")
+  @ApiOperation({
+    summary: "Compare one file of the document repo at two commits: its unified diff with old and new line numbers; never restricted/ or .git",
+    description: "from and to are commit ids of the mirror (the sha of a version from /documents/history). A file missing at one side is added or deleted; the same text at both gives status unchanged and no hunks. 413 over 2 MiB and 415 for a binary file, as /documents/file.",
+  })
+  @ApiOkResponse({ description: "The status, the counts of added and removed lines and the hunks." })
+  compare(@Param("id") id: string, @Query({ schema: compareQuerySchema }) query: CompareQuery): Promise<DocumentCompare> {
+    return this.documents.compare(id, query.path, query.from, query.to);
   }
 
   @Get("documents/tree")
