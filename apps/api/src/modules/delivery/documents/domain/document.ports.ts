@@ -1,7 +1,7 @@
 // Port of document repo reads: the mirror Kintsugi keeps of a project's document repository
 // (ADR-0025), read-only. Implemented over the git CLI (packages/git).
 
-import type { DocumentDiff, DocumentRepo, FileRead, FileVersion, GrepLine, MirrorBranch, TreeEntry } from "./document.js";
+import type { BytesRead, DocumentDiff, DocumentRepo, FileRead, FileVersion, GrepLine, MirrorBranch, TreeEntry } from "./document.js";
 
 export abstract class DocumentRepoReader {
   /** Whether the mirror exists (the worker clones it on the first sync). */
@@ -18,6 +18,8 @@ export abstract class DocumentRepoReader {
   abstract isAncestor(repo: DocumentRepo, ancestor: string, descendant: string): Promise<boolean>;
   /** The entries of a directory at a commit (`""` is the root); undefined when it is not a directory. */
   abstract list(repo: DocumentRepo, commit: string, path: string): Promise<TreeEntry[] | undefined>;
+  /** A file's bytes at a commit, refused when larger than `maxBytes`; any content, text or not. */
+  abstract readBytes(repo: DocumentRepo, commit: string, path: string, maxBytes: number): Promise<BytesRead>;
   /**
    * A text file at a commit, refused when larger than `maxBytes` or binary. `knownSize` (from a
    * listing of its directory at the same commit) saves looking the file up first.

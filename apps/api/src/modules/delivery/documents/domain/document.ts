@@ -63,6 +63,33 @@ export interface TreeEntry {
   size?: number;
 }
 
+/** A page attachment ready to serve: its bytes with the content type its extension fixes (never sniffed). */
+export interface DocumentAttachment {
+  ref: string;
+  commit: string;
+  path: string;
+  contentType: string;
+  /** `inline` for an image the page shows, `attachment` for a PDF. */
+  disposition: "inline" | "attachment";
+  bytes: Buffer;
+}
+
+/** The most bytes of one attachment the documents API serves (the writer's cap per file, ADR-0096). */
+export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+
+/** The content type of each attachment extension: the only types a page's `_attachments/` folder serves. */
+export const ATTACHMENT_MEDIA_TYPES: Readonly<Record<string, string>> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  pdf: "application/pdf",
+};
+
+/** What reading a file's bytes at a commit found. */
+export type BytesRead = { status: "ok"; size: number; bytes: Buffer } | { status: "missing" } | { status: "not-a-file" } | { status: "too-large"; size: number };
+
 export interface DocumentTree {
   ref: string;
   commit: string;
