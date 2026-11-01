@@ -40,7 +40,7 @@
 | COL-15 | In-app notification inbox | A bell lists shares, mentions, comments and likes on watched content; unread filter, mark all read, items age out after 30 days. | S6 | Partial: the portal follows changes over one SSE stream that carries topic and scope only ([ADR-0059](../../../decisions/0059-live-updates-over-sse.md), `apps/api/src/common/realtime/change-feed.ts`). No persisted per-user notification exists. | partial | M | `member`: the one place that tells him or her what needs a reply. Decided: `core.notification`, delivered over the change feed. |
 | COL-16 | Email notifications: real time and daily digest | Mentions, tasks and changes to watched or owned content by email at once, or one summary of the last 24 hours. | S7, S5 | None. [ADR-0008](../../../decisions/0008-authentication.md) has no email dependency; no mail sender exists. | gap | C | Deferred behind its own ADR (outbound dependency). In-app inbox first. |
 | COL-17 | Notification preferences and watch list | A person switches autowatch, blog watching and "notify on my actions", and lists and removes every watch. | S7, S5 | None. | gap | S | `member`: control over noise. |
-| COL-18 | Notifications respect view permission | Notifications require View permission on the content. | S5 | Project Access check exists for member reads (see COL-10); not applied to any notification. | partial | M | Same rule as COL-10. |
+| COL-18 | Notifications respect view permission | Notifications require View permission on the content. | S5 | Project Access check exists for member reads (see COL-10); not applied to any notification. | partial | M | `admin`: same rule as COL-10, so a revoked user stops receiving. |
 
 ## Sharing
 
@@ -80,8 +80,22 @@
 | ID | Feature | Confluence behaviour (one line) | Source | Kintsugi today | Gap | Priority | Notes |
 |---|---|---|---|---|---|---|---|
 | COL-37 | Audit of permission and restriction changes | The audit log records space, global and content-restriction changes, public-link toggles and admin-key use; page edits are not logged there (version history); CSV export; retention 1 to 12 months. | S13 | Have: append-only `governance.audit_event`, one port (`AuditTrail`), coverage for roles, members, gates, projects ([data model](../../../reference/data-model.md#audit-log)); no retention setting, no export. | partial | M | `admin`: who granted what, when. New actions for space grant, restriction and comment delete. |
-| COL-38 | Audit of reads of sensitive pages | Admin-key views are logged; ordinary views are not. | S13 | Have for restricted records: every read is audited fail-closed before the content returns (`restricted.read`). | partial | S | Only for COL-27. Ordinary page reads are not audited (decided; view counts are telemetry). |
+| COL-38 | Audit of reads of sensitive pages | Admin-key views are logged; ordinary views are not. | S13 | Have for restricted records: every read is audited fail-closed before the content returns (`restricted.read`). | partial | S | `admin`: shows who read a restricted page, only if COL-27 is built. Ordinary page reads are not audited (decided; view counts are telemetry). |
 | COL-39 | Page analytics | Views, unique viewers, per-person last view and engagement, link clicks (Premium and Enterprise); "engaged" means 20 seconds or more. | S17 | Partial: monitoring of member activity and Brain reads (`brain.read`, `apps/api/src/modules/monitoring/member-activity/`, [member CLI](../../../reference/member-cli.md)). | partial | C | `manager`: sees which standards are read, by people and by agents. Owned by the discovery area (`DIS-60` to `DIS-63`, one report and one privacy default); kept here only as a pointer. |
+
+## Permission rows mapped to Kintsugi
+
+Each Confluence level of the permission rows (COL-22 to COL-31), against what exists or the code it would need. The reasoning and the limits set by [ADR-0024](../../../decisions/0024-access-roles-vs-project-roles.md) are in the [gap analysis](gap-analysis.md#permission-mapping); the names are those of the architects' proposal (ADR-0099).
+
+| Confluence level | Existing in Kintsugi | Gap and the code it would need |
+|---|---|---|
+| Global permissions | Access-role permission codes (`core.permission`, `core.role_permission`) | `wiki.comment`, `wiki.write`, `wiki.publish`, `wiki.manage` by migration |
+| Space view | Project Access (`admin.project_access`, `project.access.manage`) | None; the portal's document routes must check it (prerequisite) |
+| Space roles Viewer, Collaborator, Manager, Admin | Access roles bundle codes; project roles never grant | Viewer = `wiki.comment`; Collaborator = `wiki.write`; Manager and Admin = `wiki.manage`; no new role concept |
+| Space or page edit restriction | None (`autoCommitPaths` only picks commit or pull request) | A space rule on a path prefix naming users or access roles, checked by the API |
+| Page view restriction | None | Declined on Git content; authored restricted pages are a candidate (COL-27, its own ADR) |
+| Groups | Access roles incl. admin-defined sub-roles | None; project roles are not subjects |
+| Admin override | `admin` holds every code | Audited as `wiki.rule.clear` |
 
 ## Sources
 
