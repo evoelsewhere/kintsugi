@@ -440,3 +440,30 @@ describe("member CLI reference (T4-009)", () => {
   });
 });
 
+describe("CLI messages (T4-008)", () => {
+  it("reports an argument a schema refuses as one readable line", async () => {
+    const state = harness(async () => ok({ schemaVersion: "1", items: [], limit: 25 }), { profile: true, token: "TEST-token" });
+    expect(await runCli(["document", "tree", "--project", "Bad Project!"], state.deps as never)).toBe(2);
+    expect(state.output().stderr.trim().split("\n")).toHaveLength(1);
+    expect(state.output().stderr).toMatch(/^Error INVALID_ARGUMENT: projectId: /);
+  });
+
+  it("prints a usage error once, and only JSON under --json", async () => {
+    const text = harness(async () => ok({}));
+    expect(await runCli(["frobnicate"], text.deps as never)).toBe(2);
+    expect(text.output().stderr).toBe("error: unknown command 'frobnicate'\n");
+    const json = harness(async () => ok({}));
+    expect(await runCli(["--json", "frobnicate"], json.deps as never)).toBe(2);
+    expect(JSON.parse(json.output().stderr)).toEqual({ success: false, error: { code: "commander.unknownCommand", message: "unknown command 'frobnicate'" } });
+  });
+
+  it("shows help and exits 0 for a bare group command", async () => {
+    for (const argv of [[], ["install"]]) {
+      const state = harness(async () => ok({}));
+      expect(await runCli(argv, state.deps as never)).toBe(0);
+      expect(state.output().stdout + state.output().stderr).toContain("Usage:");
+      expect(state.output().stderr).not.toContain("Error");
+    }
+  });
+});
+

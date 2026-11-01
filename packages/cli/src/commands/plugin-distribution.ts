@@ -99,7 +99,7 @@ async function chooseHarnesses(deps: CliDeps, command: Command, profileId: strin
     });
     return picked.map((value) => normalizeHarness(value));
   }
-  throw new CliError("PLUGIN_HARNESS_REQUIRED", "More than one client is set up; choose one with -H claude or -H codex, or use --all");
+  throw new CliError("PLUGIN_HARNESS_REQUIRED", "More than one client is set up; choose one with -H claude, -H codex or -H copilot, or use --all");
 }
 
 function report(deps: CliDeps, command: Command, value: Record<string, unknown>, lines: string[]): void {
