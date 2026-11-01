@@ -56,6 +56,7 @@ describe("transient provider failures", () => {
     // A loop is never tried again, also when the tool it names reads like a provider failure.
     expect(isTransientFailure("Agent x failed (loop): stopped: mcp__provider-docs__search was called with the same arguments 12 times")).toBe(false);
     expect(isTransientFailure("Agent provider-mapper failed (max-turns): stopped after 150 turn(s)")).toBe(false);
+    expect(isTransientFailure("Agent x failed (output-limit): wrote more than the output limit of 52428800 bytes to its output and scratch folders")).toBe(false);
     // The kernel's own wall-clock limit is not a dropped request.
     expect(isTransientFailure("Agent x failed (timeout): timed out after 2700s")).toBe(false);
     expect(isTransientFailure(explainFailure(BYTE_STRING))).toBe(false);

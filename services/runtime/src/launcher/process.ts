@@ -4,7 +4,7 @@
 
 import { spawn, type ChildProcessWithoutNullStreams, type SpawnOptions } from "node:child_process";
 import { createInterface } from "node:readline";
-import { treeSize } from "./workspace.js";
+import { treesSize } from "./workspace.js";
 
 export interface RunProcessOptions {
   command: string;
@@ -15,8 +15,8 @@ export interface RunProcessOptions {
   timeoutMs: number;
   /** Bytes of stdout / stderr kept (each); the rest is dropped. */
   maxCaptureBytes?: number;
-  /** Directory whose size is watched while the process runs, and its limit in bytes. */
-  watch?: { dir: string; maxBytes: number; intervalMs?: number };
+  /** Directories whose size together is watched while the process runs, and their limit in bytes. */
+  watch?: { dirs: readonly string[]; maxBytes: number; intervalMs?: number };
   signal?: AbortSignal;
   /** Written to the process's stdin, which is then closed (stdin is empty otherwise). */
   input?: string;
@@ -199,9 +199,9 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
         : setInterval(() => {
             if (checking) return;
             checking = true;
-            void treeSize(options.watch!.dir)
-              .then((size) => {
-                if (size.bytes > options.watch!.maxBytes) stop("output-limit");
+            void treesSize(options.watch!.dirs)
+              .then((bytes) => {
+                if (bytes > options.watch!.maxBytes) stop("output-limit");
               })
               .catch(() => undefined)
               .finally(() => {

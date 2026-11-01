@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 import { type JobUser, type ProcessResult, jobUser, runProcess } from "./process.js";
-import { grantToUser, treeSize } from "./workspace.js";
+import { grantToUser, treesSize } from "./workspace.js";
 
 export interface Interpreters {
   /** Python 3.12 executable (KINTSUGI_PYTHON); run as `python -I -B -X utf8`. */
@@ -32,7 +32,7 @@ export interface ScriptWorkspace {
   writable: readonly string[];
   /** Scratch directory: HOME, TEMP and TMPDIR point here. */
   tmp: string;
-  /** Output directory, watched against `maxOutputBytes`. */
+  /** Output directory; with the scratch, watched against `maxOutputBytes`. */
   out: string;
 }
 
@@ -163,20 +163,21 @@ export async function runScript(spec: ScriptSpec): Promise<ScriptResult> {
     cwd: spec.workspace.cwd,
     env: jobEnvironment(spec.workspace.tmp),
     timeoutMs: spec.limits.timeoutSec * 1000,
-    watch: { dir: spec.workspace.out, maxBytes: spec.limits.maxOutputBytes },
+    // Output and scratch together: HOME and TEMP point into the scratch, so a limit on `out` alone is no limit (T3-006).
+    watch: { dirs: [spec.workspace.out, spec.workspace.tmp], maxBytes: spec.limits.maxOutputBytes },
     ...(spec.signal === undefined ? {} : { signal: spec.signal }),
     ...(runAs === undefined ? {} : { runAs }),
   }).catch((error: unknown) => {
     throw new Error(`could not start ${executable}: ${error instanceof Error ? error.message : String(error)}`);
   });
   // The watcher samples; a final measurement catches a burst written just before exit.
-  if (result.stopped === undefined && (await treeSize(spec.workspace.out)).bytes > spec.limits.maxOutputBytes) result.stopped = "output-limit";
+  if (result.stopped === undefined && (await treesSize([spec.workspace.out, spec.workspace.tmp])) > spec.limits.maxOutputBytes) result.stopped = "output-limit";
   return { ...result, sha256, ...failureOf(result, spec.limits) };
 }
 
 function failureOf(result: ProcessResult, limits: ScriptLimits): { failure?: string } {
   if (result.stopped === "timeout") return { failure: `timed out after ${limits.timeoutSec}s` };
-  if (result.stopped === "output-limit") return { failure: `output exceeded ${limits.maxOutputBytes} bytes` };
+  if (result.stopped === "output-limit") return { failure: `output and scratch exceeded the output limit of ${limits.maxOutputBytes} bytes` };
   if (result.stopped === "aborted") return { failure: "aborted" };
   if (result.exitCode === 0) return {};
   const detail = lastLine(result.stderr);

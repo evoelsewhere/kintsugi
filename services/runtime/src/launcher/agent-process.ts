@@ -142,6 +142,7 @@ class ChildAgentJob implements JobHandle {
   constructor(
     readonly jobId: string,
     private readonly idleTimeoutSec: number,
+    readonly maxOutputBytes?: number,
   ) {
     this.done = new Promise<JobEnd>((resolve) => {
       this.#resolveDone = resolve;
@@ -189,6 +190,7 @@ class ChildAgentJob implements JobHandle {
     else if (this.#stalledAfterSec !== undefined) fail("timeout", `stalled: no activity from the model for ${this.#stalledAfterSec}s (the provider stopped responding)`);
     else if (result?.stopped === "aborted") fail("aborted", this.#abortReason);
     else if (result?.stopped === "timeout") fail("timeout", `timed out after ${timeoutSec}s`);
+    else if (result?.stopped === "output-limit") fail("output-limit", `wrote more than the output limit of ${this.maxOutputBytes ?? 0} bytes to its output and scratch folders`);
     else {
       const detail = redactText((result?.stderr ?? "").trim().split(/\r?\n/).slice(-15).join("\n"));
       fail("error", `the agent process exited with code ${result?.exitCode ?? "?"} without a result${detail === "" ? "" : `: ${detail}`}`);
@@ -254,7 +256,8 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Agen
               ...[...(await childCodeRoots()), entry, spec.workspace.root, jobDir, ...spec.workspace.readOnly].map((path) => `--allow-fs-read=${path}`),
               ...[spec.workspace.outDir, tmp].map((path) => `--allow-fs-write=${path}`),
             ];
-      const job = new ChildAgentJob(randomUUID(), spec.limits.idleTimeoutSec ?? idleTimeoutSec);
+      const maxOutputBytes = spec.limits.maxOutputBytes;
+      const job = new ChildAgentJob(randomUUID(), spec.limits.idleTimeoutSec ?? idleTimeoutSec, maxOutputBytes);
       const timeoutSec = spec.limits.timeoutSec;
       void runProcess({
         command: options.node ?? process.execPath,
@@ -269,6 +272,8 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Agen
         ...(spec.memory === undefined && spec.webSearch !== true && spec.webFetch !== true ? {} : { onMessage: createJobServiceHost(spec, services, job.signal) }),
         signal: job.signal,
         ...(runAs === undefined ? {} : { runAs }),
+        // What a `shell` call or a write puts in the output and the scratch, together (T3-006).
+        ...(maxOutputBytes === undefined ? {} : { watch: { dirs: [spec.workspace.outDir, tmp], maxBytes: maxOutputBytes } }),
       }).then(
         (result) => job.exited(result, timeoutSec),
         (error: unknown) => job.exited(undefined, timeoutSec, error),
