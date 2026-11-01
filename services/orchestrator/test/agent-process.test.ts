@@ -1,7 +1,7 @@
 // Agent jobs as child processes of the worker (ADR-0029): the mock backend and pi run in a
 // child started in the job directory with a cleared environment and Node's permission model;
-// the provider's API key arrives on stdin and its environment credentials in that child's
-// environment only; aborts and timeouts kill the process tree.
+// the provider's API key and its environment credentials arrive on stdin, never in the child's
+// spawn environment (ADR-0093); aborts and timeouts kill the process tree.
 
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
@@ -92,7 +92,7 @@ describe("agent jobs in child processes", () => {
     }
   }, 90_000);
 
-  it("passes the API key on stdin and provider variables in the child's environment only", async () => {
+  it("passes the API key and the provider variables on stdin, never in the child's spawn environment (ADR-0093)", async () => {
     process.env["KINTSUGI_TEST_WORKER_ONLY"] = "worker-secret";
     const entry = fixture(
       "report.mjs",
@@ -101,7 +101,7 @@ process.stdin.setEncoding("utf8");
 process.stdin.on("data", (chunk) => (input += chunk));
 process.stdin.on("end", () => {
   const parsed = JSON.parse(input);
-  const report = { apiKey: parsed.provider.apiKey, region: process.env.KINTSUGI_TEST_REGION ?? null, leaked: process.env.KINTSUGI_TEST_WORKER_ONLY ?? null, database: process.env.DATABASE_URL ?? null, cwd: process.cwd() };
+  const report = { apiKey: parsed.provider.apiKey, region: parsed.provider.env?.KINTSUGI_TEST_REGION ?? null, spawnRegion: process.env.KINTSUGI_TEST_REGION ?? null, leaked: process.env.KINTSUGI_TEST_WORKER_ONLY ?? null, database: process.env.DATABASE_URL ?? null, cwd: process.cwd() };
   process.stdout.write(JSON.stringify({ type: "job.completed", jobId: "x", at: new Date().toISOString(), summary: JSON.stringify(report) }) + "\\n");
 });
 `,
@@ -119,7 +119,7 @@ process.stdin.on("end", () => {
     const done = await handle.done;
     expect(done.type).toBe("job.completed");
     const report = JSON.parse(done.type === "job.completed" ? done.summary : "{}") as Record<string, string | null>;
-    expect(report).toMatchObject({ apiKey: "sk-test-key", region: "eu-test-1", leaked: null, database: null });
+    expect(report).toMatchObject({ apiKey: "sk-test-key", region: "eu-test-1", spawnRegion: null, leaked: null, database: null });
     expect(report["cwd"]?.toLowerCase()).toBe(paths.job.toLowerCase());
     expect(process.env["KINTSUGI_TEST_REGION"]).toBeUndefined();
     delete process.env["KINTSUGI_TEST_WORKER_ONLY"];
