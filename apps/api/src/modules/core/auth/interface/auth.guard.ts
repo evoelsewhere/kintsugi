@@ -5,6 +5,7 @@ import { CanActivate, ExecutionContext, ForbiddenException, Injectable, Unauthor
 import { Reflector } from "@nestjs/core";
 import type { Request } from "express";
 import { IS_PUBLIC_KEY, MEMBER_READ_SCOPE_KEY, PERMISSION_KEY, SKIP_CSRF_KEY, type MemberReadScope } from "#common/auth/decorators.js";
+import { setRecheck } from "#common/auth/recheck.js";
 import { bearerToken, passesCsrfCheck, sessionToken } from "#common/auth/session-cookie.js";
 import { ProjectAccessService } from "#modules/admin/project-access/index.js";
 import { AuthService, type SessionUser } from "../application/auth.service.js";
@@ -52,6 +53,10 @@ export class AuthGuard implements CanActivate {
       if (user === undefined) throw new UnauthorizedException("Invalid or expired token");
       request.memberPrincipal = principal;
       request.sessionUser = user;
+      setRecheck(request, async () => {
+        const again = await this.memberTokens.authenticateMemberToken(bearer);
+        return again !== undefined && (await this.auth.authenticateUser(again.userId)) !== undefined;
+      });
       return true;
     }
 
@@ -60,6 +65,7 @@ export class AuthGuard implements CanActivate {
     const user = await this.auth.authenticate(token);
     if (user === undefined) throw new UnauthorizedException("Invalid or expired session");
     request.sessionUser = user;
+    setRecheck(request, async () => (await this.auth.authenticate(token)) !== undefined);
     return true;
   }
 }

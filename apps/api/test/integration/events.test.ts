@@ -3,7 +3,8 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { hasDatabase } from "../support/database.js";
-import { type Client, adminClient, startTestApp, type TestApp } from "../support/app.js";
+import { SSE_DEFAULTS } from "#common/interface/sse.js";
+import { type Client, adminClient, memberClient, startTestApp, type TestApp } from "../support/app.js";
 
 /** Reads an SSE response until `done` is satisfied by the text so far, or fails after `timeoutMs`. */
 async function readUntil(url: string, cookie: string, done: (text: string) => boolean, timeoutMs: number, onOpen?: () => Promise<void>): Promise<string> {
@@ -50,6 +51,29 @@ describe.skipIf(!hasDatabase)("live updates (integration)", () => {
   });
   afterAll(async () => {
     await app?.close();
+  });
+
+  it("ends an open stream within a heartbeat when its member is disabled or signs out; a valid session keeps it", async () => {
+    const heartbeat = SSE_DEFAULTS.heartbeatMs;
+    SSE_DEFAULTS.heartbeatMs = 150;
+    try {
+      const kept = await readUntil(`${app.baseUrl}/events`, admin.cookie!, (text) => text.split(": keep-alive").length > 4, 5000);
+      expect(kept).toContain("event: ready");
+
+      const disabled = await memberClient(app, admin, "sse-disabled", ["user"]);
+      const ended = await readUntil(`${app.baseUrl}/events`, disabled.client.cookie!, () => false, 5000, async () => {
+        expect((await admin.request("PATCH", `/admin/users/${disabled.id}`, { body: { enabled: false } })).status).toBe(200);
+      });
+      expect(ended).toContain("event: ready");
+
+      const leaving = await memberClient(app, admin, "sse-leaving", ["user"]);
+      const cookie = leaving.client.cookie!;
+      await readUntil(`${app.baseUrl}/events`, cookie, () => false, 5000, async () => {
+        expect((await leaving.client.request("POST", "/auth/logout")).status).toBe(204);
+      });
+    } finally {
+      SSE_DEFAULTS.heartbeatMs = heartbeat;
+    }
   });
 
   it("needs a session", async () => {
