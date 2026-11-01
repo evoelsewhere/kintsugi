@@ -44,7 +44,7 @@ Each question has its options, the analyst's default and the decision with the b
 ### Q4: Which editor, and how are macros written in Markdown?
 
 - **Options:** (a) Markdown source with a live preview; (b) a rich-text editor that round-trips to Markdown; (c) both. Macro syntax: fenced directives, HTML comments or front matter.
-- **Decision (a) first, (b) later.** Phase 1 is the Markdown source editor that the portal already has (CodeMirror) with a live preview. A rich-text mode comes only when it round-trips every document of the starter template and a sample repository byte for byte; otherwise it would rewrite people's files. Panels are GitHub alerts (`> [!NOTE]`, `[!WARNING]`); dynamic and data macros are fenced blocks whose info string is `kintsugi-<macro>` with YAML parameters (`kintsugi-children`, `kintsugi-toc`, `kintsugi-labels`). They are stored as the macro, never as its rendered output, and rendered in the portal. No raw HTML.
+- **Decision (a) first, (b) later.** The first editor is the Markdown source editor that the portal already has (CodeMirror) with a live preview; it arrives in [Phase 2 of the roadmap](../90-roadmap.md#phase-2-write-and-organise). A rich-text mode comes only when it round-trips every document of the starter template and a sample repository byte for byte; otherwise it would rewrite people's files. Panels are GitHub alerts (`> [!NOTE]`, `[!WARNING]`); dynamic and data macros are fenced blocks whose info string is `kintsugi-<macro>` with YAML parameters (`kintsugi-children`, `kintsugi-toc`, `kintsugi-labels`). They are stored as the macro, never as its rendered output, and rendered in the portal. No raw HTML.
 - **Source:** same thread, platform post (it changed the analyst's default of `:::` directives, which are not CommonMark and show as stray text on Git servers).
 
 ### Q5: How does a page keep its identity when it moves?
@@ -62,7 +62,7 @@ Each question has its options, the analyst's default and the decision with the b
 ### Q7: How are pages exported as PDF or Word?
 
 - **Options:** a converter in the worker image (a headless browser or pandoc) or nothing server-side at first.
-- **Decision.** Phase 1 offers Markdown export (a page, or a space as an archive of its folder at a commit) and the browser's print-to-PDF with a print stylesheet. Server-side PDF and Word need a new dependency in the worker image and an ADR of their own, so they are deferred.
+- **Decision.** [Phase 1 of the roadmap](../90-roadmap.md#phase-1-read-and-navigate) offers Markdown export (a page, or a space as an archive of its folder at a commit) and the browser's print-to-PDF with a print stylesheet. Server-side PDF and Word need a new dependency in the worker image and an ADR of their own, so they are deferred.
 - **Source:** same thread, both posts.
 
 ## Decided in the follow-up thread
