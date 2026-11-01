@@ -1,6 +1,6 @@
 # ADR-0098: Wiki pages are edited as Markdown in the portal, kept as drafts in Postgres and published through the document writer
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-02
 - Decision register: D112
 

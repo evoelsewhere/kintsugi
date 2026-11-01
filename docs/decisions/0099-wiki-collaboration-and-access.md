@@ -1,6 +1,6 @@
 # ADR-0099: Wiki comments, watches and notifications live in Postgres; wiki access is edit rules on paths, with Project Access as the view boundary
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-02
 - Decision register: D113
 

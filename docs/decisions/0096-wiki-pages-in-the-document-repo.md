@@ -1,6 +1,6 @@
 # ADR-0096: Wiki spaces and pages are Markdown in the document repository; collaboration state is in Postgres
 
-- Status: Proposed (amends [ADR-0042](0042-markdown-only-document-repo-by-bounded-context.md) decision "Markdown only" for page attachments; extends the layout of [ADR-0051](0051-document-repo-layout-legacy-and-modern.md))
+- Status: Accepted (amends [ADR-0042](0042-markdown-only-document-repo-by-bounded-context.md) decision "Markdown only" for page attachments; extends the layout of [ADR-0051](0051-document-repo-layout-legacy-and-modern.md))
 - Date: 2026-11-02
 - Decision register: D110
 

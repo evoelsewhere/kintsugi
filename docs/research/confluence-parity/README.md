@@ -1,6 +1,6 @@
 # Confluence parity: a project wiki on the document repository
 
-> Research pack, status proposed. How Kintsugi would offer the feature set of a Confluence-like wiki (spaces and the page tree, editing, macros, attachments, comments, mentions, notifications, permissions, search, labels, templates and version history) on top of what it already has, and how the wiki fits with the Brain ([ADR-0091](../../decisions/0091-brain-vectorless-tree-index.md)). Nothing here is decided until the four ADR proposals below are accepted.
+> Research pack. How Kintsugi would offer the feature set of a Confluence-like wiki (spaces and the page tree, editing, macros, attachments, comments, mentions, notifications, permissions, search, labels, templates and version history) on top of what it already has, and how the wiki fits with the Brain ([ADR-0091](../../decisions/0091-brain-vectorless-tree-index.md)). The four decisions below are accepted.
 
 ## The question
 
@@ -27,14 +27,14 @@ Teams keep their project knowledge in a wiki because it lets them write, organis
 
 ## Decisions
 
-The research leads to four proposals. Each is Proposed and changes nothing until it is accepted.
+The research led to four decisions, accepted by the owner on 2 November 2026.
 
 | ADR | Decides | Status |
 |---|---|---|
-| [ADR-0096](../../decisions/0096-wiki-pages-in-the-document-repo.md) | Wiki spaces and pages are Markdown in the document repository with a stable page id in front matter, team spaces under `20-spaces/`, attachments beside the page (amending Markdown only for attachments), and collaboration state in Postgres | Proposed |
-| [ADR-0097](../../decisions/0097-brain-indexes-wiki-pages.md) | The Brain indexes and serves wiki pages: front matter attributes, backlinks, incremental builds on publish and a full-text index beside exact search (amending ADR-0091) | Proposed |
-| [ADR-0098](../../decisions/0098-wiki-page-editing-and-publishing.md) | Pages are edited as Markdown in the portal, kept as drafts in Postgres and published through the document writer, by pull request unless a path allows a direct publish, with a three-way merge on a moved base | Proposed |
-| [ADR-0099](../../decisions/0099-wiki-collaboration-and-access.md) | Comments, watches and notifications live in Postgres; access is edit rules on paths, with Project Access as the view boundary | Proposed |
+| [ADR-0096](../../decisions/0096-wiki-pages-in-the-document-repo.md) | Wiki spaces and pages are Markdown in the document repository with a stable page id in front matter, team spaces under `20-spaces/`, attachments beside the page (amending Markdown only for attachments), and collaboration state in Postgres | Accepted |
+| [ADR-0097](../../decisions/0097-brain-indexes-wiki-pages.md) | The Brain indexes and serves wiki pages: front matter attributes, backlinks, incremental builds on publish and a full-text index beside exact search (amending ADR-0091) | Accepted |
+| [ADR-0098](../../decisions/0098-wiki-page-editing-and-publishing.md) | Pages are edited as Markdown in the portal, kept as drafts in Postgres and published through the document writer, by pull request unless a path allows a direct publish, with a three-way merge on a moved base | Accepted |
+| [ADR-0099](../../decisions/0099-wiki-collaboration-and-access.md) | Comments, watches and notifications live in Postgres; access is edit rules on paths, with Project Access as the view boundary | Accepted |
 
 ## Open questions for the owner
 

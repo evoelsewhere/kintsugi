@@ -1,6 +1,6 @@
 # ADR-0097: The Brain indexes and serves wiki pages, builds incrementally and keeps a full-text index
 
-- Status: Proposed (amends [ADR-0091](0091-brain-vectorless-tree-index.md) decisions 3, 5 and 6)
+- Status: Accepted (amends [ADR-0091](0091-brain-vectorless-tree-index.md) decisions 3, 5 and 6)
 - Date: 2026-11-02
 - Decision register: D111
 
