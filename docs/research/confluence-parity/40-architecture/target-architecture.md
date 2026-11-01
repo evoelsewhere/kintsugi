@@ -23,7 +23,7 @@ flowchart LR
     BRAIN["delivery/brain<br/>tree, read, lookup, grep, ranked search"]:::ext
     DW["admin/document-writes<br/>publishPage, delete and move entries"]:::ext
     MAPI["delivery/member-api<br/>Brain tools, comments read"]:::ext
-    AUTH["core/auth + permission catalog<br/>wiki.* codes"]:::ext
+    AUTH["core/auth + permission catalog<br/>four wiki codes"]:::ext
     AUD["governance/audit"]:::ext
     FEED["common/realtime<br/>change feed"]:::ext
   end
@@ -78,7 +78,7 @@ Every module keeps the anatomy of [apps/api](../../../../apps/api/README.md): `d
 | `delivery/brain` | extended | search hit with rank | ranked search beside grep (`brain_search` for members' agents); labels, status and order in node data | `pg-brain.index.ts` reads the full-text index | a search route beside lookup and grep, filtered by space, label and status | `knowledge` (`brain_text`, `brain_search`, `brain_ref`, owned by ADR-0097) |
 | `delivery/member-api` | extended | none | a read of the open comments of a page or node (`comments_list` in the local MCP bridge) | none | `GET /api/member/v1/comments?projectId&node` | none |
 | `core/auth` | extended | none | none | migration of the permission codes `wiki.comment`, `wiki.write`, `wiki.publish`, `wiki.manage` | none | `core` |
-| `governance/audit` | extended | new actions: `wiki.publish`, `wiki.page.delete`, `wiki.comment.delete`, `wiki.rule.set`, `wiki.rule.clear` | none | none | none | `governance` |
+| `governance/audit` | extended | new actions named like the existing ones (`<subject>.<verb>`): `wiki-page.publish`, `wiki-page.delete`, `wiki-comment.delete`, `wiki-restriction.set`, `wiki-restriction.clear` | none | none | none | `governance` |
 | `monitoring/telemetry` | extended | page views per page and day (`monitoring.wiki_page_view`), without user ids by default | aggregate and prune with the telemetry retention | none | none | `monitoring` |
 | `delivery/runtime-jobs`, `admin/agents`, `services/runtime` | unchanged | the wiki adds no job, no agent and no kernel tool | | | | |
 
