@@ -17,7 +17,11 @@ STANDARDS_ROOT = '01-standards'
 ARCHITECTURE_ROOT = '02-architecture'
 TRANSITION_ROOT = '03-transition'
 APPLICATIONS_ROOT = '10-applications'
+SPACES_ROOT = '20-spaces'
 SCRATCH_ROOT = 'scratch'
+PAGE_TEMPLATES_DIR = f'{STANDARDS_ROOT}/page-templates'
+SPACE_TEMPLATES = '_templates'
+ATTACHMENTS = '_attachments'
 DESIGN_SETS_ROOT = f'{STANDARDS_ROOT}/templates'
 INPUTS = '00-inputs'
 LEGACY = '01-legacy'
@@ -237,6 +241,147 @@ def topology_extractor_path(app):
 
 def understand_plan_path(app):
     return f'{legacy_dir(app)}/plan.md'
+
+
+# ---------------------------------------------------------------------------
+# Wiki: team spaces, page ids, attachments (ADR-0096)
+# ---------------------------------------------------------------------------
+
+# The scope of page ids: an uppercase short name of a space, written in its home page's `key` (2 to 10 characters).
+_PAGE_KEY = re.compile(r'^[A-Z][A-Z0-9]{1,9}\Z')
+# The number is what `page_id` writes: from 1, padded to four digits, no leading zero beyond that.
+_PAGE_ID = re.compile(r'^PAGE-([A-Z][A-Z0-9]{1,9})-((?!0000\Z)[0-9]{4}|[1-9][0-9]{4,8})\Z')
+_PAGE_NUMBER_MAX = 999_999_999
+_ATTACHMENT_NAME = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z')
+
+# The file types a page may keep in its `_attachments/` folder (ADR-0096 decision 6); SVG waits for its sanitiser.
+ATTACHMENT_EXTENSIONS = ('png', 'jpg', 'jpeg', 'gif', 'webp', 'pdf')
+
+# What no wiki or Brain reader treats as a page: roots that hold member plugins and run scratch, and folders that
+# hold restricted records and allocation ledgers (ADR-0075). Hidden folders are excluded too, by their name.
+DOCUMENT_EXCLUDED_ROOTS = ('plugins', SCRATCH_ROOT)
+DOCUMENT_EXCLUDED_FOLDERS = ('restricted', 'identifiers')
+
+
+def _is_plain_folder(path):
+    """Whether every segment of a repository-relative folder path is plain: not empty, not `.`, `..` or hidden."""
+    return path != '' and '\\' not in path and all(part != '' and not part.startswith('.') for part in path.split('/'))
+
+
+def _is_excluded_folder(parts):
+    """Whether a folder segment path leaves the wiki's pages: it starts in an excluded root (a checkout on Windows
+    or macOS is case-insensitive, so `Plugins/` is `plugins/`), holds an excluded folder, or is `_generated/`."""
+    if parts[0].lower() in DOCUMENT_EXCLUDED_ROOTS:
+        return True
+    return any(part.lower() in DOCUMENT_EXCLUDED_FOLDERS or part.lower() == GENERATED for part in parts)
+
+
+def _require_space(space):
+    if not is_unit_segment(space):
+        raise ValueError(f'"{space}" cannot name a space')
+    return space
+
+
+def spaces_dir():
+    return SPACES_ROOT
+
+
+def space_dir(space):
+    """A team space is one folder under `20-spaces/`; `space` is a segment (`is_unit_segment`)."""
+    return f'{SPACES_ROOT}/{_require_space(space)}'
+
+
+def space_home_path(space):
+    """The space's home page: front matter `title` and `key`, then the text of the page."""
+    return f'{space_dir(space)}/{UNIT_CARD}'
+
+
+def space_templates_dir(space):
+    return f'{space_dir(space)}/{SPACE_TEMPLATES}'
+
+
+def page_templates_dir():
+    """The page templates every space of the project may use."""
+    return PAGE_TEMPLATES_DIR
+
+
+def is_page_key(key):
+    """Whether `key` can scope page ids: uppercase letters and digits, a letter first, 2 to 10 characters."""
+    return bool(_PAGE_KEY.match(key))
+
+
+def page_id(key, number):
+    """The id of a page: `PAGE-<KEY>-<nnnn>`, the number counted from 1 and padded to four digits."""
+    if not is_page_key(key):
+        raise ValueError(f'"{key}" cannot scope page ids')
+    if isinstance(number, bool) or not isinstance(number, int) or number < 1 or number > _PAGE_NUMBER_MAX:
+        raise ValueError(f'{number} cannot number a page')
+    return f'PAGE-{key}-{number:04d}'
+
+
+def is_page_id(value):
+    return bool(_PAGE_ID.match(value))
+
+
+def parse_page_id(value):
+    """(key, number) of a page id, None for anything else."""
+    match = _PAGE_ID.match(value)
+    return (match.group(1), int(match.group(2))) if match else None
+
+
+def page_folder(page_path):
+    """The folder a page file sits in, which also holds its `_attachments/` folder; '' for a file at the root."""
+    return page_path.rpartition('/')[0]
+
+
+def is_attachment_name(file):
+    """Whether `file` is one safe file name: a letter or digit first, then letters, digits, `.`, `_` and `-`."""
+    return bool(_ATTACHMENT_NAME.match(file))
+
+
+def is_attachment_type(file):
+    """Whether `file` has the extension of an allowed attachment type, in any letter case."""
+    stem, dot, extension = file.rpartition('.')
+    return bool(dot) and bool(stem) and extension.lower() in ATTACHMENT_EXTENSIONS
+
+
+def page_attachments_dir(page_dir):
+    """The folder of the files that belong to the pages of `page_dir` (files beside the page). Callers pass the
+    folder of a page (`page_folder`), which is a plain folder of the wiki: never an `_attachments/` folder, and
+    never under an excluded root or folder."""
+    if (not _is_plain_folder(page_dir) or _is_excluded_folder(page_dir.split('/'))
+            or ATTACHMENTS in page_dir.split('/')):
+        raise ValueError(f'"{page_dir}" cannot hold attachments')
+    return f'{page_dir}/{ATTACHMENTS}'
+
+
+def page_attachment_path(page_dir, file):
+    if not is_attachment_name(file):
+        raise ValueError(f'"{file}" cannot name an attachment')
+    return f'{page_attachments_dir(page_dir)}/{file}'
+
+
+def is_stage_written_path(path):
+    """Whether a stage writes the document: the legacy and modern halves of an application and its read models."""
+    parts = path.split('/')
+    return (len(parts) > 3 and parts[0] == APPLICATIONS_ROOT and is_unit_segment(parts[1])
+            and parts[2] in (LEGACY, MODERN, GENERATED))
+
+
+def is_wiki_editable_path(path):
+    """Whether the wiki editor may write the path: a Markdown page, or an attachment of an allowed type in an
+    `_attachments/` folder; every segment plain; outside plugins, scratch, restricted records, identifier ledgers
+    and `_generated/`; not written by a stage. `kintsugi.yaml` is neither a page nor an attachment."""
+    parts = path.split('/')
+    name = parts[-1]
+    attachment = len(parts) > 1 and parts[-2] == ATTACHMENTS and is_attachment_name(name) and is_attachment_type(name)
+    if not attachment and not path.lower().endswith('.md'):
+        return False
+    if '\\' in path or any(part == '' or part.startswith('.') for part in parts):
+        return False
+    if _is_excluded_folder(parts):
+        return False
+    return not is_stage_written_path(path)
 
 
 # ---------------------------------------------------------------------------

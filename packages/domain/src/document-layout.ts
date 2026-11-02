@@ -13,6 +13,9 @@
  *     02-modern/                the new system: requirements.md, _design/<set>/ (the application's design)
  *       <module>/<unit>/        the unit's card (README.md), one folder per design set, task.md
  *     _generated/               read models rebuilt after a merge
+ *   20-spaces/<space>/          team spaces of the wiki (ADR-0096): README.md is the space's home page, pages below it
+ *     _templates/               the space's page templates
+ *     _attachments/             files beside the pages of their folder (any folder of the wiki has one)
  *   plugins/                    project-authored member plugins
  *   scratch/<app>/              job-to-job data of one run; outside the layout, never committed
  *
@@ -26,7 +29,11 @@ const STANDARDS_ROOT = "01-standards";
 const ARCHITECTURE_ROOT = "02-architecture";
 const TRANSITION_ROOT = "03-transition";
 const APPLICATIONS_ROOT = "10-applications";
+const SPACES_ROOT = "20-spaces";
 const SCRATCH_ROOT = "scratch";
+const PAGE_TEMPLATES_DIR = `${STANDARDS_ROOT}/page-templates`;
+const SPACE_TEMPLATES = "_templates";
+const ATTACHMENTS = "_attachments";
 const DESIGN_SETS_ROOT = `${STANDARDS_ROOT}/templates`;
 const INPUTS = "00-inputs";
 const LEGACY = "01-legacy";
@@ -249,6 +256,151 @@ export function applicationDesignSetDir(app: string, set: string): string {
 /** A design document of the application; `file` is the `Path` of the set's files table. */
 export function applicationDesignFilePath(app: string, set: string, file: string): string {
   return `${applicationDesignSetDir(app, set)}/${file}`;
+}
+
+// ---------------------------------------------------------------------------
+// Wiki: team spaces, page ids, attachments (ADR-0096)
+// ---------------------------------------------------------------------------
+
+/** The scope of page ids: an uppercase short name of a space, written in its home page's `key` (2 to 10 characters). */
+const PAGE_KEY_PATTERN = /^[A-Z][A-Z0-9]{1,9}$/;
+/** The number is what `pageId` writes: from 1, padded to four digits, no leading zero beyond that. */
+const PAGE_ID_PATTERN = /^PAGE-([A-Z][A-Z0-9]{1,9})-((?!0000$)[0-9]{4}|[1-9][0-9]{4,8})$/;
+const PAGE_NUMBER_MAX = 999_999_999;
+const ATTACHMENT_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+
+/** The file types a page may keep in its `_attachments/` folder (ADR-0096 decision 6); SVG waits for its sanitiser. */
+export const ATTACHMENT_EXTENSIONS: readonly string[] = ["png", "jpg", "jpeg", "gif", "webp", "pdf"];
+
+/**
+ * What no wiki or Brain reader treats as a page: roots that hold member plugins and run scratch, and folders that
+ * hold restricted records and allocation ledgers (ADR-0075). Hidden folders are excluded too, by their name.
+ */
+export const DOCUMENT_EXCLUDED_ROOTS: readonly string[] = ["plugins", SCRATCH_ROOT];
+export const DOCUMENT_EXCLUDED_FOLDERS: readonly string[] = ["restricted", "identifiers"];
+
+/** Whether every segment of a repository-relative folder path is plain: not empty, not `.`, `..` or hidden. */
+function isPlainFolder(path: string): boolean {
+  return path !== "" && !path.includes("\\") && path.split("/").every((segment) => segment !== "" && !segment.startsWith("."));
+}
+
+/**
+ * Whether a folder segment path leaves the wiki's pages: it starts in an excluded root (a checkout on Windows or macOS
+ * is case-insensitive, so `Plugins/` is `plugins/`), holds an excluded folder, or is `_generated/`.
+ */
+function isExcludedFolder(segments: readonly string[]): boolean {
+  if (DOCUMENT_EXCLUDED_ROOTS.includes((segments[0] ?? "").toLowerCase())) return true;
+  return segments.some((segment) => DOCUMENT_EXCLUDED_FOLDERS.includes(segment.toLowerCase()) || segment.toLowerCase() === GENERATED);
+}
+
+function requireSpace(space: string): string {
+  if (!isUnitSegment(space)) throw new Error(`"${space}" cannot name a space`);
+  return space;
+}
+
+export function spacesDir(): string {
+  return SPACES_ROOT;
+}
+
+/** A team space is one folder under `20-spaces/`; `space` is a segment (`isUnitSegment`). */
+export function spaceDir(space: string): string {
+  return `${SPACES_ROOT}/${requireSpace(space)}`;
+}
+
+/** The space's home page: front matter `title` and `key`, then the text of the page. */
+export function spaceHomePath(space: string): string {
+  return `${spaceDir(space)}/${UNIT_CARD}`;
+}
+
+/** The page templates of one space (Markdown files with front matter `type: template`). */
+export function spaceTemplatesDir(space: string): string {
+  return `${spaceDir(space)}/${SPACE_TEMPLATES}`;
+}
+
+/** The page templates every space of the project may use. */
+export function pageTemplatesDir(): string {
+  return PAGE_TEMPLATES_DIR;
+}
+
+/** Whether `key` can scope page ids: uppercase letters and digits, a letter first, 2 to 10 characters. */
+export function isPageKey(key: string): boolean {
+  return PAGE_KEY_PATTERN.test(key);
+}
+
+/** The id of a page: `PAGE-<KEY>-<nnnn>`, the number counted from 1 and padded to four digits. */
+export function pageId(key: string, number: number): string {
+  if (!isPageKey(key)) throw new Error(`"${key}" cannot scope page ids`);
+  if (!Number.isInteger(number) || number < 1 || number > PAGE_NUMBER_MAX) throw new Error(`${number} cannot number a page`);
+  return `PAGE-${key}-${String(number).padStart(4, "0")}`;
+}
+
+export function isPageId(id: string): boolean {
+  return PAGE_ID_PATTERN.test(id);
+}
+
+/** The key and number of a page id, or undefined for anything else. */
+export function parsePageId(id: string): { key: string; number: number } | undefined {
+  const match = PAGE_ID_PATTERN.exec(id);
+  return match?.[1] !== undefined && match[2] !== undefined ? { key: match[1], number: Number(match[2]) } : undefined;
+}
+
+/** The folder a page file sits in, which also holds its `_attachments/` folder; "" for a file at the root. */
+export function pageFolder(pagePath: string): string {
+  const slash = pagePath.lastIndexOf("/");
+  return slash < 0 ? "" : pagePath.slice(0, slash);
+}
+
+/** Whether `file` is one safe file name: a letter or digit first, then letters, digits, `.`, `_` and `-`. */
+export function isAttachmentName(file: string): boolean {
+  return ATTACHMENT_NAME_PATTERN.test(file);
+}
+
+/** Whether `file` has the extension of an allowed attachment type, in any letter case. */
+export function isAttachmentType(file: string): boolean {
+  const dot = file.lastIndexOf(".");
+  return dot > 0 && ATTACHMENT_EXTENSIONS.includes(file.slice(dot + 1).toLowerCase());
+}
+
+/**
+ * The folder of the files that belong to the pages of `pageDir` (files beside the page, ADR-0096 decision 6). Callers
+ * pass the folder of a page (`pageFolder`), which is a plain folder of the wiki: never an `_attachments/` folder, and
+ * never under an excluded root or folder.
+ */
+export function pageAttachmentsDir(pageDir: string): string {
+  if (!isPlainFolder(pageDir) || isExcludedFolder(pageDir.split("/")) || pageDir.split("/").includes(ATTACHMENTS)) {
+    throw new Error(`"${pageDir}" cannot hold attachments`);
+  }
+  return `${pageDir}/${ATTACHMENTS}`;
+}
+
+export function pageAttachmentPath(pageDir: string, file: string): string {
+  if (!isAttachmentName(file)) throw new Error(`"${file}" cannot name an attachment`);
+  return `${pageAttachmentsDir(pageDir)}/${file}`;
+}
+
+/**
+ * Whether a stage writes the document: the legacy and modern halves of an application and its read models. The wiki
+ * shows them and people correct them through pull requests (ADR-0096 decision 2).
+ */
+export function isStageWrittenPath(path: string): boolean {
+  const [root, app, half, ...rest] = path.split("/");
+  return root === APPLICATIONS_ROOT && app !== undefined && isUnitSegment(app) && (half === LEGACY || half === MODERN || half === GENERATED) && rest.length > 0;
+}
+
+/**
+ * Whether the wiki editor may write the path: a Markdown page, or an attachment of an allowed type in an
+ * `_attachments/` folder; every segment plain (no empty, `.`, `..` or hidden one); outside member plugins, scratch,
+ * restricted records, identifier ledgers and `_generated/`; not written by a stage. `kintsugi.yaml` is neither a
+ * page nor an attachment, so it is never editable here.
+ */
+export function isWikiEditablePath(path: string): boolean {
+  const segments = path.split("/");
+  const file = segments[segments.length - 1] ?? "";
+  const attachment = segments.length > 1 && segments[segments.length - 2] === ATTACHMENTS && isAttachmentName(file) && isAttachmentType(file);
+  if (!attachment && !path.toLowerCase().endsWith(".md")) return false;
+  if (path.includes("\\") || segments.some((segment) => segment === "" || segment.startsWith("."))) return false;
+  if (isExcludedFolder(segments)) return false;
+  return !isStageWrittenPath(path);
 }
 
 // ---------------------------------------------------------------------------
@@ -616,6 +768,8 @@ const ROOT_DESCRIPTIONS: Readonly<Record<string, string>> = {
   [`${ARCHITECTURE_ROOT}/common`]: "Common components shared by the applications, one document per COM id.",
   [TRANSITION_ROOT]: "Transition: coexistence of the old and new systems, data migration and shared data.",
   [APPLICATIONS_ROOT]: "The applications, each with its old system (01-legacy) and its new system (02-modern).",
+  [PAGE_TEMPLATES_DIR]: "Page templates every space of the wiki may start a page from.",
+  [SPACES_ROOT]: "Team spaces of the wiki: a folder per space, its home page in README.md.",
 };
 
 /**
@@ -625,6 +779,13 @@ const ROOT_DESCRIPTIONS: Readonly<Record<string, string>> = {
 export function describeDocumentFolder(path: string): string | undefined {
   const known = ROOT_DESCRIPTIONS[path];
   if (known !== undefined) return known;
+  const [space, below, ...deeper] = path.startsWith(`${SPACES_ROOT}/`) ? path.slice(SPACES_ROOT.length + 1).split("/") : [];
+  if (space !== undefined) {
+    if (!isUnitSegment(space)) return undefined;
+    if (below === undefined) return `Space ${space} of the wiki: its home page and the pages below it.`;
+    if (below === SPACE_TEMPLATES && deeper.length === 0) return `Page templates of space ${space}.`;
+    return undefined;
+  }
   const [root, app, half, module, unit, part, ...rest] = path.split("/");
   if (root !== APPLICATIONS_ROOT || app === undefined || !isUnitSegment(app)) return undefined;
   if (half === undefined) return `Application ${app}: what people attached, its old system, its new system and the read models.`;

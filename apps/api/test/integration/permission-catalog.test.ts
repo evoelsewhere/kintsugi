@@ -14,6 +14,10 @@ const sourceFiles = (dir: string): string[] =>
     return statSync(path).isDirectory() ? sourceFiles(path) : path.endsWith(".ts") ? [path] : [];
   });
 
+// Codes added by migration ahead of the module that checks them: the four wiki codes of ADR-0099 decision 5 (migration
+// 050) are checked from Phase 2 of the wiki roadmap on. Remove a code from this list when its module lands.
+const PLANNED = ["wiki.comment", "wiki.write", "wiki.publish", "wiki.manage"];
+
 const REMOVED = ["subroles.manage", "resource-policy.manage", "agents.publish", "skills.publish", "mcp.publish", "monitoring.team.view", "catalog.consume", "secrets.create", "usage.report"];
 
 describe.skipIf(!hasDatabase)("permission catalog (integration)", () => {
@@ -36,9 +40,31 @@ describe.skipIf(!hasDatabase)("permission catalog (integration)", () => {
     expect([...required].filter((code) => !catalog.includes(code))).toEqual([]);
   });
 
-  it("offers only permissions the code checks", () => {
-    expect(catalog.filter((code) => !source.includes(`"${code}"`))).toEqual([]);
+  it("offers only permissions the code checks, or plans to", () => {
+    expect(catalog.filter((code) => !PLANNED.includes(code) && !source.includes(`"${code}"`))).toEqual([]);
     expect(catalog.filter((code) => REMOVED.includes(code))).toEqual([]);
+  });
+
+  it("lists a planned permission only until the code checks it", () => {
+    expect(PLANNED.filter((code) => !catalog.includes(code))).toEqual([]);
+    expect(PLANNED.filter((code) => source.includes(`"${code}"`))).toEqual([]);
+  });
+
+  it("offers the wiki permissions under Wiki, held by the admin role", async () => {
+    const wiki = (await app.db.query<{ code: string; group_name: string; description: string }>("select code, group_name, description from core.permission where code like 'wiki.%' order by code")).rows;
+    expect(wiki.map((row) => row.code)).toEqual([...PLANNED].sort());
+    for (const row of wiki) {
+      expect(row.group_name, row.code).toBe("Wiki");
+      expect(row.description.length, row.code).toBeGreaterThan(10);
+    }
+    const granted = (await app.db.query<{ permission_code: string }>("select permission_code from core.role_permission where role_id = 'admin' and permission_code like 'wiki.%' order by permission_code")).rows;
+    expect(granted.map((row) => row.permission_code)).toEqual([...PLANNED].sort());
+  });
+
+  it("adds the wiki permissions again without duplicating them", async () => {
+    await app.db.query(readFileSync(resolve(import.meta.dirname, "../../migrations/050_wiki_permissions.sql"), "utf8"));
+    expect((await app.db.query("select 1 from core.permission where code like 'wiki.%'")).rowCount).toBe(PLANNED.length);
+    expect((await app.db.query("select 1 from core.role_permission where permission_code like 'wiki.%'")).rowCount).toBe(PLANNED.length);
   });
 
   it("describes the primary roles by what they can do", async () => {

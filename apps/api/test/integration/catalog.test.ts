@@ -10,7 +10,7 @@ import { CheckoutStorage, cloneMirror } from "@kintsugi/git";
 import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { hasDatabase } from "../support/database.js";
-import { Client, adminClient, memberClient, startTestApp, type TestApp } from "../support/app.js";
+import { Client, adminClient, currentUserId, grantProjectAccess, memberClient, startTestApp, type TestApp } from "../support/app.js";
 import { catalogDocuments, findingsDocument, understoodUnit } from "../support/documents.js";
 
 /** The catalog assess merged (ADR-0042): an index and one document per module. */
@@ -121,6 +121,7 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
     await app.db.query("insert into admin.git_server (id, kind, name, base_url, auth_type) values ('local', 'plain-git', 'Local', $1, 'none')", [remote.baseUrl]);
     await app.db.query("insert into admin.git_repository (id, server_id, url, default_branch) values ('docs', 'local', $1, 'main'), ('legacy', 'local', $2, 'main')", [`${remote.baseUrl}/docs.git`, `${remote.baseUrl}/legacy.git`]);
     expect((await admin.request("POST", "/admin/projects", { body: { id: "shop", name: "Shop", documentRepositoryId: "docs" } })).status).toBe(201);
+    await grantProjectAccess(admin, "shop", await currentUserId(admin));
     expect((await admin.request("POST", "/admin/projects/shop/applications", { body: { id: "web", name: "Web" } })).status).toBe(201);
     expect((await admin.request("POST", "/admin/projects/shop/applications/web/repositories", { body: { repositoryId: "legacy", role: "legacy" } })).status).toBe(201);
 
@@ -156,7 +157,7 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
   });
 
   it("serves the catalog with a derived status per item", async () => {
-    const { client } = await memberClient(app, admin, "reader", ["user"]);
+    const { client } = await memberClient(app, admin, "reader", ["user"], ["shop"]);
     const response = await client.get<{
       ref: { ref: string };
       catalog: { modules: unknown[]; unassigned: string[]; ambiguities: string[]; items?: unknown };
@@ -191,7 +192,7 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
   });
 
   it("serves the AI plan with where its items stand now", async () => {
-    const { client } = await memberClient(app, admin, "plan-reader", ["user"]);
+    const { client } = await memberClient(app, admin, "plan-reader", ["user"], ["shop"]);
     const response = await client.get<{ plan: { strategy: string; batches: Array<{ items: string[] }> } | null; stale: boolean; status: Record<string, string> }>("/projects/shop/applications/web/understand/plan");
     expect(response.status).toBe(200);
     const view = response.body.data!;
@@ -215,7 +216,7 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
   type Failure = { message: string; details?: { conflicts?: Array<{ item: string; runId?: string; state: string }>; unknown?: string[] } };
 
   it("starts understand on a selection, pinned to the catalog's commit, and refuses unknown, retired, blocked and oversized selections", async () => {
-    const { client } = await memberClient(app, admin, "viewer", ["user"]);
+    const { client } = await memberClient(app, admin, "viewer", ["user"], ["shop"]);
     expect((await client.request("POST", "/projects/shop/applications/web/understand/runs", { body: { items: ["billing/invoice"] } })).status).toBe(403);
     expect((await admin.request("POST", "/projects/shop/applications/web/stages/understand/run")).status).toBe(400);
     expect((await admin.request("POST", "/projects/shop/applications/web/understand/runs", { body: {} })).status).toBe(400);

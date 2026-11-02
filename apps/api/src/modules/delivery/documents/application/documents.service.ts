@@ -6,11 +6,15 @@
 
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, PayloadTooLargeException, UnsupportedMediaTypeException } from "@nestjs/common";
 import { assertSafeRepoPath, GitError } from "@kintsugi/git";
+import { isAttachmentName, isAttachmentType, pageAttachmentsDir, pageFolder } from "@kintsugi/domain";
 import { DocumentWritesService } from "#modules/admin/document-writes/index.js";
+import { InstallationSettingsService } from "#modules/admin/settings/index.js";
 import { type ProjectDetail, ProjectsService } from "#modules/admin/projects/index.js";
 import { JobRunsService, type JobRunView } from "#modules/delivery/runtime-jobs/index.js";
-import { type DocumentDiff, type DocumentFile, type DocumentRef, type DocumentRefs, type DocumentRepo, type DocumentTree, type GrepLine, MAX_DOCUMENT_BYTES, type MirrorBranch, diffFileWithin } from "../domain/document.js";
+import { ATTACHMENT_MEDIA_TYPES, type DocumentAttachment, type DocumentDiff, type DocumentFile, type DocumentHistory, type DocumentRef, type DocumentRefs, type DocumentRepo, type DocumentTree, type FileVersion, type GrepLine, type HistoryEntry, MAX_ATTACHMENT_BYTES, MAX_DOCUMENT_BYTES, type MirrorBranch, diffFileWithin } from "../domain/document.js";
 import { DocumentRepoReader } from "../domain/document.ports.js";
+import { parseUnifiedDiff } from "../domain/unified-diff.js";
+import type { DocumentCompare } from "../domain/document.js";
 
 /** A project's document repo, ready to read: the mirror and its default branch. */
 export interface DocumentContext {
@@ -52,6 +56,15 @@ export function servablePath(path: string, allowRoot: boolean): string {
   return path;
 }
 
+/** Whether `folder` is the `_attachments/` folder of a page folder of the wiki, as the layout builds it. */
+function isBesideAPage(folder: string): boolean {
+  try {
+    return pageAttachmentsDir(pageFolder(folder)) === folder;
+  } catch {
+    return false;
+  }
+}
+
 const isServable = (path: string): boolean => !path.split("/").some((segment) => segment.toLowerCase() === "restricted" || segment.toLowerCase() === ".git");
 
 @Injectable()
@@ -61,6 +74,7 @@ export class DocumentsService {
     private readonly runs: JobRunsService,
     private readonly writes: DocumentWritesService,
     private readonly reader: DocumentRepoReader,
+    private readonly settings: InstallationSettingsService,
   ) {}
 
   /** The project's document repo mirror; 404 for an unknown project, 409 without a repo or mirror. */
@@ -200,6 +214,33 @@ export class DocumentsService {
     return (await this.reader.isAncestor(context.repo, tip.commit, defaultTip.commit)) ? "merged" : "open";
   }
 
+  /**
+   * A page attachment at a ref: a file of an allowed type (`isAttachmentType`) directly in an `_attachments/` folder
+   * (`pageAttachmentsDir`), at most MAX_ATTACHMENT_BYTES. 400 for any other place, 415 for any other type (SVG and
+   * HTML included), 413 when larger; its content type comes from its extension, never from its bytes.
+   */
+  async attachment(projectId: string, ref: string | undefined, path: string): Promise<DocumentAttachment> {
+    const file = servablePath(path, false);
+    const folder = pageFolder(file);
+    const name = file.slice(folder === "" ? 0 : folder.length + 1);
+    if (!isAttachmentName(name) || !isBesideAPage(folder)) throw new BadRequestException(`${file} is not in an _attachments folder of a page`);
+    const extension = name.slice(name.lastIndexOf(".") + 1).toLowerCase();
+    const contentType = ATTACHMENT_MEDIA_TYPES[extension];
+    if (!isAttachmentType(name) || contentType === undefined) throw new UnsupportedMediaTypeException(`${file} is not an attachment type the documents API serves (png, jpg, jpeg, gif, webp, pdf)`);
+    const context = await this.context(projectId);
+    const resolved = await this.resolve(context, ref);
+    const read = await this.reader.readBytes(context.repo, resolved.commit, file, MAX_ATTACHMENT_BYTES);
+    switch (read.status) {
+      case "missing":
+        throw new NotFoundException(`${file} does not exist at ${resolved.ref}`);
+      case "not-a-file":
+        throw new BadRequestException(`${file} is a directory at ${resolved.ref}`);
+      case "too-large":
+        throw new PayloadTooLargeException(`${file} is ${read.size} bytes; the documents API serves attachments up to ${MAX_ATTACHMENT_BYTES} bytes`);
+    }
+    return { ...resolved, path: file, contentType, disposition: extension === "pdf" ? "attachment" : "inline", bytes: read.bytes };
+  }
+
   /** The entries of a directory at a ref, without `restricted/` and `.git`. */
   async tree(projectId: string, ref: string | undefined, path: string): Promise<DocumentTree> {
     const dir = servablePath(path, true);
@@ -212,6 +253,31 @@ export class DocumentsService {
       path: dir,
       entries: entries.filter((entry) => isServable(entry.path)).sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "dir" ? -1 : 1)),
     };
+  }
+
+  /**
+   * The versions of a file at a ref: the commits that changed it, newest first, across renames. A path with no
+   * commits has an empty list; `before` (a commit of the mirror) continues after it.
+   */
+  async history(projectId: string, ref: string | undefined, path: string, limit: number, before: string | undefined): Promise<DocumentHistory> {
+    const file = servablePath(path, false);
+    const context = await this.context(projectId);
+    const resolved = await this.resolve(context, ref);
+    if (before !== undefined && !(await this.reader.hasCommit(context.repo, before))) throw new NotFoundException(`Commit ${before} is not in the document repo mirror`);
+    const found = await this.reader.history(context.repo, resolved.commit, file, { limit, ...(before === undefined ? {} : { before }) });
+    // The trailers of a commit are believed only when Kintsugi made it: its author is the commit identity (docs/reference/
+    // document-repo-commit-conventions.md). A member's own commit may write any trailer.
+    const identity = await this.settings.commitIdentity();
+    const kintsugi = (version: FileVersion): boolean => version.authorName === identity.name && version.authorEmail.toLowerCase() === identity.email.toLowerCase();
+    const entries: HistoryEntry[] = found.entries.map((version) => ({
+      sha: version.sha,
+      date: version.date,
+      subject: version.subject,
+      actor: kintsugi(version) ? (version.trailerActor ?? version.authorName) : version.authorName,
+      minor: kintsugi(version) && version.trailerMinor,
+    }));
+    const last = entries[entries.length - 1];
+    return { ...resolved, path: file, followsRenames: true, entries, next: found.more && last !== undefined ? last.sha : null };
   }
 
   /** A text file at a ref (at most MAX_DOCUMENT_BYTES). */
@@ -231,5 +297,39 @@ export class DocumentsService {
         throw new UnsupportedMediaTypeException(`${file} is not a text file`);
     }
     return { ...resolved, path: file, size: read.size, content: read.content };
+  }
+
+  /**
+   * One file at two commits of the mirror: its unified diff, or none when the text is the same. A side where the file
+   * does not exist counts as empty (the file is added or deleted); 404 when neither has it, and a side that is too
+   * large or not text is refused as `file` refuses it.
+   */
+  async compare(projectId: string, path: string, from: string, to: string): Promise<DocumentCompare> {
+    const file = servablePath(path, false);
+    const context = await this.context(projectId);
+    for (const commit of [from, to]) {
+      if (!(await this.reader.hasCommit(context.repo, commit))) throw new NotFoundException(`Commit ${commit} is not in the document repo mirror`);
+    }
+    const side = async (commit: string): Promise<string | undefined> => {
+      const read = await this.reader.read(context.repo, commit, file, MAX_DOCUMENT_BYTES);
+      switch (read.status) {
+        case "missing":
+          return undefined;
+        case "not-a-file":
+          throw new BadRequestException(`${file} is a directory at ${commit}; list it with /documents/tree`);
+        case "too-large":
+          throw new PayloadTooLargeException(`${file} is ${read.size} bytes at ${commit}; the documents API serves files up to ${MAX_DOCUMENT_BYTES} bytes`);
+        case "binary":
+          throw new UnsupportedMediaTypeException(`${file} is not a text file`);
+        case "ok":
+          return read.content;
+      }
+    };
+    const [older, newer] = [await side(from), await side(to)];
+    if (older === undefined && newer === undefined) throw new NotFoundException(`${file} does not exist at either commit`);
+    const status = older === undefined ? "added" : newer === undefined ? "deleted" : older === newer ? "unchanged" : "modified";
+    const hunks = status === "unchanged" ? [] : parseUnifiedDiff(await this.reader.patch(context.repo, from, to, file));
+    const lines = hunks.flatMap((hunk) => hunk.lines);
+    return { path: file, from, to, status, added: lines.filter((line) => line.type === "add").length, removed: lines.filter((line) => line.type === "del").length, hunks };
   }
 }

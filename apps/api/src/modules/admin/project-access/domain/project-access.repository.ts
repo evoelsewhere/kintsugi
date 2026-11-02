@@ -14,6 +14,7 @@ export interface ReadableProject {
 
 export abstract class ProjectAccessRepository {
   abstract list(projectId: string): Promise<ProjectAccessGrant[]>;
+  abstract listProjectIds(userId: string): Promise<string[]>;
   abstract listReadableProjects(userId: string, projectIds: readonly string[]): Promise<ReadableProject[]>;
   abstract has(userId: string, projectId: string): Promise<boolean>;
   abstract projectExists(projectId: string): Promise<boolean>;

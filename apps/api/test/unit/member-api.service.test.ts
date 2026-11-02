@@ -163,3 +163,21 @@ describe("MemberApiService.recordActivity", () => {
     expect(activity.record).not.toHaveBeenCalled();
   });
 });
+
+describe("MemberApiService Brain nodes", () => {
+  it("leaves the page attributes of builder 6 off the member contract", async () => {
+    const node = {
+      id: "a.md", parentId: "/", kind: "document", path: "a.md", anchor: null, title: "A", summary: "", summarySource: "none", ordinal: 0, depth: 1,
+      lineStart: 1, lineEnd: 2, subtreeEnd: 2, tokens: 1, subtreeTokens: 1, children: 0, ids: [], changed: null,
+      labels: ["runbook"], status: "archived", owner: "lead", template: true, space: "ENG",
+    };
+    const brain = { lookup: vi.fn(async () => ({ projectId: "shop", branch: "main", commit: "c".repeat(40), query: "a.md", matches: [{ ...node, breadcrumb: [] }] })) } as unknown as BrainService;
+    const access = { listReadableProjects: vi.fn(async () => []) } as unknown as ProjectAccessService;
+    const member = new MemberApiService(access, {} as DocumentsService, {} as PluginsService, {} as PluginAccessService, {} as MemberActivityService, brain);
+    const result = await member.brainLookup({ projectId: "shop", query: "a.md" });
+    const [match] = result.matches;
+    expect(match).toBeDefined();
+    for (const field of ["parentId", "ordinal", "depth", "labels", "status", "owner", "template", "space"]) expect(match, field).not.toHaveProperty(field);
+    expect(match).toMatchObject({ id: "a.md", kind: "document", title: "A" });
+  });
+});

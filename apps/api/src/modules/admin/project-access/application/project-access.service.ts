@@ -41,6 +41,11 @@ export class ProjectAccessService {
     if (!(await this.access.has(userId, projectId))) throw new ForbiddenException("Project Access is required");
   }
 
+  /** The projects the user holds Project Access on: what a cross-project list may show them. */
+  readableProjectIds(userId: string): Promise<string[]> {
+    return this.access.listProjectIds(userId);
+  }
+
   listReadableProjects(userId: string, projectIds: readonly string[]): Promise<ReadableProject[]> {
     return this.access.listReadableProjects(userId, [...new Set(projectIds)]);
   }

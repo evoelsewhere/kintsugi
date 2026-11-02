@@ -4,11 +4,13 @@
 
 import { access } from "node:fs/promises";
 import { Injectable } from "@nestjs/common";
-import { CheckoutStorage, GitError, dataDirFromEnv, runGit } from "@kintsugi/git";
-import type { DiffFile, DocumentDiff, DocumentRepo, FileRead, GrepLine, MirrorBranch, TreeEntry } from "../domain/document.js";
+import { CheckoutStorage, GitError, dataDirFromEnv, runGit, runGitBytes } from "@kintsugi/git";
+import type { BytesRead, DiffFile, DocumentDiff, DocumentRepo, FileRead, FileVersion, GrepLine, MirrorBranch, TreeEntry } from "../domain/document.js";
 import { DocumentRepoReader } from "../domain/document.ports.js";
 
 const TIMEOUT_MS = 30_000;
+/** The most versions of one file the history reads: the newest ones. */
+const HISTORY_SCAN_MAX = 2_000;
 
 @Injectable()
 export class GitMirrorDocumentReader extends DocumentRepoReader {
@@ -78,6 +80,17 @@ export class GitMirrorDocumentReader extends DocumentRepoReader {
     return entries;
   }
 
+  async readBytes(repo: DocumentRepo, commit: string, path: string, maxBytes: number): Promise<BytesRead> {
+    const type = await this.objectType(repo, commit, path);
+    if (type === undefined) return { status: "missing" };
+    if (type !== "blob") return { status: "not-a-file" };
+    const size = Number((await this.git(repo, ["cat-file", "-s", `${commit}:${path}`])).trim());
+    if (size > maxBytes) return { status: "too-large", size };
+    // The blob's bytes, never decoded as text; the output is bounded by the size just read.
+    const bytes = await runGitBytes(["--git-dir", this.storage.mirror(repo.serverId, repo.repositoryId), "cat-file", "blob", `${commit}:${path}`], { timeoutMs: TIMEOUT_MS, maxOutputBytes: size + 1024 });
+    return { status: "ok", size, bytes };
+  }
+
   async read(repo: DocumentRepo, commit: string, path: string, maxBytes: number, knownSize?: number): Promise<FileRead> {
     let size = knownSize;
     if (size === undefined) {
@@ -90,6 +103,11 @@ export class GitMirrorDocumentReader extends DocumentRepoReader {
     const content = await this.git(repo, ["cat-file", "blob", `${commit}:${path}`]);
     if (content.includes("\0")) return { status: "binary", size };
     return { status: "ok", size, content };
+  }
+
+  async patch(repo: DocumentRepo, from: string, to: string, path: string): Promise<string> {
+    // The path is literal (no glob); no external diff driver or text conversion runs on the repository's attributes.
+    return this.git(repo, ["-c", "core.quotePath=false", "--literal-pathspecs", "diff", "--unified=3", "--no-color", "--no-ext-diff", "--no-textconv", "--no-renames", from, to, "--", path]);
   }
 
   async grep(repo: DocumentRepo, commit: string, terms: readonly string[], options: { ignoreCase: boolean; under?: string; limit: number }): Promise<{ matches: GrepLine[]; truncated: boolean }> {
@@ -176,6 +194,32 @@ export class GitMirrorDocumentReader extends DocumentRepoReader {
       linesKnown = false;
     }
     return { from: resolved, files: [...files.values()], linesKnown };
+  }
+
+  async history(repo: DocumentRepo, commit: string, path: string, options: { limit: number; before?: string }): Promise<{ entries: FileVersion[]; more: boolean }> {
+    // The whole history of the file (up to HISTORY_SCAN_MAX versions) is read from the tip each time: `--follow` follows
+    // a rename only from the commit that has the path, so a page cannot start at an older commit under the new name.
+    // The path is literal (no glob). Fields end with a unit separator, a record with a record separator.
+    const format = ["%H", "%aI", "%an", "%ae", "%s", "%(trailers:only,unfold)"].join("%x1f");
+    const out = await this.git(repo, ["--literal-pathspecs", "log", "--follow", `-n${HISTORY_SCAN_MAX}`, `--format=${format}%x1e`, commit, "--", path]);
+    const entries: FileVersion[] = [];
+    for (const record of out.split("\x1e")) {
+      const [sha = "", date = "", authorName = "", authorEmail = "", subject = "", trailers = ""] = record.trim().split("\x1f");
+      if (sha === "") continue;
+      const trailer = (key: string): string | undefined => {
+        for (const line of trailers.split("\n")) {
+          const colon = line.indexOf(":");
+          if (colon > 0 && line.slice(0, colon).trim().toLowerCase() === key) return line.slice(colon + 1).trim();
+        }
+        return undefined;
+      };
+      const actor = trailer("kintsugi-actor");
+      entries.push({ sha, date: new Date(date).toISOString(), subject, authorName, authorEmail, trailerActor: actor === "" ? undefined : actor, trailerMinor: trailer("kintsugi-minor")?.toLowerCase() === "true" });
+    }
+    // The page starts after `before` when it is given (none when `before` is not a version of this file).
+    const from = options.before === undefined ? 0 : entries.findIndex((entry) => entry.sha === options.before) + 1;
+    if (options.before !== undefined && from === 0) return { entries: [], more: false };
+    return { entries: entries.slice(from, from + options.limit), more: entries.length > from + options.limit };
   }
 
   private async objectType(repo: DocumentRepo, commit: string, path: string): Promise<string | undefined> {

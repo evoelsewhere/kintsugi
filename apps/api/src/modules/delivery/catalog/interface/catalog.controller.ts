@@ -1,9 +1,10 @@
 // Interface layer: the item catalog of an application with the derived status of every item
-// (ADR-0033). Reading needs a session, like the documents it comes from.
+// (ADR-0033). Every route needs Project Access on the project, like the documents it comes from (ADR-0099 decision 4).
 
-import { Body, Controller, Get, HttpCode, Param, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { ApiAcceptedResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { type Actor, CurrentActor, RequirePermission } from "#common/auth/decorators.js";
+import { ProjectAccessGuard } from "#modules/admin/project-access/index.js";
 import type { JobRunView } from "#modules/delivery/runtime-jobs/index.js";
 import { CatalogService } from "../application/catalog.service.js";
 import { UnderstandRunsService } from "../application/understand-runs.service.js";
@@ -12,6 +13,7 @@ import { type CatalogQuery, type UnderstandRunBody, catalogQuerySchema, understa
 
 @ApiTags("delivery · item catalog")
 @Controller("projects/:id/applications/:appId")
+@UseGuards(ProjectAccessGuard)
 export class CatalogController {
   constructor(
     private readonly catalog: CatalogService,

@@ -103,10 +103,10 @@ export class PgDocumentWriteStore extends DocumentWriteStore {
   }
 
   async list(filter: DocumentWriteFilter, limit: number, offset: number): Promise<{ items: DocumentWriteRecord[]; total: number }> {
-    const where = "($1::text[] is null or status = any($1)) and ($2::text is null or project_id = $2)";
-    const params = [filter.statuses === undefined || filter.statuses.length === 0 ? null : [...filter.statuses], filter.projectId ?? null];
+    const where = "($1::text[] is null or status = any($1)) and ($2::text is null or project_id = $2) and ($3::text[] is null or project_id = any($3))";
+    const params = [filter.statuses === undefined || filter.statuses.length === 0 ? null : [...filter.statuses], filter.projectId ?? null, filter.projectIds === undefined ? null : [...filter.projectIds]];
     const [rows, count] = await Promise.all([
-      this.#pool.query<WriteRow>(`select ${COLUMNS} from workflow.document_write where ${where} order by created_at desc, id limit $3 offset $4`, [...params, limit, offset]),
+      this.#pool.query<WriteRow>(`select ${COLUMNS} from workflow.document_write where ${where} order by created_at desc, id limit $4 offset $5`, [...params, limit, offset]),
       this.#pool.query<{ total: number }>(`select count(*)::int as total from workflow.document_write where ${where}`, params),
     ]);
     return { items: rows.rows.map(toRecord), total: count.rows[0]?.total ?? 0 };

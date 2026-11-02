@@ -1,0 +1,122 @@
+# Collaboration and access: feature matrix
+
+> Research pack, area 20-collaboration (ticket BC-001). The collaboration and access features of a Confluence-like wiki, each with the behaviour documented by the vendor, a public source, what Kintsugi has today, the gap and a MoSCoW proposal. Companion pages: [user stories](user-stories.md), [gap analysis](gap-analysis.md), [open questions](open-questions.md). The architects' decisions that shape the priorities are in the thread `collab-constraints` (summarised in [open questions](open-questions.md)).
+
+## How to read this page
+
+- **Source** keys point to the list at the end. Every source is a public documentation page that needs no sign-in. The pages were read through a summarising fetch on 1 Nov 2026 (the verbatim text stopped after the site navigation on several pages), so the behaviour column paraphrases and the wording should be checked against the live page before it is quoted.
+- **Kintsugi today** names a repository path or a documentation page, or says *none*. "Have" means the capability exists as described, "partial" that a part of it exists, "gap" that nothing does.
+- **Priority** is a proposal (M must, S should, C could, W won't in the phases of this pack), reviewed by the product owner. Personas are the contract's: `member`, `manager`, `admin`, `viewer`, `agent` (a member's agent reading through the [Brain](../../../reference/brain.md)). Each M or S row says in *Notes* which persona needs it and why.
+- Two decisions of the architects change a Confluence behaviour and are marked **(D-view)** and **(D-edit)**: a page in the shared Git repo has no per-page *view* restriction, because everyone with Git read access, every member's clone and every mirror holds the text, so the view boundary stays Project Access ([ADR-0062](../../../decisions/0062-coding-agent-context-and-project-access.md)); *edit* and publish restrictions are real controls because publishing goes through the writer ([write path](../../../reference/document-repo-write-path.md)).
+
+## Comments
+
+| ID | Feature | Confluence behaviour (one line) | Source | Kintsugi today | Gap | Priority | Notes |
+|---|---|---|---|---|---|---|---|
+| COL-01 | Page comments with replies | A general comment sits at the foot of a page or blog and others reply to it, forming a thread. | S1 | None. No comment, mention or notification concept exists in `apps/api/src` or `packages/domain/src`. Review conversation happens on the Git server's pull request ([write path](../../../reference/document-repo-write-path.md) step 5). | gap | M | `member`: asks a question about a rule or standard where the reader is, without opening a pull request. |
+| COL-02 | Inline comments anchored to text | Highlight text, choose Comment; the comment is tied to that passage. | S1 | None. The Brain gives stable anchors to comment on: node ids `path.md#anchor`, cards by reference id, line ranges and a commit ([Brain](../../../reference/brain.md), [ADR-0091](../../../decisions/0091-brain-vectorless-tree-index.md) decision 1 and 4). | gap | M | `member`, `manager`: discuss one rule or table row; the anchor must survive edits (re-anchor by the quoted text, orphaned when it is gone). |
+| COL-03 | Resolve and reopen inline comments | An inline comment can be resolved (hidden under a filter) and reopened; replies cannot be resolved on their own. | S1 | None. A gap in a specification has its own life cycle ([ADR-0087](../../../decisions/0087-who-settles-a-gap-and-evidence-that-moved.md), `documents.resolve`), which is a different mechanism. | gap | S | `manager`: closes review threads so the open ones are the work list. |
+| COL-04 | Edit and delete comments | Authors edit their own comments; they delete their own only when no reply exists; space admins edit and delete any; a deleted comment cannot be restored. | S1 | None. Audit of a deletion has a place: `apps/api/src/common/audit/audit-trail.ts` (`AUDIT_ACTIONS`). | gap | S | `member`: corrects a typo; `admin`: removes an inappropriate comment, audited. |
+| COL-05 | Comments on a draft stay hidden until publish | An inline comment written while editing is not visible to viewers and sends no notification until the page is published. | S1 | None; depends on drafts, which are in the authoring area (`docs/research/confluence-parity/10-authoring/`). | gap | C | `member`: draft reviewers comment before a publish. Not needed until drafts exist. |
+| COL-06 | Reactions and likes | General comments take reactions; inline comments can be liked. | S1 | None. | gap | C | Low value for a delivery portal; cheap once comments exist. |
+| COL-07 | Comments by agents and about agents | Not a Confluence feature. A page's review findings are written by a runtime agent (`_build/review.md`, [ADR-0071](../../../decisions/0071-members-build-runtime-reviews.md)) or read by a member's agent. | none (Kintsugi-specific) | None: the Brain's read tools do not return conversation ([Brain](../../../reference/brain.md) Reads). | gap | S | `agent`: reads open comments on the page it is about to change, through a tool of its own, never inside `brain_read` (decided in the thread). |
+
+## Mentions and tasks
+
+| ID | Feature | Confluence behaviour (one line) | Source | Kintsugi today | Gap | Priority | Notes |
+|---|---|---|---|---|---|---|---|
+| COL-08 | @mention a person | Type `@` and pick a name; the person gets an in-app notification and an email when subscribed. | S2, S3 | None. `GET /users` needs `members.manage` (`apps/api/src/modules/admin/users/interface/`), so an ordinary member cannot even look people up. | gap | M | `member`: pulls the right reviewer in. Needs a read-only people directory scoped to the project's Project Access holders. |
+| COL-09 | Notify on the first mention only | Notifications go out the first time a person is mentioned on a page, not for later mentions of the same person. | S2 | None. | gap | S | `member`: avoids noise when a page is edited many times. |
+| COL-10 | A mention never reveals a page to someone without access | A person who cannot view the page is not notified. | S4 | Project Access is the check the member API makes (`apps/api/src/modules/admin/project-access/application/project-access.service.ts`). | partial | M | `admin`: no leak through a notification. Notify only users with Project Access to the project. |
+| COL-11 | Mention a team | A team of up to 50 people can be mentioned; each member is notified. | S3 | None. Kintsugi has access roles (installation-wide) and project roles (RACI, no grant power, [ADR-0024](../../../decisions/0024-access-roles-vs-project-roles.md)); neither is a team of a project. | gap | W | Needs a group concept the architects have not accepted; mention people individually. |
+| COL-12 | Action items (tasks) with an assignee | `[]` makes a checkbox task, assigned by @mentioning someone; tasks are listed in one place. | S2 | None for wiki pages. Unit tasks are files (`task.md`, [ADR-0012](../../../decisions/0012-work-items-as-files-in-git.md)), a different thing. | gap | C | `member`: a review comment that must be done by someone. Could reuse comments with an assignee. |
+
+## Watching and notifications
+
+| ID | Feature | Confluence behaviour (one line) | Source | Kintsugi today | Gap | Priority | Notes |
+|---|---|---|---|---|---|---|---|
+| COL-13 | Watch a page or a space | Watching a page, blog or whole space notifies of added, edited and deleted content, comments and attachments. | S5 | None. | gap | M | `member`: follows the standards they depend on. Space = a folder subtree (authoring thread Q6). |
+| COL-14 | Autowatch | Content you create or edit is watched by default; writing a general comment also selects Watch. | S5, S1 | None. | gap | S | `member`: stays informed about own pages without setup. A preference, off switch needed. |
+| COL-15 | In-app notification inbox | A bell lists shares, mentions, comments and likes on watched content; unread filter, mark all read, items age out after 30 days. | S6 | Partial: the portal follows changes over one SSE stream that carries topic and scope only ([ADR-0059](../../../decisions/0059-live-updates-over-sse.md), `apps/api/src/common/realtime/change-feed.ts`). No persisted per-user notification exists. | partial | M | `member`: the one place that tells him or her what needs a reply. Decided: `core.notification`, delivered over the change feed. |
+| COL-16 | Email notifications: real time and daily digest | Mentions, tasks and changes to watched or owned content by email at once, or one summary of the last 24 hours. | S7, S5 | None. [ADR-0008](../../../decisions/0008-authentication.md) has no email dependency; no mail sender exists. | gap | C | Deferred behind its own ADR (outbound dependency). In-app inbox first. |
+| COL-17 | Notification preferences and watch list | A person switches autowatch, blog watching and "notify on my actions", and lists and removes every watch. | S7, S5 | None. | gap | S | `member`: control over noise. |
+| COL-18 | Notifications respect view permission | Notifications require View permission on the content. | S5 | Project Access check exists for member reads (see COL-10); not applied to any notification. | partial | M | `admin`: same rule as COL-10, so a revoked user stops receiving. |
+
+## Sharing
+
+| ID | Feature | Confluence behaviour (one line) | Source | Kintsugi today | Gap | Priority | Notes |
+|---|---|---|---|---|---|---|---|
+| COL-19 | Share a page with a person | A Share button adds people or groups with view or edit and optionally emails them; a bare link does not grant access. | S8 | None. A link to a document path works only for a signed-in user (`documents.controller.ts` needs a session). | gap | S | `member`: sends a colleague to the page with a note. Kintsugi's version is "notify with a link", never a grant (a share cannot widen Project Access). |
+| COL-20 | Access requests | A person without access asks the owner; anyone who can edit and manage restrictions acts on it. | S9 | None. Project Access is granted by `project.access.manage` holders (admins). | gap | C | `viewer`: asks for Project Access from the page. A notification to the managers. |
+| COL-21 | Public links and anonymous access | A page can be shared by one public link (paid plans); the visitor sees a view-only copy that ignores every restriction; spaces can allow anonymous access. | S10, S11 | None. Kintsugi has no anonymous route; every read needs a session or a member token ([ADR-0008](../../../decisions/0008-authentication.md)). | gap | W | Self-hosted delivery documents hold legacy analysis; an unauthenticated surface is a security decision of its own. |
+
+## Permissions and restrictions
+
+| ID | Feature | Confluence behaviour (one line) | Source | Kintsugi today | Gap | Priority | Notes |
+|---|---|---|---|---|---|---|---|
+| COL-22 | Three-level model | Global permissions, space permissions and content restrictions combine; a content item never has more access than its container; permissions are additive across groups. | S11, S4 | Partial: access roles with permission codes (`core.permission`, `apps/api/migrations/002_identity.sql`) and Project Access (`admin.project_access`, migration 019) give two levels; no space level, no content level. | partial | M | `admin`: one understandable rule set. Mapping in the [gap analysis](gap-analysis.md#permission-mapping). |
+| COL-23 | Space permissions and roles | A space has Admin, Manager, Collaborator and Viewer roles (and custom roles) bundling permissions: view, create, edit, delete, comment, attach, export, restrict, administer. | S12 | None. The role mechanism exists installation-wide (`core.role`, `core.role_permission`, [ADR-0024](../../../decisions/0024-access-roles-vs-project-roles.md)); a space needs grants on a folder subtree. | gap | M | `manager`: a space for the standards team where only they publish; `viewer`: read and comment only. Decided: grants to users and access roles, never to project roles. |
+| COL-24 | Per-operation space permissions | Create, delete own, delete any, comment, delete comments, add and delete attachments, export, restrict, archive are separate switches. | S12, S13 | None. The permission catalog is flat codes and new ones are added by migration ([AGENTS.md](../../../../AGENTS.md) identity rule). | gap | S | `admin`: separate who may comment from who may edit. Start with view, comment, edit, manage. |
+| COL-25 | Page edit restriction | Edit can be limited to named users or groups on a page; edit permission is not inherited by child pages. | S9, S4 | None. Closest: the write path's `autoCommitPaths` split between direct commit and pull request ([write path](../../../reference/document-repo-write-path.md) step 3). | gap | M **(D-edit)** | `manager`: a rule or standard only owners may change. Enforced by the API on draft and publish; branch protection or CODEOWNERS on the Git server is the backstop. |
+| COL-26 | Page view restriction and inheritance | View can be limited to named users or groups and passes down to children; the restricted page is hidden from the tree, search and macros; a user with space View who follows a link sees "access denied". | S9, S11 | None, and not offered on Git content **(D-view)**. The Brain indexes the whole branch and leaves out only `restricted/`, `plugins/`, `scratch/`, ledgers and hidden folders ([Brain](../../../reference/brain.md) Left out). | gap | W | Everyone with Git read access, every clone and every mirror holds the text, and each of the Brain, change-feed and search paths would need a filter that can leak. Replacement: COL-27. |
+| COL-27 | Restricted pages as encrypted records | Not a Confluence feature (it keeps restricted pages in the same store). Kintsugi already stores sensitive job output encrypted in Postgres, never in Git or the Brain, readable with `restricted.read` and audited before the content is returned. | S11 (comparison) | Partial: `governance.restricted_record` ([data model](../../../reference/data-model.md#job-runs)), audit fail-closed ([security](../../../architecture/concepts/security.md#audit)). Written by jobs, not authored by people. | partial | S | `manager`: a page some project members must not see (a customer's personal data findings, a pricing note). Needs its own ADR; the owner decides if the need is real (open question O-3). |
+| COL-28 | Restrictions only narrow | A restriction can never grant more than the container allows; removing the viewer's own read while keeping update is refused. | S4, S14 | None. | gap | M | `admin`: an invariant to enforce and test, not a feature to build. |
+| COL-29 | List restricted content in a space | Space admins see the list of restricted pages, including those they cannot open, and can remove the restriction. | S11 | None. | gap | S | `manager`: finds and clears stale edit restrictions after people leave. |
+| COL-30 | Admin override with audit | Organisation admins can view and change access to any content with an admin key; its use is audited. | S13 | Partial: admins hold all permissions by seed (`002_identity.sql`); every `restricted.read` is audited before it returns. | partial | C | `admin`: recover a page whose restricting person has left. Only needed once restrictions exist. |
+| COL-31 | Group grants | Permissions go to users and to groups; group membership can override an individual change. | S11 | Partial: access roles are the installation's groups of permissions, assigned to users (`core.user_role`); admin-defined sub-roles such as `ba`, `dev`, `tester` exist. Project roles are RACI and never grants (ADR-0024). | partial | S | `admin`: grant "all `ba` members" once. Decided: users and access roles. |
+
+## Co-editing, review and approval
+
+| ID | Feature | Confluence behaviour (one line) | Source | Kintsugi today | Gap | Priority | Notes |
+|---|---|---|---|---|---|---|---|
+| COL-32 | Real-time co-editing | Live docs: up to 40 people edit at once with avatars on the toolbar, auto-saved; a version is finalised 10 to 15 minutes after the last edit; standard pages are not documented as simultaneous. | S15 | None, and incompatible with Git as the source of truth ([ADR-0007](../../../decisions/0007-git-as-source-of-truth.md)) without a new realtime service holding document state in Postgres. | gap | W | Recommendation in the [gap analysis](gap-analysis.md#real-time-co-editing). |
+| COL-33 | Presence on a page | Avatars show who is editing. | S15 | None. The change feed can push a topic to the portal (ADR-0059). | gap | S | `member`: "Alex is editing" prevents two people editing one page. Decided: draft rows touched in the last 2 minutes. |
+| COL-34 | Conflict handling on concurrent edits | The editor merges simultaneous changes; the vendor does not say what happens to the same text. | S15 | Partial: the writer fetches, rebases and retries a push, and a rebase conflict fails the write ([write path](../../../reference/document-repo-write-path.md) step 4); no person-facing resolution. | partial | M | `member`: never loses an edit. Publish with an optimistic check on the base commit and a three-way view on conflict. |
+| COL-35 | Page approvals | A requester names up to five approvers with a message and due date; each approves or requests changes with a comment; the panel shows who answered; past cycles are logged (Premium and Enterprise). | S16 | Partial: the pull request is the review ([write path](../../../reference/document-repo-write-path.md) steps 5 and 7, `workflow.document_write` states `pr-opened`, `merged`, `closed`); governance gates exist for stages (`governance.gate`, [data model](../../../reference/data-model.md#gates)). | partial | S | `manager`: a standard is published only after a named reviewer agrees. Decided: the pull request is the approval; a gate only for spaces that require one (later). |
+| COL-36 | Version history shows who changed what | A page keeps versions with author and time, compared and reverted. | S15 | Have in Git: history per file; the Brain's `brain_changes` and per-document `changed` ([Brain](../../../reference/brain.md)). The row's owner is the discovery area (`DIS-40` to `DIS-45`, in `docs/research/confluence-parity/30-discovery/`). | partial | S | `viewer`: sees who last changed a rule. Kept here as a pointer. |
+
+## Audit and insight
+
+| ID | Feature | Confluence behaviour (one line) | Source | Kintsugi today | Gap | Priority | Notes |
+|---|---|---|---|---|---|---|---|
+| COL-37 | Audit of permission and restriction changes | The audit log records space, global and content-restriction changes, public-link toggles and admin-key use; page edits are not logged there (version history); CSV export; retention 1 to 12 months. | S13 | Have: append-only `governance.audit_event`, one port (`AuditTrail`), coverage for roles, members, gates, projects ([data model](../../../reference/data-model.md#audit-log)); no retention setting, no export. | partial | M | `admin`: who granted what, when. New actions for space grant, restriction and comment delete. |
+| COL-38 | Audit of reads of sensitive pages | Admin-key views are logged; ordinary views are not. | S13 | Have for restricted records: every read is audited fail-closed before the content returns (`restricted.read`). | partial | S | `admin`: shows who read a restricted page, only if COL-27 is built. Ordinary page reads are not audited (decided; view counts are telemetry). |
+| COL-39 | Page analytics | Views, unique viewers, per-person last view and engagement, link clicks (Premium and Enterprise); "engaged" means 20 seconds or more. | S17 | Partial: monitoring of member activity and Brain reads (`brain.read`, `apps/api/src/modules/monitoring/member-activity/`, [member CLI](../../../reference/member-cli.md)). | partial | C | `manager`: sees which standards are read, by people and by agents. Owned by the discovery area (`DIS-60` to `DIS-63`, one report and one privacy default); kept here only as a pointer. |
+
+## Permission rows mapped to Kintsugi
+
+Each Confluence level of the permission rows (COL-22 to COL-31), against what exists or the code it would need. The reasoning and the limits set by [ADR-0024](../../../decisions/0024-access-roles-vs-project-roles.md) are in the [gap analysis](gap-analysis.md#permission-mapping); the names are those of the architects' proposal (ADR-0099).
+
+| Confluence level | Existing in Kintsugi | Gap and the code it would need |
+|---|---|---|
+| Global permissions | Access-role permission codes (`core.permission`, `core.role_permission`) | `wiki.comment`, `wiki.write`, `wiki.publish`, `wiki.manage` by migration |
+| Space view | Project Access (`admin.project_access`, `project.access.manage`) | None; the portal's document routes must check it (prerequisite) |
+| Space roles Viewer, Collaborator, Manager, Admin | Access roles bundle codes; project roles never grant | Viewer = `wiki.comment`; Collaborator = `wiki.write`; Manager and Admin = `wiki.manage`; no new role concept |
+| Space or page edit restriction | None (`autoCommitPaths` only picks commit or pull request) | An edit restriction on a path prefix naming users or access roles, checked by the API |
+| Page view restriction | None | Declined on Git content; authored restricted pages are a candidate (COL-27, its own ADR) |
+| Groups | Access roles incl. admin-defined sub-roles | None; project roles are not subjects |
+| Admin override | `admin` holds every code | Audited as `wiki-restriction.clear` |
+
+## Sources
+
+| Key | Page | URL |
+|---|---|---|
+| S1 | Comment on pages, live docs, whiteboards, blog posts, and slides | https://support.atlassian.com/confluence-cloud/docs/comment-on-pages-and-blog-posts/ |
+| S2 | Add action items and @mentions | https://support.atlassian.com/confluence-cloud/docs/add-action-items-and-mentions/ |
+| S3 | Mention a person, team, or AI agent | https://support.atlassian.com/confluence-cloud/docs/mention-a-person-team-or-ai-agent/ |
+| S4 | Manage permissions at the content level (users without access are not notified) | https://support.atlassian.com/confluence-cloud/docs/manage-permissions-on-the-page-level/ |
+| S5 | Watch pages, live docs, spaces, whiteboards, blogs, and slides | https://support.atlassian.com/confluence-cloud/docs/watch-pages-spaces-and-blogs/ |
+| S6 | View your notifications | https://support.atlassian.com/confluence-cloud/docs/view-your-notifications/ |
+| S7 | Subscribe to email updates | https://support.atlassian.com/confluence-cloud/docs/subscribe-to-email-notifications/ |
+| S8 | Share Confluence content | https://support.atlassian.com/confluence-cloud/docs/share-confluence-content/ |
+| S9 | Change who can find content and what they can do with it | https://support.atlassian.com/confluence-cloud/docs/add-or-remove-page-restrictions/ |
+| S10 | Share content externally with public links | https://support.atlassian.com/confluence-cloud/docs/share-content-externally-with-public-links/ |
+| S11 | Confluence permissions structure | https://support.atlassian.com/confluence-cloud/docs/what-are-confluence-cloud-permissions-and-restrictions/ |
+| S12 | What are Confluence's roles? (space permissions and roles) | https://support.atlassian.com/confluence-cloud/docs/what-are-space-permissions/ |
+| S13 | View the audit log (also lists the admin key) | https://support.atlassian.com/confluence-cloud/docs/view-the-audit-log/ |
+| S14 | REST API, content restrictions (operations `read` and `update`; removing read from an editor is refused) | https://developer.atlassian.com/cloud/confluence/rest/v1/api-group-content-restrictions/ |
+| S15 | Create and collaborate in real time with live docs | https://support.atlassian.com/confluence-cloud/docs/create-and-collaborate-in-real-time-with-live-docs/ |
+| S16 | Request and manage approvals in Confluence | https://support.atlassian.com/confluence-cloud/docs/request-and-manage-approvals-in-confluence/ |
+| S17 | View insights on pages | https://support.atlassian.com/confluence-cloud/docs/view-insights-on-pages/ |
+
+Not confirmed from the public pages: the per-role permission grids of the four space roles (they are images), whether a mention of a person without page access is blocked or only unannounced for comments, what an open approval does when the page is edited, and the field-level schema of the v2 comment resources. They need the live product or a trial site and are not needed for the priorities above.

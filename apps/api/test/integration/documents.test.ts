@@ -10,7 +10,7 @@ import { CheckoutStorage, cloneMirror, fetchMirror } from "@kintsugi/git";
 import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { hasDatabase } from "../support/database.js";
-import { type Client, adminClient, memberClient, startTestApp, type TestApp } from "../support/app.js";
+import { type Client, adminClient, currentUserId, grantProjectAccess, memberClient, startTestApp, type TestApp } from "../support/app.js";
 import { catalogDocuments, understoodUnit } from "../support/documents.js";
 
 // What inventory.py writes (ADR-0042): the figures of record, then the roll-ups and the most complex files.
@@ -173,6 +173,7 @@ describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
     await app.db.query("insert into admin.git_server (id, kind, name, base_url, auth_type) values ('local', 'plain-git', 'Local', $1, 'none')", [remote.baseUrl]);
     await app.db.query("insert into admin.git_repository (id, server_id, url, default_branch) values ('docs', 'local', $1, 'main'), ('legacy', 'local', $2, 'main')", [`${remote.baseUrl}/docs.git`, `${remote.baseUrl}/legacy.git`]);
     expect((await admin.request("POST", "/admin/projects", { body: { id: "shop", name: "Shop", documentRepositoryId: "docs" } })).status).toBe(201);
+    await grantProjectAccess(admin, "shop", await currentUserId(admin));
     expect((await admin.request("POST", "/admin/projects/shop/applications", { body: { id: "web", name: "Web" } })).status).toBe(201);
     expect((await admin.request("POST", "/admin/projects/shop/applications/web/repositories", { body: { repositoryId: "legacy", role: "legacy" } })).status).toBe(201);
 
@@ -201,10 +202,12 @@ describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
     else process.env["KINTSUGI_DATA_DIR"] = previousDataDir;
   });
 
-  it("needs a session, not a permission", async () => {
+  it("needs Project Access, not a permission", async () => {
     const anonymous = await fetch(`${app.baseUrl}/projects/shop/documents/refs`);
     expect(anonymous.status).toBe(401);
-    const { client } = await memberClient(app, admin, "reader", ["user"]);
+    const { client: stranger } = await memberClient(app, admin, "stranger", ["user"]);
+    expect((await stranger.get("/projects/shop/documents/refs")).status).toBe(403);
+    const { client } = await memberClient(app, admin, "reader", ["user"], ["shop"]);
     expect((await client.get("/projects/shop/documents/refs")).status).toBe(200);
   });
 
@@ -251,7 +254,7 @@ describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
     expect((await admin.get("/projects/shop/documents/file?path=README.md&ref=refs/heads/../x")).status).toBe(400);
     expect((await admin.get("/projects/shop/documents/file?path=README.md&ref=refs/heads/nope")).status).toBe(404);
     expect((await admin.get(`/projects/shop/documents/file?path=README.md&ref=${"0".repeat(40)}`)).status).toBe(404);
-    expect((await admin.get("/projects/missing/documents/refs")).status).toBe(404);
+    expect((await admin.get("/projects/missing/documents/refs")).status).toBe(403); // no grant can exist on a project that does not
   });
 
   it("builds the assess results from the default branch when the run committed there", async () => {

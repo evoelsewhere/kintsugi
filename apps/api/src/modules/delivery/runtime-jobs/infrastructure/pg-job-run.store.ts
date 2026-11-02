@@ -225,10 +225,10 @@ export class PgJobRunStore extends JobRunStore {
 
   async listAll(filter: JobRunFilter, limit: number, offset: number): Promise<{ items: JobRunView[]; total: number }> {
     const where =
-      "r.parent_id is null and ($1::text[] is null or r.status = any($1)) and ($2::text is null or r.project_id = $2) and ($3::text is null or r.application_id = $3)";
-    const params = [filter.statuses === undefined || filter.statuses.length === 0 ? null : [...filter.statuses], filter.projectId ?? null, filter.applicationId ?? null];
+      "r.parent_id is null and ($1::text[] is null or r.status = any($1)) and ($2::text is null or r.project_id = $2) and ($3::text is null or r.application_id = $3) and ($4::text[] is null or r.project_id = any($4))";
+    const params = [filter.statuses === undefined || filter.statuses.length === 0 ? null : [...filter.statuses], filter.projectId ?? null, filter.applicationId ?? null, filter.projectIds === undefined ? null : [...filter.projectIds]];
     const [rows, count] = await Promise.all([
-      this.#pool.query<RunRow>(`${SELECT} where ${where} order by r.created_at desc, r.id limit $4 offset $5`, [...params, limit, offset]),
+      this.#pool.query<RunRow>(`${SELECT} where ${where} order by r.created_at desc, r.id limit $5 offset $6`, [...params, limit, offset]),
       this.#pool.query<{ total: number }>(`select count(*)::int as total from workflow.job_run r where ${where}`, params),
     ]);
     return { items: rows.rows.map((row) => toView(row)), total: count.rows[0]?.total ?? 0 };

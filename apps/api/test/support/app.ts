@@ -180,14 +180,29 @@ export async function adminClient(app: TestApp): Promise<Client> {
   return client;
 }
 
-/** Creates a member with the given roles (as admin) and returns a signed-in client for them. */
-export async function memberClient(app: TestApp, admin: Client, username: string, roleIds: string[]): Promise<{ client: Client; id: string; password: string }> {
+/** Gives a user Project Access on a project (ADR-0062), as an administrator does in the portal. */
+export async function grantProjectAccess(admin: Client, projectId: string, userId: string): Promise<void> {
+  const granted = await admin.request("PUT", `/admin/project-access/${projectId}/${userId}`, { body: {} });
+  if (granted.status !== 204) throw new Error(`grant project access failed: ${granted.raw}`);
+}
+
+/** The id of the signed-in user. */
+export async function currentUserId(client: Client): Promise<string> {
+  return (await client.get<{ id: string }>("/auth/me")).body.data!.id;
+}
+
+/**
+ * Creates a member with the given roles (as admin) and returns a signed-in client for them; `projectIds` are the
+ * projects they get Project Access on.
+ */
+export async function memberClient(app: TestApp, admin: Client, username: string, roleIds: string[], projectIds: string[] = []): Promise<{ client: Client; id: string; password: string }> {
   const password = `pw-${randomBytes(6).toString("hex")}`;
   const created = await admin.request<{ id: string }>("POST", "/admin/users", { body: { username, password, roleIds } });
   if (created.status !== 201) throw new Error(`create member failed: ${created.raw}`);
   const client = new Client(app);
   const login = await client.login(username, password);
   if (login.status !== 200) throw new Error(`member login failed: ${login.raw}`);
+  for (const projectId of projectIds) await grantProjectAccess(admin, projectId, created.body.data!.id);
   return { client, id: created.body.data!.id, password };
 }
 

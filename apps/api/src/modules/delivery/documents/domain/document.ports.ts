@@ -1,7 +1,7 @@
 // Port of document repo reads: the mirror Kintsugi keeps of a project's document repository
 // (ADR-0025), read-only. Implemented over the git CLI (packages/git).
 
-import type { DocumentDiff, DocumentRepo, FileRead, GrepLine, MirrorBranch, TreeEntry } from "./document.js";
+import type { BytesRead, DocumentDiff, DocumentRepo, FileRead, FileVersion, GrepLine, MirrorBranch, TreeEntry } from "./document.js";
 
 export abstract class DocumentRepoReader {
   /** Whether the mirror exists (the worker clones it on the first sync). */
@@ -18,11 +18,15 @@ export abstract class DocumentRepoReader {
   abstract isAncestor(repo: DocumentRepo, ancestor: string, descendant: string): Promise<boolean>;
   /** The entries of a directory at a commit (`""` is the root); undefined when it is not a directory. */
   abstract list(repo: DocumentRepo, commit: string, path: string): Promise<TreeEntry[] | undefined>;
+  /** A file's bytes at a commit, refused when larger than `maxBytes`; any content, text or not. */
+  abstract readBytes(repo: DocumentRepo, commit: string, path: string, maxBytes: number): Promise<BytesRead>;
   /**
    * A text file at a commit, refused when larger than `maxBytes` or binary. `knownSize` (from a
    * listing of its directory at the same commit) saves looking the file up first.
    */
   abstract read(repo: DocumentRepo, commit: string, path: string, maxBytes: number, knownSize?: number): Promise<FileRead>;
+  /** The unified diff of one file between two commits of the mirror (3 lines of context), as `git diff` prints it. */
+  abstract patch(repo: DocumentRepo, from: string, to: string, path: string): Promise<string>;
   /**
    * The lines of the Markdown files at a commit that contain every one of `terms` (fixed strings, not patterns),
    * under `under` when given; at most `limit` lines, and whether more matched.
@@ -33,4 +37,10 @@ export abstract class DocumentRepoReader {
    * when given; undefined when `from` is not a commit of the mirror.
    */
   abstract diff(repo: DocumentRepo, from: string, to: string, under: string | undefined): Promise<DocumentDiff | undefined>;
+  /**
+   * The commits that changed a file, newest first, following renames; at most `limit` entries and whether older ones
+   * exist. `before` is a version of the file: the page starts after it (none when it is not one). Only the newest
+   * 2,000 versions are read.
+   */
+  abstract history(repo: DocumentRepo, commit: string, path: string, options: { limit: number; before?: string }): Promise<{ entries: FileVersion[]; more: boolean }>;
 }

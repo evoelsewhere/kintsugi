@@ -69,7 +69,7 @@ A failed build sets the state `failed` with its error and is not retried on the 
 
 All reads use the tree of the indexed commit and fail with 409 until a first build succeeded. Text comes from the mirror at that commit.
 
-| Portal (session) | Member API (`member.read`, Project Access) | MCP tool | Returns |
+| Portal (Project Access) | Member API (`member.read`, Project Access) | MCP tool | Returns |
 | --- | --- | --- | --- |
 | `GET /api/projects/:id/brain` | | | Index state, branch, indexed commit and the branch tip, counts, error, followable branches |
 | `GET …/brain/tree?node&depth&offset&limit` | `GET /api/member/v1/brain/tree?projectId&node&depth&offset&limit` | `brain_tree` | The node, its breadcrumb and one level of children with summaries (depth 2: the first 20 grandchildren too); 50 per page by default, at most 100 for members and 200 in the portal |

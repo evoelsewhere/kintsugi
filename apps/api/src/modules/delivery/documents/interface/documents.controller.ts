@@ -1,22 +1,26 @@
 // Interface layer: read-only document repo content from Kintsugi's mirror (ADR-0025, ADR-0028)
-// and the results of a stage built from it. A session is enough (no permission): the documents
-// are what the project shares; restricted records are never committed and never served here.
-// The bounded answer route needs documents.resolve and proposes its correction through the writer.
+// and the results of a stage built from it. Every route needs Project Access on the project (ADR-0099 decision 4)
+// and no permission: the documents are what the project shares; restricted records are never committed and never
+// served here. The bounded answer route needs documents.resolve too and proposes its correction through the writer.
 
-import { Body, Controller, Get, HttpCode, Param, Post, Query } from "@nestjs/common";
-import { ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { Body, Controller, Get, HttpCode, Param, Post, Query, Res, UseGuards } from "@nestjs/common";
+import { ApiOkResponse, ApiOperation, ApiProduces, ApiTags } from "@nestjs/swagger";
+import type { Response } from "express";
 import { type Actor, CurrentActor, RequirePermission } from "#common/auth/decorators.js";
 import type { DocumentWriteRecord } from "#modules/admin/document-writes/index.js";
+import { ProjectAccessGuard } from "#modules/admin/project-access/index.js";
 import { GapAnswersService } from "../application/gap-answers.service.js";
 import type { GapAnswer } from "../domain/gap-answer.js";
-import { gapAnswerSchema } from "./document.dto.js";
+import { type CompareQuery, compareQuerySchema, gapAnswerSchema } from "./document.dto.js";
+import type { DocumentCompare } from "../domain/document.js";
 import { DocumentsService } from "../application/documents.service.js";
 import { StageResultsService } from "../application/stage-results.service.js";
-import type { DocumentFile, DocumentRefs, DocumentTree, StageHeadline, StageResults } from "../domain/document.js";
-import { type FileQuery, type ResultsQuery, type TreeQuery, type UnderstandResultsQuery, fileQuerySchema, resultsQuerySchema, treeQuerySchema, understandResultsQuerySchema } from "./document.dto.js";
+import type { DocumentFile, DocumentHistory, DocumentRefs, DocumentTree, StageHeadline, StageResults } from "../domain/document.js";
+import { type FileQuery, type HistoryQuery, type ResultsQuery, type TreeQuery, type UnderstandResultsQuery, fileQuerySchema, historyQuerySchema, resultsQuerySchema, treeQuerySchema, understandResultsQuerySchema } from "./document.dto.js";
 
 @ApiTags("delivery · documents")
 @Controller("projects/:id")
+@UseGuards(ProjectAccessGuard)
 export class DocumentsController {
   constructor(
     private readonly documents: DocumentsService,
@@ -39,6 +43,16 @@ export class DocumentsController {
     return this.documents.refs(id);
   }
 
+  @Get("documents/compare")
+  @ApiOperation({
+    summary: "Compare one file of the document repo at two commits: its unified diff with old and new line numbers; never restricted/ or .git",
+    description: "from and to are commit ids of the mirror (the sha of a version from /documents/history). A file missing at one side is added or deleted; the same text at both gives status unchanged and no hunks. 413 over 2 MiB and 415 for a binary file, as /documents/file.",
+  })
+  @ApiOkResponse({ description: "The status, the counts of added and removed lines and the hunks." })
+  compare(@Param("id") id: string, @Query({ schema: compareQuerySchema }) query: CompareQuery): Promise<DocumentCompare> {
+    return this.documents.compare(id, query.path, query.from, query.to);
+  }
+
   @Get("documents/tree")
   @ApiOperation({ summary: "List a directory of the document repo at a ref (default: the default branch); never restricted/ or .git" })
   @ApiOkResponse({ description: "The resolved commit and the entries (directories first)." })
@@ -46,11 +60,39 @@ export class DocumentsController {
     return this.documents.tree(id, query.ref, query.path);
   }
 
+  @Get("documents/attachment")
+  @ApiProduces("image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf")
+  @ApiOperation({
+    summary: "Serve a page attachment of the document repo at a ref: a png, jpg, jpeg, gif, webp or pdf file in an _attachments/ folder, up to 5 MiB",
+    description: "The content type comes from the extension and is never sniffed (X-Content-Type-Options: nosniff); images are inline, a PDF is a download; the Content-Security-Policy forbids scripts. 400 outside an _attachments/ folder, 415 for any other type (SVG and HTML included), 413 over 5 MiB, 403 under restricted/.",
+  })
+  @ApiOkResponse({ description: "The file's bytes." })
+  async attachment(@Param("id") id: string, @Query({ schema: fileQuerySchema }) query: FileQuery, @Res() response: Response): Promise<void> {
+    const attachment = await this.documents.attachment(id, query.ref, query.path);
+    response.setHeader("Content-Type", attachment.contentType);
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    response.setHeader("Content-Disposition", `${attachment.disposition}; filename="${attachment.path.slice(attachment.path.lastIndexOf("/") + 1)}"`);
+    response.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
+    response.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+    response.setHeader("Cache-Control", "private, no-cache");
+    response.send(attachment.bytes);
+  }
+
   @Get("documents/file")
   @ApiOperation({ summary: "Read a text file of the document repo at a ref (up to 2 MiB); never restricted/ or .git" })
   @ApiOkResponse({ description: "The file content; 413 when larger than 2 MiB, 415 when binary." })
   file(@Param("id") id: string, @Query({ schema: fileQuerySchema }) query: FileQuery): Promise<DocumentFile> {
     return this.documents.file(id, query.ref, query.path);
+  }
+
+  @Get("documents/history")
+  @ApiOperation({
+    summary: "The versions of a file of the document repo: the commits that changed it, newest first, following renames; never restricted/ or .git",
+    description: "Each version has its commit, date, subject, actor (the Kintsugi-Actor trailer of a portal publish, else the commit author) and minor flag (the trailer Kintsugi-Minor: true). limit defaults to 50 (at most 200); pass the answer's next as before for the older versions. Only the newest 2,000 versions of a file are reached.",
+  })
+  @ApiOkResponse({ description: "The versions and the cursor of the next page; an empty list for a path no commit touched." })
+  history(@Param("id") id: string, @Query({ schema: historyQuerySchema }) query: HistoryQuery): Promise<DocumentHistory> {
+    return this.documents.history(id, query.ref, query.path, query.limit, query.before);
   }
 
   @Get("applications/:appId/stages/:stage/results")

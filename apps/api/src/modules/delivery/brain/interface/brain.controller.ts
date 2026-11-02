@@ -1,10 +1,11 @@
-// The Brain of a project in the portal (ADR-0091). Reads need a session only, as document reads do; choosing the
-// branch, rebuilding and turning the index off need `project.brain.manage`.
+// The Brain of a project in the portal (ADR-0091). Every route needs Project Access on the project, as document reads
+// do (ADR-0099 decision 4); choosing the branch, rebuilding and turning the index off need `project.brain.manage` too.
 
-import { Body, Controller, Get, HttpCode, Param, Post, Put, Query } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Param, Post, Put, Query, UseGuards } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { BrainChangesView, BrainGrepView, BrainLookupView, BrainReadView, BrainStatusView, BrainTreeView } from "@kintsugi/domain";
 import { type Actor, CurrentActor, RequirePermission } from "#common/auth/decorators.js";
+import { ProjectAccessGuard } from "#modules/admin/project-access/index.js";
 import { BrainService } from "../application/brain.service.js";
 import {
   type BrainChangesQueryDto,
@@ -26,6 +27,7 @@ const PORTAL_READ_CHARS = 200_000;
 
 @ApiTags("delivery · brain")
 @Controller("projects/:id/brain")
+@UseGuards(ProjectAccessGuard)
 export class BrainController {
   constructor(private readonly brain: BrainService) {}
 

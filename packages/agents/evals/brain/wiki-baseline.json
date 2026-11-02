@@ -1,0 +1,375 @@
+{
+  "builderVersion": 6,
+  "recorded": "kcp-integration e1c07606 + P2-012",
+  "report": {
+    "builderVersion": 6,
+    "stats": {
+      "documents": 38,
+      "nodes": 111,
+      "folders": 11,
+      "sections": 61,
+      "summarised": 110,
+      "links": {
+        "resolved": 18,
+        "unresolved": 1
+      },
+      "headingLinks": {
+        "resolved": 3,
+        "total": 3
+      }
+    },
+    "questions": [
+      {
+        "id": "W01",
+        "kind": "label",
+        "scores": {
+          "attributeRecall": 1,
+          "attributePrecision": 1,
+          "grepRecall": 1,
+          "grepPrecision": 0.6666666666666666,
+          "evidenceInNode": 1
+        },
+        "costs": {
+          "grepLines": 3
+        },
+        "citations": [
+          "20-spaces/eng/runbooks/db-failover.md:1-9",
+          "20-spaces/eng/runbooks/payment-outage.md:1-9"
+        ]
+      },
+      {
+        "id": "W02",
+        "kind": "label",
+        "scores": {
+          "attributeRecall": 1,
+          "attributePrecision": 1,
+          "grepRecall": 1,
+          "grepPrecision": 0.5,
+          "evidenceInNode": 1
+        },
+        "costs": {
+          "grepLines": 9
+        },
+        "citations": [
+          "20-spaces/hr/benefits/README.md:1-10",
+          "20-spaces/hr/benefits/health.md:1-9"
+        ]
+      },
+      {
+        "id": "W03",
+        "kind": "label",
+        "scores": {
+          "attributeRecall": 1,
+          "attributePrecision": 1,
+          "grepRecall": 1,
+          "grepPrecision": 1,
+          "evidenceInNode": 1
+        },
+        "costs": {
+          "grepLines": 5
+        },
+        "citations": [
+          "20-spaces/eng/runbooks/payment-outage.md:1-9",
+          "20-spaces/ops/services/checkout.md:1-9"
+        ]
+      },
+      {
+        "id": "W04",
+        "kind": "space",
+        "scores": {
+          "attributeRecall": 1,
+          "attributePrecision": 1,
+          "pathRecall": 1,
+          "pathPrecision": 1,
+          "evidenceInNode": 1
+        },
+        "costs": {},
+        "citations": [
+          "20-spaces/eng/README.md:1-11"
+        ]
+      },
+      {
+        "id": "W05",
+        "kind": "space",
+        "scores": {
+          "attributeRecall": 1,
+          "attributePrecision": 1,
+          "pathRecall": 1,
+          "pathPrecision": 1,
+          "evidenceInNode": 1
+        },
+        "costs": {},
+        "citations": [
+          "20-spaces/hr/README.md:1-10"
+        ]
+      },
+      {
+        "id": "W06",
+        "kind": "order",
+        "scores": {
+          "listedFirst": 1,
+          "evidenceInNode": 1
+        },
+        "costs": {},
+        "citations": [
+          "20-spaces/eng/README.md:1-11"
+        ]
+      },
+      {
+        "id": "W07",
+        "kind": "order",
+        "scores": {
+          "listedFirst": 1,
+          "evidenceInNode": 1
+        },
+        "costs": {},
+        "citations": [
+          "20-spaces/eng/onboarding/README.md:1-12"
+        ]
+      },
+      {
+        "id": "W08",
+        "kind": "order",
+        "scores": {
+          "listedFirst": 1,
+          "evidenceInNode": 1
+        },
+        "costs": {},
+        "citations": [
+          "20-spaces/hr/README.md:1-10"
+        ]
+      },
+      {
+        "id": "W09",
+        "kind": "retired",
+        "scores": {
+          "summaryRecall": 1,
+          "summaryPrecision": 1,
+          "attributeRecall": 1,
+          "attributePrecision": 1,
+          "evidenceInNode": 1
+        },
+        "costs": {},
+        "citations": [
+          "20-spaces/eng/decisions/0001-use-postgres.md:1-11",
+          "20-spaces/hr/2019-expenses.md:1-10"
+        ]
+      },
+      {
+        "id": "W10",
+        "kind": "template",
+        "scores": {
+          "summaryRecall": 1,
+          "summaryPrecision": 1,
+          "attributeRecall": 1,
+          "attributePrecision": 1,
+          "evidenceInNode": 1
+        },
+        "costs": {},
+        "citations": [
+          "20-spaces/eng/_templates/decision-record.md:1-9",
+          "20-spaces/eng/_templates/incident-report.md:1-9"
+        ]
+      },
+      {
+        "id": "W11",
+        "kind": "anchor",
+        "scores": {
+          "anchorsFound": 1,
+          "evidenceInNode": 1
+        },
+        "costs": {},
+        "citations": [
+          "20-spaces/eng/onboarding/first-week.md:10-13",
+          "20-spaces/eng/onboarding/first-week.md:20-22"
+        ]
+      },
+      {
+        "id": "W12",
+        "kind": "heading-link",
+        "scores": {
+          "resolved": 1,
+          "evidenceInNode": 1
+        },
+        "costs": {},
+        "citations": [
+          "20-spaces/eng/onboarding/first-week.md:14-19"
+        ]
+      },
+      {
+        "id": "W13",
+        "kind": "heading-link",
+        "scores": {
+          "resolved": 1,
+          "evidenceInNode": 1
+        },
+        "costs": {},
+        "citations": [
+          "20-spaces/hr/remote-work.md:14-18"
+        ]
+      },
+      {
+        "id": "W14",
+        "kind": "backlinks",
+        "scores": {
+          "recall": 1,
+          "precision": 1,
+          "evidenceInNode": 1
+        },
+        "costs": {},
+        "citations": [
+          "20-spaces/ops/README.md:1-12",
+          "20-spaces/ops/services/checkout.md:14-18"
+        ]
+      },
+      {
+        "id": "W15",
+        "kind": "backlinks",
+        "scores": {
+          "recall": 1,
+          "precision": 1,
+          "evidenceInNode": 1
+        },
+        "costs": {},
+        "citations": [
+          "20-spaces/eng/runbooks/payment-outage.md:14-22",
+          "20-spaces/eng/runbooks/db-failover.md:20-23"
+        ]
+      },
+      {
+        "id": "W16",
+        "kind": "backlinks",
+        "scores": {
+          "recall": 1,
+          "precision": 1,
+          "evidenceInNode": 1
+        },
+        "costs": {},
+        "citations": [
+          "20-spaces/ops/services/orphan-notes.md:10-12"
+        ]
+      },
+      {
+        "id": "W17",
+        "kind": "broken",
+        "scores": {
+          "recall": 1,
+          "precision": 1,
+          "evidenceInNode": 1
+        },
+        "costs": {},
+        "citations": [
+          "20-spaces/eng/onboarding/laptop-setup.md:14-19"
+        ]
+      },
+      {
+        "id": "W18",
+        "kind": "search",
+        "scores": {
+          "recall": 1,
+          "precision": 1,
+          "evidenceInNode": 1
+        },
+        "costs": {
+          "grepLines": 1
+        },
+        "citations": [
+          "20-spaces/eng/runbooks/cache-flush.md:14-19"
+        ]
+      },
+      {
+        "id": "W19",
+        "kind": "search",
+        "scores": {
+          "recall": 1,
+          "precision": 1,
+          "evidenceInNode": 1
+        },
+        "costs": {
+          "grepLines": 1
+        },
+        "citations": [
+          "20-spaces/eng/runbooks/payment-outage.md:14-22"
+        ]
+      },
+      {
+        "id": "W20",
+        "kind": "search",
+        "scores": {
+          "recall": 1,
+          "precision": 0.8,
+          "evidenceInNode": 1
+        },
+        "costs": {
+          "grepLines": 7
+        },
+        "citations": [
+          "20-spaces/eng/onboarding/access-requests.md:10-17",
+          "20-spaces/eng/onboarding/first-week.md:20-22",
+          "20-spaces/eng/runbooks/README.md:12-14",
+          "20-spaces/ops/on-call.md:10-13"
+        ]
+      },
+      {
+        "id": "W21",
+        "kind": "descend",
+        "scores": {
+          "everyStepSummarised": 1,
+          "evidenceInNode": 1
+        },
+        "costs": {
+          "levels": 4,
+          "tokensToDescend": 286
+        },
+        "citations": [
+          "20-spaces/eng/onboarding/access-requests.md:10-17"
+        ]
+      },
+      {
+        "id": "W22",
+        "kind": "descend",
+        "scores": {
+          "everyStepSummarised": 1,
+          "evidenceInNode": 1
+        },
+        "costs": {
+          "levels": 3,
+          "tokensToDescend": 195
+        },
+        "citations": [
+          "20-spaces/hr/leave-policy.md:14-17"
+        ]
+      },
+      {
+        "id": "W23",
+        "kind": "moved",
+        "scores": {
+          "resolved": 1,
+          "evidenceInNode": 1
+        },
+        "costs": {},
+        "citations": [
+          "20-spaces/ops/cache-purge.md:1-10"
+        ]
+      },
+      {
+        "id": "W24",
+        "kind": "label",
+        "scores": {
+          "attributeRecall": 1,
+          "attributePrecision": 1,
+          "grepRecall": 1,
+          "grepPrecision": 1,
+          "evidenceInNode": 1
+        },
+        "costs": {
+          "grepLines": 5
+        },
+        "citations": [
+          "20-spaces/hr/2019-expenses.md:1-10",
+          "20-spaces/ops/services/billing.md:1-11"
+        ]
+      }
+    ]
+  }
+}

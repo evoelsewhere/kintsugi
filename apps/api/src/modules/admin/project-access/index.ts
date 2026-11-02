@@ -2,4 +2,5 @@
 
 export { ProjectAccessModule } from "./project-access.module.js";
 export { ProjectAccessService } from "./application/project-access.service.js";
+export { ProjectAccessGuard } from "./interface/project-access.guard.js";
 export type { ProjectAccessGrant, ReadableProject } from "./domain/project-access.repository.js";

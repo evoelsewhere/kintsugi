@@ -18,6 +18,7 @@ import {
   type BrainState,
   type BrainStatusView,
   type BrainTreeView,
+  brainLabels,
   brainLines,
   isBrainIndexedPath,
   isBrainReferenceId,
@@ -35,6 +36,9 @@ const GRANDCHILDREN = 20;
 const READ_CHILDREN = 50;
 const READ_LINKS = 20;
 const LOOKUP_LIMIT = 20;
+/** `label:<name>` and `space:<key>`, as a lookup query starts. */
+const ATTRIBUTE_LOOKUP = /^(label|space):(.*)$/is;
+const ATTRIBUTE_VALUE_MAX = 64;
 const GREP_LIMIT = 50;
 const EXCERPT = 240;
 const OUTPUT_BRANCH = "kintsugi/";
@@ -271,11 +275,30 @@ export class BrainService {
     };
   }
 
-  /** The nodes a reference id (`RULE-…`, `COM-…`), a node id or a repository path names. */
+  /**
+   * The nodes a reference id (`RULE-…`, `COM-…`), a node id or a repository path names; `label:<name>` the pages that
+   * carry a label and `space:<key>` the pages of a space (ADR-0097 decision 8).
+   */
   async lookup(projectId: string, query: string): Promise<BrainLookupView> {
     const { source } = await this.ready(projectId);
     const wanted = query.trim().replace(/^`|`$/g, "");
     let matches: BrainNode[] = [];
+    const attribute = ATTRIBUTE_LOOKUP.exec(wanted);
+    if (attribute?.[1] !== undefined) {
+      const kind = attribute[1].toLowerCase();
+      const value = (attribute[2] ?? "").trim();
+      if (value === "" || value.length > ATTRIBUTE_VALUE_MAX) throw new BadRequestException(`Give a ${kind} of 1 to ${ATTRIBUTE_VALUE_MAX} characters after \`${kind}:\`.`);
+      if (kind === "label") {
+        // A label is stored as the page's front matter gives it once cleaned (lowercase, `a-z`, `0-9`, `-`).
+        const label = brainLabels([value])[0];
+        if (label === undefined) throw new BadRequestException("A label holds letters, digits and hyphens.");
+        matches = await this.index.byLabel(projectId, label, LOOKUP_LIMIT);
+      } else {
+        matches = await this.index.bySpace(projectId, value.toUpperCase(), LOOKUP_LIMIT);
+      }
+      const withCrumbs = await Promise.all(matches.map(async (node) => ({ ...node, breadcrumb: await this.breadcrumb(projectId, node) })));
+      return { projectId, branch: source.branch, commit: source.indexedCommit, query: wanted, matches: withCrumbs };
+    }
     if (isBrainReferenceId(wanted)) matches = await this.index.lookup(projectId, wanted, LOOKUP_LIMIT);
     if (matches.length === 0) {
       const exact = await this.index.node(projectId, wanted);

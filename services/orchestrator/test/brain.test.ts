@@ -123,6 +123,36 @@ describe.skipIf(!hasDatabase)("brain index (integration)", () => {
     expect(await store.node("shop", "00-project/over.md")).toBeUndefined();
   });
 
+  it("stores the page attributes of builder 6 and reads them back, in the order a home page lists", async () => {
+    await remote.commitFiles("shop-docs", [
+      { path: "00-project/team/README.md", content: "---\nkey: TEAM\nlabels: [team]\nowner: lead\norder: [second, first]\n---\n\n# Team\n\nThe team's space.\n" },
+      { path: "00-project/team/first.md", content: "---\nid: PAGE-TEAM-0001\nlabels:\n  - Runbook\n  - sev1\nstatus: archived\n---\n\n# First\n\nThe first page.\n" },
+      { path: "00-project/team/second.md", content: "---\nid: PAGE-TEAM-0002\ntype: template\n---\n\n# Second\n\nThe second page.\n" },
+    ]);
+    await syncRepository({ store: deps.repositories, storage: deps.storage }, "shop-docs");
+    await indexBrain(deps, "shop");
+
+    const first = await store.node("shop", "00-project/team/first.md");
+    expect(first).toMatchObject({ labels: ["runbook", "sev1"], status: "archived", owner: null, template: false, space: "TEAM" });
+    expect(first?.summary).toMatch(/^Archived\./);
+    const second = await store.node("shop", "00-project/team/second.md");
+    expect(second).toMatchObject({ labels: [], template: true, space: "TEAM" });
+    expect(second?.summary).toMatch(/^Template\./);
+    // A folder takes the attributes of its home page, and a section has none.
+    expect(await store.node("shop", "00-project/team/")).toMatchObject({ labels: ["team"], owner: "lead", space: "TEAM" });
+    expect(await store.node("shop", "00-project/")).toMatchObject({ labels: [], space: null });
+    // The listed entries come first, in the home page's order; the home page itself follows.
+    const team = await store.children("shop", "00-project/team/", 0, 10);
+    expect(team.items.map((node) => node.id)).toEqual(["00-project/team/second.md", "00-project/team/first.md", "00-project/team/README.md"]);
+    // The labels are indexed: a lookup by a label is an `@>` on the column.
+    const found = await db.pool.query<{ id: string }>("select id from knowledge.brain_node where project_id = 'shop' and labels @> array['runbook']::text[]");
+    expect(found.rows.map((row) => row.id)).toEqual(["00-project/team/first.md"]);
+    expect((await store.byLabel("shop", "runbook", 10)).map((node) => node.id)).toEqual(["00-project/team/first.md"]);
+    expect(await store.byLabel("shop", "nothing", 10)).toEqual([]);
+    expect((await store.bySpace("shop", "TEAM", 10)).map((node) => node.id)).toEqual(["00-project/team/README.md", "00-project/team/first.md", "00-project/team/second.md"]);
+    expect(await store.bySpace("shop", "team", 10)).toEqual([]);
+  });
+
   it("fails the build of a project without a document repository", async () => {
     await db.pool.query("insert into admin.project (id, name) values ('bare', 'Bare')");
     await store.configure("bare", { branch: "main", enabled: true }, "alice");

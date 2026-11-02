@@ -5,10 +5,15 @@ The eval measures how well a member's agent answers questions from a project's d
 | Path | What it is |
 | --- | --- |
 | `fixture/shop-docs/` | A document repository of 59 Markdown documents in the numbered layout. It plants answers in several kinds of places: two and three levels down, in cards with ids, in tables, and behind a common component and a decision. It has rules with a near twin in another application, a decision superseded by a later one, and a 30,000-character document longer than one read. It also has a term that no title or summary shows, questions it does not answer, and an instruction addressed to AI assistants |
+| `fixture/wiki-docs/` | A wiki-shaped document repository of 38 Markdown documents ([ADR-0096](../decisions/0096-wiki-pages-in-the-document-repo.md)): three spaces (`ENG`, `HR`, `OPS`) and a system folder, pages with ids, labels and owners, templates, archived pages, manual `order` lists, a repeated heading, links to headings, a link to a page that does not exist, a page nothing links to, a moved page, a GitHub alert, a `kintsugi-*` block and an attachment. Its [baseline](#wiki-baseline) is deterministic |
+| `make_wiki.py` | Writes `fixture/wiki-docs/` (`python make_wiki.py`; with `--check` it fails when the folder differs) |
+| `wiki-questions.json` | The 24 wiki questions: the pages that answer each, and the lines that hold the answer, by the text of the line |
+| `wiki-eval.ts` | The deterministic wiki eval: answers every question from the builder's tree, its links, the tree order and a stand-in for `brain_grep`, and counts what that costs |
+| `wiki-baseline.json` | The recorded baseline that the test compares the builder with |
 | `make_scale.py` | Writes the large part of the fixture: two legacy applications of 30 look-alike units with program-like names (`rtn04`, `ship03`), three rule cards each. A few hold answers worded differently from the questions |
 | `questions.json` | The 28 questions, the lines that answer each (by the text of the line, never by number), the accepted values, and the phrases and patterns that say "the documents do not answer" |
 | `brain_score.py` | The scorer of one or more runs, and the prompt for a run (`--prompt`) |
-| `tests/` | The scorer's tests, the check that the key fits the fixture, and the check that the large part is what `make_scale.py` writes |
+| `tests/` | The scorer's tests, the check that the key fits the fixture, and the checks that the large part is what `make_scale.py` writes and that the wiki fixture is what `make_wiki.py` writes |
 
 `packages/agents/test/brain-eval.test.ts` builds the fixture with the Brain's own builder. It checks that the fixture tests what the key says:
 
@@ -101,3 +106,72 @@ The later runs used harder questions:
 They then added 30 look-alike units with program-like names. Both modes still answered everything, so on 59 documents this model does not need the Brain to be right. The Brain needed fewer requests than the plain reads (34 against 49, then 47 against 83) and cited more tightly.
 
 Builder 2 changes three summaries. A folder without a README names its entries, a one-document folder by its document's title. A table names its rows. A retired document says so first. Searches also match every word on a line. With these changes the Brain sessions needed 40 to 41 requests instead of 47, finding the right unit without opening its look-alikes. Their tokens and their answers did not change beyond the spread between runs. One of the two runs wrote one answer line broken, which counts as unanswered. Citation precision varies with how a session cites (72% to 100%), more than with the builder.
+
+## Wiki baseline
+
+[ADR-0097](../decisions/0097-brain-indexes-wiki-pages.md) changes the Brain for wiki pages, and its decision 10 asks for the accuracy to be measured before a change is called an improvement. This baseline is the first step. It is deterministic and calls no model, so it can run on every change. It measures what the builder and the reads put within reach of an agent; it does not measure whether an agent uses them well (see [the agent-run baseline](#the-agent-run-baseline)).
+
+**How it works.** `wiki-eval.ts` builds `fixture/wiki-docs/` with the domain's own `buildBrainTree` and answers each of the 24 questions the way a reader of the Brain can:
+
+| Kind | Questions | How it is answered | Scores |
+| --- | --- | --- | --- |
+| `label` | W01-W03, W24 | The pages whose node carries the label (an attribute of a later builder), and a `brain_grep` of the label word | Recall and precision of each, against the pages the front matter names |
+| `space` | W04-W05 | The pages whose node carries the space key, and the pages under the space's folder | Recall and precision |
+| `order` | W06-W08 | The order of the `brain_tree` children of a folder against the entries its home page lists in `order` | Share of listed entries in place |
+| `retired`, `template` | W09, W10 | A summary that says "Archived" or starts `Template.`, and a status or template attribute | Recall and precision |
+| `anchor`, `heading-link`, `moved` | W11-W13, W23 | The section anchors of a repeated heading, and whether a link to a heading or to a moved page reaches its node | Share found |
+| `backlinks` | W14-W16 | The documents with a link to the page, from the stored links | Recall and precision |
+| `broken` | W17 | The links the builder knows point nowhere | Recall and precision |
+| `search` | W18-W20 | A `brain_grep` of the words: the lines that hold every word, case-insensitive, the first 50 | Recall and precision; the lines found are the cost |
+| `descend` | W21-W22 | Every folder and document on the way down has a summary to follow | Share, and the tokens of the titles and summaries a reader passes |
+
+Every question also names the lines that answer it by their text. The score `evidenceInNode` is the share of those lines a node holds, and the citation is that node's `path:start-end`. The test (`packages/agents/test/brain-eval.test.ts`) checks:
+
+- the fixture is a wiki as ADR-0096 lays it out: free spaces with a home page that gives `key`, `title` and `order`, at least 15 pages with a page id of their space and labels, a page with children, an attachment a page links to, an alert, a macro block and a moved page;
+- the key's answers are what the front matter and the links of the fixture say;
+- every answer is in a node, with a citation that resolves to lines of its file;
+- the Brain falls below no score of the baseline.
+
+**The baseline.** Builder version 6 (P2-012), recorded on `kcp-integration` e1c07606 with that change. It replaces the builder 5 recording of P2-007 and P2-016, whose numbers stay in the tables below as the column to beat. (The first builder 5 recording, on b1d59f1c, predates the folder descriptions of the `20-spaces/` layout that P2-003 added to the summaries, so its two descend costs were 258 and 174; P2-016 re-recorded it as 286 and 193.) Produced by:
+
+```bash
+BRAIN_WIKI_BASELINE=1 BRAIN_WIKI_RECORDED="kcp-integration e1c07606 + P2-012" pnpm --filter @kintsugi/agents exec vitest run test/brain-eval.test.ts
+```
+
+It writes `packages/agents/evals/brain/wiki-baseline.json`. Without the variable the same test compares the builder with that file: no score may be lower, and no cost more than a twentieth higher. The costs are counts of a deterministic build, so a cost that moves means a builder change: the descend costs add up the title and summary of every sibling on the way down, so any change to a folder or document summary moves them. Re-record the baseline in the commit that changes the summaries, and name that commit here.
+
+| Measure | Builder 5 | Builder 6 |
+| --- | --- | --- |
+| Documents, nodes (folders, sections and cards) | 37, 109 (11, 60) | 38, 111 (11, 61) |
+| Nodes with a summary | 108 of 109 (everything but the root) | 110 of 111 (everything but the root) |
+| Links between pages or headings: resolved, unresolved | 18, 1 (`vpn-guide.md`, which does not exist) | 18, 1 (listed by the builder) |
+| Heading links resolved | 3 of 3 | 3 of 3 |
+| Answer lines held by a node, with a citation | 34 of 34 (23 questions) | 36 of 36 (24 questions) |
+
+Builder 5 ran on the 37 documents and 23 questions of P2-007; P2-012 added a page that writes its labels as a block list and the question W24 about it, so the builder 6 column has one page and one question more.
+
+| Questions | Builder 5 | Builder 6 |
+| --- | --- | --- |
+| W01-W03, W24 labels | Found only by `brain_grep` of the word: recall 100%, precision 67%, 50%, 100% and 100% (3, 9, 5 and 5 lines). No node carries the label | The node carries the labels (the flow form `[a, b]` and the block form), recall and precision 100% |
+| W04-W05 spaces | Found by the folder (100%); no node carries the space | The node carries the space key: 100% |
+| W06-W08 manual order | 0 of the listed entries first | All listed entries first, in the home page's order |
+| W09 archived pages | Not told apart (0%) | `status: archived` on the node and `Archived` first in the summary: 100% |
+| W10 templates | Not told apart (0%) | `type: template` flags the node and `Template.` starts the summary: 100% (`template: <name>` does not flag) |
+| W11-W13, W23 anchors, heading links, a moved page | All 100% | All 100% |
+| W14-W16 backlinks | 100% from the stored links | 100% |
+| W17 broken links | 0%: a link that resolves to nothing is dropped | The tree lists it (the page and the path it points at): 100%. `knowledge.brain_ref` keeping them is ADR-0097 decision 6, a later change |
+| W18-W20 search | W18 and W19: 100% in one line each. W20 (the words "on-call lead"): recall 100%, precision 80%, because `owner: on-call-lead` lines match too | Unchanged: `brain_search` ranks them (decision 7), a later change |
+| W21-W22 descend | Every step has a summary; 4 and 3 levels, 286 and 193 tokens of titles and summaries to the answer | 4 and 3 levels, 286 and 195 tokens |
+
+**What the next change must show.** No score below the builder 6 recording. The attribute scores (labels, spaces, status, template) and the broken-link and order scores are now 100% and stay there; what is left to gain is the precision of search (W20) with `brain_search`, and the lookup by `label:` and `space:` of the API (P2-014), which the harness reads from the node and does not exercise.
+
+### The agent-run baseline
+
+The score above says what is within reach. Whether an agent finds it needs a live installation and a client session, and costs tokens. It is the owner's step, with the steps of [Run it](#run-it):
+
+1. Push `fixture/wiki-docs/` as in step 1 there (`cp -r packages/agents/evals/brain/fixture/wiki-docs /path/to/wiki-docs`), register it as a project's document repository, give the member Project Access and build the Brain on `main`.
+2. Open two fresh sessions of the same client and model with the Kintsugi MCP bridge connected: one may use the Brain tools, the other the plain document tools. Give each the 24 questions of `wiki-questions.json` (the `question` of each entry) and ask for one line of JSON per question: `{"id": "W01", "pages": ["path", ...], "citations": ["path:start-end@commit", ...]}`.
+3. Compare each line with its entry: `pages` against `expect` (a recall and a precision per question, as above), and each citation against the lines the entry's `evidence` names (a citation is grounded when its lines overlap the line holding the text). Note the tool calls and tokens the client reports, and run each mode at least three times.
+4. Record each run under [Recorded runs](#recorded-runs) with the builder version and the commit.
+
+The scorer `brain_score.py` reads `questions.json` only. Teaching it the wiki key (`pages` instead of accepted values) belongs to the Phase 1 builder work, so that one command scores both fixtures.

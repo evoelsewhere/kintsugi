@@ -31,6 +31,11 @@ export class PgProjectAccessRepository extends ProjectAccessRepository {
     }));
   }
 
+  async listProjectIds(userId: string): Promise<string[]> {
+    const result = await this.#pool.query<{ project_id: string }>("select project_id from admin.project_access where user_id = $1 order by project_id", [userId]);
+    return result.rows.map((row) => row.project_id);
+  }
+
   async listReadableProjects(userId: string, projectIds: readonly string[]): Promise<ReadableProject[]> {
     if (projectIds.length === 0) return [];
     const result = await this.#pool.query<{ project_id: string; name: string }>(

@@ -14,6 +14,10 @@ export abstract class BrainIndex {
   abstract ancestors(projectId: string, id: string): Promise<BrainNode[]>;
   abstract lookup(projectId: string, id: string, limit: number): Promise<BrainNode[]>;
   abstract byPath(projectId: string, path: string, limit: number): Promise<BrainNode[]>;
+  /** The documents that carry a label (lowercase), by path. */
+  abstract byLabel(projectId: string, label: string, limit: number): Promise<BrainNode[]>;
+  /** The documents in the space of a key, by path. */
+  abstract bySpace(projectId: string, space: string, limit: number): Promise<BrainNode[]>;
   abstract links(projectId: string, id: string, limit: number): Promise<BrainLinks>;
   abstract nodesAtLines(projectId: string, hits: ReadonlyArray<{ path: string; line: number }>): Promise<Array<BrainNode | undefined>>;
   /** The nodes of a document whose own text overlaps the line ranges, in document order. */

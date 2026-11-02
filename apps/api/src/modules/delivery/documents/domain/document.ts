@@ -5,6 +5,7 @@
 
 import type { CatalogRule, DataObject, Finding, Gap, GapCounts, Inventory, SecurityReport, Table, TopoDomainEdge, TopoEdge, TopoFlow, TraceUnit } from "@kintsugi/agents/reader";
 import type { RuleId, RulesReviewRecord } from "@kintsugi/domain";
+import type { CompareHunk } from "./unified-diff.js";
 
 /** The mirror of a project's document repository (ADR-0025). */
 export interface DocumentRepo {
@@ -62,12 +63,41 @@ export interface TreeEntry {
   size?: number;
 }
 
+/** A page attachment ready to serve: its bytes with the content type its extension fixes (never sniffed). */
+export interface DocumentAttachment {
+  ref: string;
+  commit: string;
+  path: string;
+  contentType: string;
+  /** `inline` for an image the page shows, `attachment` for a PDF. */
+  disposition: "inline" | "attachment";
+  bytes: Buffer;
+}
+
+/** The most bytes of one attachment the documents API serves (the writer's cap per file, ADR-0096). */
+export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+
+/** The content type of each attachment extension: the only types a page's `_attachments/` folder serves. */
+export const ATTACHMENT_MEDIA_TYPES: Readonly<Record<string, string>> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  pdf: "application/pdf",
+};
+
+/** What reading a file's bytes at a commit found. */
+export type BytesRead = { status: "ok"; size: number; bytes: Buffer } | { status: "missing" } | { status: "not-a-file" } | { status: "too-large"; size: number };
+
 export interface DocumentTree {
   ref: string;
   commit: string;
   path: string;
   entries: TreeEntry[];
 }
+
+export type { CompareHunk, CompareLine } from "./unified-diff.js";
 
 export interface DocumentFile {
   ref: string;
@@ -76,6 +106,57 @@ export interface DocumentFile {
   size: number;
   /** The file's text. The document repository holds Markdown (ADR-0042); front matter is part of it. */
   content: string;
+}
+
+/** One file at two commits: its unified diff, with old and new line numbers. */
+export interface DocumentCompare {
+  path: string;
+  from: string;
+  to: string;
+  status: "unchanged" | "added" | "deleted" | "modified";
+  added: number;
+  removed: number;
+  hunks: CompareHunk[];
+}
+
+/** A commit that changed a file as Git records it: the author and the trailers are what the commit says, not yet trusted. */
+export interface FileVersion {
+  sha: string;
+  date: string;
+  subject: string;
+  authorName: string;
+  authorEmail: string;
+  /** The value of the `Kintsugi-Actor` trailer, when the commit has one. */
+  trailerActor: string | undefined;
+  /** The commit has the trailer `Kintsugi-Minor: true`. */
+  trailerMinor: boolean;
+}
+
+/** One version of a file: a commit that changed it (ADR-0096 decision 5). */
+export interface HistoryEntry {
+  sha: string;
+  /** The commit's author date. */
+  date: string;
+  /** The first line of the commit message: the version comment. */
+  subject: string;
+  /**
+   * The `Kintsugi-Actor` trailer of a commit Kintsugi made (its author is the commit identity), else the author's name.
+   * Anyone can write a trailer in a commit of their own, so no other commit's trailer is believed.
+   */
+  actor: string;
+  /** The commit is Kintsugi's own and carries the trailer `Kintsugi-Minor: true`. */
+  minor: boolean;
+}
+
+/** The versions of a file, newest first; `next` is the `before` of the following page when there are older ones. */
+export interface DocumentHistory {
+  ref: string;
+  commit: string;
+  path: string;
+  /** Renames of the file are followed: earlier versions under its old paths are listed. */
+  followsRenames: true;
+  entries: HistoryEntry[];
+  next: string | null;
 }
 
 /** What reading a file at a commit found. */

@@ -1,9 +1,10 @@
-// Interface layer: the units members build and the review of their merge requests (ADR-0071). Reading needs a session, like
-// the documents it comes from; starting a review needs `jobs.run`.
+// Interface layer: the units members build and the review of their merge requests (ADR-0071). Every route needs Project
+// Access on the project, like the documents it comes from (ADR-0099 decision 4); starting a review needs `jobs.run` too.
 
-import { Body, Controller, Get, HttpCode, Param, Post } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Param, Post, UseGuards } from "@nestjs/common";
 import { ApiAcceptedResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { type Actor, CurrentActor, RequirePermission } from "#common/auth/decorators.js";
+import { ProjectAccessGuard } from "#modules/admin/project-access/index.js";
 import type { JobRunView } from "#modules/delivery/runtime-jobs/index.js";
 import { BuildReviewsService } from "../application/build-reviews.service.js";
 import { BuildService } from "../application/build.service.js";
@@ -12,6 +13,7 @@ import { type ReviewRunInput, reviewRunSchema } from "./build.dto.js";
 
 @ApiTags("delivery · build")
 @Controller("projects/:id/applications/:appId/build")
+@UseGuards(ProjectAccessGuard)
 export class BuildController {
   constructor(
     private readonly build: BuildService,

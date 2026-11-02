@@ -157,6 +157,8 @@ export interface RestrictedRecordFilter {
 export interface JobRunFilter {
   statuses?: readonly JobRunStatus[];
   projectId?: string;
+  /** Only runs of these projects (the caller's Project Access); absent means every project. */
+  projectIds?: readonly string[];
   applicationId?: string;
 }
 
