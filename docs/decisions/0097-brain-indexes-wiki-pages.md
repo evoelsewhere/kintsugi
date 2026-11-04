@@ -43,3 +43,12 @@ The research behind this decision is in the parity research pack: [Brain integra
 - **Keep whole builds only.** Rejected for wiki projects: every publish would read the whole repository, and a burst of publishes would keep the index behind the branch.
 - **Vector search over pages.** Rejected again for the reasons of ADR-0091: it cannot explain its choice and its accuracy on these documents is unproven.
 - **Filter the tree per reader.** Rejected: summaries, links, grep and search hits and changes would each need a filter that can leak, and it would protect nothing that members' clones do not already hold.
+
+
+## Amendment: how the notify job is requested (2026-11-05)
+
+Decision 6 says the build records a `wiki-notify` intent in the worker's transactional outbox, in its own transaction. What was built differs in the mechanism, not in the goal. After a build of the default branch is stored, the worker **requests the job `wiki-notify`** (`{ projectId, from, to }`, one running and one queued per project) **outside the build's transaction**, and the job works from a **cursor**, `knowledge.wiki_notify_cursor`, the last commit the watchers were told about. The worker's Brain check, which runs every minute, **sweeps**: it asks again for every wiki project whose indexed commit is not the cursor, which finds a request that was lost and is also the first run of a project.
+
+- **Why.** A fan-out that fails must never fail or roll back a build, so it cannot share the build's transaction; and a cursor that moves only after the notifications were made repeats a half run from the same commit without a second notification, which an outbox row consumed once does not give when the job itself fails. The unique key per recipient, page and commit of decision 6 stays.
+- **What is the same.** One notification per recipient, page and commit; pages changed by members' own pull requests and pushes notify too; a request that cannot be made leaves the build `built`.
+- **Reference.** [Wiki change notifications](../reference/wiki-notifications.md#when-it-runs).

@@ -1,10 +1,12 @@
 # Wiki change notifications
 
-> How the people who watch a page, a folder or a space are told that it changed: the `wiki-notify` job of the worker, its cursor, who is told and who is not, and how long it takes ([ADR-0099](../decisions/0099-wiki-collaboration-and-access.md) decision 3). Reading the notifications is a separate matter; this page is about creating them.
+> How people are told about the wiki: the `wiki-notify` job of the worker that tells the watchers of a page, a folder or a space that it changed (its cursor, its sweep, who is told and who is not, how long it takes), the notifications a comment makes, and the inbox that shows them ([ADR-0099](../decisions/0099-wiki-collaboration-and-access.md) decision 3, with its amendment on how the job is requested). The comments themselves are in [Wiki comments](wiki-comments.md).
 
-A person **watches** a page, a folder or a space of a project (`knowledge.wiki_watch`). When the default branch of the document repository moves, the worker tells the watchers what changed, by one notification per person and page (`core.notification`, kind `wiki-page-changed`). A notification holds **ids only**: `{ pageKey, commit, actorId }`, where `pageKey` is the page's id (`PAGE-…`) or `path:<path>` for a page that has none. It never holds a title, a path or any text of the page; whoever reads the notification looks the names up then, and only for a person who still has Project Access.
+A person **watches** a page, a folder or a space of a project (`knowledge.wiki_watch`; at most 500 watches a person and project). The routes `GET`, `PUT` and `DELETE /api/projects/:id/wiki/watches` are the caller's own and need only Project Access: `PUT` takes `{ scopeKind: page | folder | space, target }` (a page is stored by its id when it has one, so a move keeps the watch; a folder or a space the Brain does not know is refused), and `GET ?path=` says whether a page is watched, directly or through a folder or a space. When the default branch of the document repository moves, the worker tells the watchers what changed, by one notification per person and page (`core.notification`, kind `wiki-page-changed`). A notification holds **ids only**: `{ pageKey, commit, actorId }`, where `pageKey` is the page's id (`PAGE-…`) or `path:<path>` for a page that has none. It never holds a title, a path or any text of the page; whoever reads the notification looks the names up then, and only for a person who still has Project Access.
 
 ## When it runs
+
+The worker, not the build, makes these notifications, and the job is **requested after the build, from a cursor that a sweep replays** ([ADR-0097](../decisions/0097-brain-indexes-wiki-pages.md) and ADR-0099 each carry an amendment saying so). A failing fan-out therefore never fails or rolls back a build, and a run that stopped halfway is repeated without a second notification.
 
 1. The worker builds the Brain of a wiki project after the default branch moved ([Brain](brain.md)). When the build is stored, it asks for the job `wiki-notify` (`{ projectId, from, to }`, one running and one queued per project). The request is made after the build and outside it: if it cannot be made, the build is still `built`.
 2. The job starts from the **cursor** of the project (`knowledge.wiki_notify_cursor`), the last commit the watchers were told about, up to `to`. It moves the cursor only after it made the notifications, so a run that failed halfway is repeated from the same commit and the notifications it made are not made twice (the unique `dedupe_key` is `wiki-page-changed:<person>:<page key>:<commit>`).
@@ -25,6 +27,29 @@ A person who watches the same page twice, through a folder and the space, is tol
 ## How long it takes
 
 Measured with the real worker and a real git remote (`services/orchestrator/test/wiki-notify-latency.test.ts`, review watch and Brain check every second): the notification exists about **3 seconds** after the review watch records that the pull request was merged (a build of one changed page, then the job). With the default intervals the merge is found by the review watch within a minute of the merge, which brings the sum under two minutes; a change pushed straight to the branch from a clone is found by the Git poll (`KINTSUGI_GIT_POLL_INTERVAL`, 180 seconds by default). Neither interval belongs to the job; lower them to shorten the wait.
+
+## Comments and mentions
+
+A comment makes its own notifications when it is saved, not through the job, and they hold ids only like every other: `{ pageKey, commentId, actorId }`.
+
+| Kind | Who gets it |
+| --- | --- |
+| `wiki-mention` | a person the comment mentions with `@username` and who has Project Access |
+| `wiki-comment` | the author of the comment this one answers, and everyone who watches the page (by its id, or `path:<path>`), a folder above it or its space |
+
+A person is told once per comment, by the strongest reason (a mention first); the writer is never told of their own comment; a person who no longer has Project Access is skipped; at most 500 watchers are told. The unique `dedupe_key` is `<kind>:<person>:<comment id>:-`, so a repeated request makes nothing twice. A name that is nobody's, or whose owner has no Project Access, is not found: no notification, and the answer to the writer is the same as without the mention. A failure to write a notification is logged and never loses the comment. **A mention in the body of a page notifies nobody yet**: only a mention in a comment does.
+
+## The inbox
+
+A person reads their own notifications (`core.notification`) through `/api/notifications`, which need a session and show only the projects the person still has Project Access on:
+
+| Route | What it does |
+| --- | --- |
+| `GET /api/notifications?unread=&limit=&before=` | The newest first, at most 100 at a time (`before` pages back): the kind, the project name, the page's key, path and title, who did it, the comment id for a comment kind, the time and whether it was read; `unread` counts the unread ones. Names and titles are looked up when the list is read, never stored |
+| `GET /api/notifications/unread-count` | `{ unread }`, for the number in the side menu |
+| `POST /api/notifications/read` | `{ ids: [uuid…] }` or `{ all: true }`; 204 |
+
+Writing a notification also announces it on the change feed: the topic `notifications` with the person's id as scope, and the event stream sends it **only to that person's own streams**, so nobody learns that someone else has a notification. The portal's inbox page and the unread number read again when the topic changes. Mail, chat and webhooks are not part of this.
 
 ## Known limits
 
