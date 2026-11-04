@@ -23,11 +23,17 @@ interface WriteRow {
   job_id: string | null;
   agent: string | null;
   correction: DocumentWriteCorrection | null;
+  merge_commit: string | null;
+  page_path: string | null;
+  page_id: string | null;
   created_at: Date;
   updated_at: Date;
 }
 
-const COLUMNS = "id, project_id, kind, status, message, branch, commit_sha, branch_commit_sha, pr_url, error, actor, job_id, agent, correction, created_at, updated_at";
+const COLUMNS = "id, project_id, kind, status, message, branch, commit_sha, branch_commit_sha, pr_url, error, actor, job_id, agent, correction, merge_commit, page_path, page_id, created_at, updated_at";
+
+/** The SQL twin of `isOpenPageWrite` (and the predicate of the index of migration 055). */
+const OPEN_PAGE = "page_path is not null and (status = 'queued' or (branch is not null and status in ('committed', 'pr-opened')))";
 
 /** The SQL twin of `isOpenCorrection`. */
 const OPEN_CORRECTION = "correction is not null and (status = 'queued' or (branch is not null and status in ('committed', 'pr-opened')))";
@@ -50,6 +56,8 @@ function toRecord(row: WriteRow): DocumentWriteRecord {
     ...optional("jobId", row.job_id),
     ...optional("agent", row.agent),
     ...(row.correction === null ? {} : { correction: { path: row.correction.path, gap: row.correction.gap } }),
+    ...(row.page_path === null ? {} : { page: { path: row.page_path, id: row.page_id } }),
+    ...optional("mergeCommit", row.merge_commit),
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
   };
@@ -63,10 +71,15 @@ export class PgDocumentWriteStore extends DocumentWriteStore {
 
   async create(write: NewDocumentWrite): Promise<DocumentWriteRecord> {
     const result = await this.#pool.query<WriteRow>(
-      `insert into workflow.document_write (id, project_id, kind, message, actor, correction) values ($1, $2, $3, $4, $5, $6) returning ${COLUMNS}`,
-      [write.id, write.projectId, write.kind, write.message, write.actor ?? null, write.correction === undefined ? null : JSON.stringify(write.correction)],
+      `insert into workflow.document_write (id, project_id, kind, message, actor, correction, page_path, page_id) values ($1, $2, $3, $4, $5, $6, $7, $8) returning ${COLUMNS}`,
+      [write.id, write.projectId, write.kind, write.message, write.actor ?? null, write.correction === undefined ? null : JSON.stringify(write.correction), write.page?.path ?? null, write.page?.id ?? null],
     );
     return toRecord(result.rows[0]!);
+  }
+
+  async openPageWrite(projectId: string, pagePath: string): Promise<DocumentWriteRecord | undefined> {
+    const result = await this.#pool.query<WriteRow>(`select ${COLUMNS} from workflow.document_write where project_id = $1 and page_path = $2 and ${OPEN_PAGE} order by created_at desc limit 1`, [projectId, pagePath]);
+    return result.rows[0] === undefined ? undefined : toRecord(result.rows[0]);
   }
 
   async createCorrection(write: NewDocumentWrite & { correction: DocumentWriteCorrection }): Promise<CorrectionOutcome> {

@@ -2,8 +2,11 @@
 // on the worker's `document-write` queue (keyed by the document repository); the list shows
 // the outcome the worker records. The worker itself is tested in services/orchestrator.
 
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { parseKintsugiYaml } from "@kintsugi/manifest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { DocumentWritesService } from "#modules/admin/document-writes/index.js";
 import { hasDatabase } from "../support/database.js";
 import { type Client, adminClient, memberClient, startTestApp, type TestApp, currentUserId, grantProjectAccess } from "../support/app.js";
 
@@ -110,5 +113,122 @@ describe.skipIf(!hasDatabase)("document writes (integration)", () => {
     expect(skeleton.some((file) => file.content.includes("{{app}}"))).toBe(false);
     expect(skeleton.find((file) => file.path === "10-applications/web/README.md")?.content).toContain("# `10-applications/web/`");
     expect(new Set(paths).size).toBe(paths.length);
+  });
+
+  describe("page writes (ADR-0098)", () => {
+    const HASH = "c".repeat(64);
+    const actor = { id: "u-page", username: "page-author", permissions: [] as string[] };
+    let writes: DocumentWritesService;
+    const payload = async (id: string) =>
+      (await app.db.query<{ data: Record<string, unknown> & { files: Array<Record<string, unknown>> } }>("select data from pgboss.job where name = 'document-write' and data->>'writeId' = $1", [id])).rows[0]!.data;
+
+    beforeAll(() => {
+      writes = app.nest.get(DocumentWritesService, { strict: false });
+    });
+
+    it("runs migration 055 again without error and adds the page columns and the open-write index", async () => {
+      const script = await readFile(resolve(import.meta.dirname, "../../migrations/055_document_write_page.sql"), "utf8");
+      await app.db.query(script);
+      await app.db.query(script);
+      const columns = await app.db.query<{ column_name: string }>(
+        "select column_name from information_schema.columns where table_schema = 'workflow' and table_name = 'document_write' and column_name in ('merge_commit', 'page_path', 'page_id') order by 1",
+      );
+      expect(columns.rows.map((row) => row.column_name)).toEqual(["merge_commit", "page_id", "page_path"]);
+      const indexes = await app.db.query<{ indexname: string }>("select indexname from pg_indexes where schemaname = 'workflow' and tablename = 'document_write' and indexname = 'document_write_open_page'");
+      expect(indexes.rows).toHaveLength(1);
+    });
+
+    it("queues a page write with base64, delete, rename, directPublish, continues and the page, and records the page", async () => {
+      const record = await writes.proposePage(
+        "billing",
+        {
+          message: "Update the naming standard",
+          files: [
+            { path: "01-standards/naming.md", content: "# Naming\n", expectedHash: HASH },
+            { path: "01-standards/_attachments/figure.png", content: Buffer.from([137, 80, 78, 71]).toString("base64"), encoding: "base64" },
+            { path: "01-standards/old.md", content: "", delete: true, expectedHash: HASH },
+            { path: "01-standards/moved.md", content: "# Moved\n", renameFrom: "01-standards/before.md", expectedHash: HASH },
+          ],
+          page: { id: "PAGE-BIL-0001", path: "01-standards/naming.md", minor: true },
+          directPublish: true,
+          continues: "kintsugi/page-author/naming",
+        },
+        actor,
+      );
+      expect(record).toMatchObject({ kind: "page", status: "queued", actor: "page-author", page: { path: "01-standards/naming.md", id: "PAGE-BIL-0001" } });
+      const data = await payload(record.id);
+      expect(data).toMatchObject({ kind: "page", directPublish: true, continues: "kintsugi/page-author/naming", page: { id: "PAGE-BIL-0001", path: "01-standards/naming.md", minor: true }, actor: "page-author" });
+      expect(data.files).toEqual([
+        { path: "01-standards/naming.md", content: "# Naming\n", expectedHash: HASH },
+        { path: "01-standards/_attachments/figure.png", content: "iVBORw==", encoding: "base64" },
+        { path: "01-standards/old.md", content: "", delete: true, expectedHash: HASH },
+        { path: "01-standards/moved.md", content: "# Moved\n", renameFrom: "01-standards/before.md", expectedHash: HASH },
+      ]);
+      // Without directPublish and continues, neither is in the payload.
+      const plain = await writes.proposePage("billing", { message: "Plain", files: [{ path: "a-plain.md", content: "# A\n" }], page: { id: null, path: "a-plain.md", minor: false } }, actor);
+      const plainData = await payload(plain.id);
+      expect(plainData).not.toHaveProperty("directPublish");
+      expect(plainData).not.toHaveProperty("continues");
+      expect(plainData).toMatchObject({ page: { id: null, path: "a-plain.md", minor: false } });
+    });
+
+    it("refuses what the contract does with a 400 naming the path, and records nothing", async () => {
+      const before = (await app.db.query("select 1 from workflow.document_write")).rowCount;
+      const tries: Array<[string, Parameters<DocumentWritesService["proposePage"]>[1]]> = [
+        ["restricted/secret.md", { message: "m", files: [{ path: "restricted/secret.md", content: "x" }], page: { id: null, path: "restricted/secret.md", minor: false } }],
+        ["../escape.md", { message: "m", files: [{ path: "../escape.md", content: "x" }], page: { id: null, path: "a.md", minor: false } }],
+        ["gone.md", { message: "m", files: [{ path: "gone.md", content: "", delete: true }], page: { id: null, path: "gone.md", minor: false } }],
+        ["dup.md", { message: "m", files: [{ path: "dup.md", content: "x" }, { path: "dup.md", content: "y" }], page: { id: null, path: "dup.md", minor: false } }],
+        ["same.md", { message: "m", files: [{ path: "same.md", content: "x", renameFrom: "same.md", expectedHash: HASH }], page: { id: null, path: "same.md", minor: false } }],
+      ];
+      for (const [name, input] of tries) await expect(writes.proposePage("billing", input, actor), name).rejects.toMatchObject({ status: 400, message: expect.stringContaining(name) });
+      expect((await app.db.query("select 1 from workflow.document_write")).rowCount).toBe(before);
+    });
+
+    it("finds the open write of a page: queued, or on a review branch, not merged, closed, direct or failed", async () => {
+      const page = "10-open/page.md";
+      const propose = (path = page) => writes.proposePage("billing", { message: "Open", files: [{ path, content: "# Open\n" }], page: { id: null, path, minor: false } }, actor);
+      expect(await writes.openPageWrite("billing", page)).toBeUndefined();
+      const first = await propose();
+      expect((await writes.openPageWrite("billing", page))?.id).toBe(first.id);
+      const set = (id: string, status: string, branch: string | null) => app.db.query("update workflow.document_write set status = $2, branch = $3 where id = $1", [id, status, branch]);
+      await set(first.id, "pr-opened", "kintsugi/page-author/open");
+      expect(await writes.openPageWrite("billing", page)).toMatchObject({ id: first.id, status: "pr-opened", branch: "kintsugi/page-author/open" });
+      await set(first.id, "committed", "kintsugi/page-author/open");
+      expect((await writes.openPageWrite("billing", page))?.id).toBe(first.id);
+      // Committed straight to the default branch (no branch), merged, closed, unchanged and failed are not open.
+      for (const [status, branch] of [["committed", null], ["merged", "kintsugi/page-author/open"], ["closed", "kintsugi/page-author/open"], ["unchanged", null], ["failed", null]] as const) {
+        await set(first.id, status, branch);
+        expect(await writes.openPageWrite("billing", page), status).toBeUndefined();
+      }
+      // Another page, another project's page and a write that is not a page write are not it.
+      await set(first.id, "queued", null);
+      expect(await writes.openPageWrite("billing", "10-open/other.md")).toBeUndefined();
+      expect(await writes.openPageWrite("elsewhere", page)).toBeUndefined();
+      await app.db.query("update workflow.document_write set page_path = null where id = $1", [first.id]);
+      expect(await writes.openPageWrite("billing", page)).toBeUndefined();
+      // The newest open write wins when the data holds two.
+      const older = await propose();
+      const newer = await propose();
+      await app.db.query("update workflow.document_write set created_at = now() + interval '5 seconds' where id = $1", [newer.id]);
+      expect((await writes.openPageWrite("billing", page))?.id).toBe(newer.id);
+      expect(older.id).not.toBe(newer.id);
+    });
+
+    it("lists the page and the merge commit of a write in the project's writes", async () => {
+      const record = await writes.proposePage("billing", { message: "Merged", files: [{ path: "20-merged.md", content: "# M\n" }], page: { id: "PAGE-BIL-0002", path: "20-merged.md", minor: false } }, actor);
+      await app.db.query("update workflow.document_write set status = 'merged', branch = 'kintsugi/x', merge_commit = $2 where id = $1", [record.id, "d".repeat(40)]);
+      const listed = await admin.get<{ items: Array<{ id: string; page?: { path: string; id: string | null }; mergeCommit?: string }> }>("/admin/projects/billing/document-writes?limit=100");
+      expect(listed.body.data!.items.find((item) => item.id === record.id)).toMatchObject({ page: { path: "20-merged.md", id: "PAGE-BIL-0002" }, mergeCommit: "d".repeat(40) });
+    });
+
+    it("leaves the manifest write as it was: no page, no new payload fields", async () => {
+      const published = (await admin.request<WriteView>("POST", "/admin/projects/billing/kintsugi.yaml/publish", { body: { scaffold: false } })).body.data!;
+      const data = await payload(published.id);
+      for (const key of ["page", "directPublish", "continues"]) expect(data).not.toHaveProperty(key);
+      expect(data.files).toHaveLength(1);
+      expect(data.files[0]).not.toHaveProperty("encoding");
+      expect((published as WriteView & { page?: unknown }).page).toBeUndefined();
+    });
   });
 });

@@ -20,6 +20,8 @@ export abstract class DocumentWriteStore {
   abstract createCorrection(write: NewDocumentWrite & { correction: DocumentWriteCorrection }): Promise<CorrectionOutcome>;
   /** The project's open corrections (ADR-0094), newest first. */
   abstract openCorrections(projectId: string): Promise<DocumentWriteRecord[]>;
+  /** The write of the page that is queued, or committed or pull-request-opened on a review branch; undefined when there is none. */
+  abstract openPageWrite(projectId: string, pagePath: string): Promise<DocumentWriteRecord | undefined>;
   /** Marks a write failed before it reached the worker. */
   abstract markFailed(id: string, error: string): Promise<void>;
 }
