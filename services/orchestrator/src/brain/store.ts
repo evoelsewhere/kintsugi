@@ -17,6 +17,7 @@ import {
   type BrainNodeKind,
   type BrainNodePage,
   type BrainRefRow,
+  type BrainSearchText,
   type BrainSource,
   type BrainSummarySource,
   type BrainTree,
@@ -279,7 +280,9 @@ export class PgBrainStore {
       await client.query("delete from knowledge.brain_link where project_id = $1", [projectId]);
       await client.query("delete from knowledge.brain_ref where project_id = $1", [projectId]);
       await client.query("delete from knowledge.brain_node where project_id = $1", [projectId]);
+      await client.query("delete from knowledge.brain_text where project_id = $1", [projectId]);
       await insertNodes(client, projectId, tree.nodes, homesOf(parts, tree.nodes));
+      await insertTexts(client, projectId, textsOf(parts, new Set(tree.nodes.map((node) => node.id))));
       await insertRefs(client, projectId, parts.flatMap(brainRefRows));
       await insertLinks(client, projectId, tree.links);
       await setLinkTotals(client, projectId, tree.nodes, tree.linkTotals);
@@ -333,12 +336,19 @@ export class PgBrainStore {
         if (before.get(node.id) !== now) write.push(node);
       }
       const remove = [...before.keys()].filter((id) => !keep.has(id));
+      // The text index follows the documents that were read again and the nodes that are gone; the text of the others stays.
+      const changedSet = new Set(changedPaths);
+      const textless = [...new Set([...remove, ...stored.rows.filter((row) => changedSet.has(row.path)).map((row) => row.id)])];
+      for (let start = 0; start < textless.length; start += INSERT_CHUNK) {
+        await client.query("delete from knowledge.brain_text where project_id = $1 and node_id = any($2::text[])", [projectId, textless.slice(start, start + INSERT_CHUNK)]);
+      }
       const drop = [...new Set([...remove, ...write.map((node) => node.id)])];
       for (let start = 0; start < drop.length; start += INSERT_CHUNK) {
         await client.query("delete from knowledge.brain_node where project_id = $1 and id = any($2::text[])", [projectId, drop.slice(start, start + INSERT_CHUNK)]);
       }
       await insertNodes(client, projectId, write, homes);
       await setLinkTotals(client, projectId, write, tree.linkTotals);
+      await insertTexts(client, projectId, textsOf(parts.filter((part) => changedSet.has(part.path)), keep));
 
       // Links: the set difference with what is stored.
       const linksStored = await client.query<{ from_id: string; to_id: string; kind: BrainLink["kind"] }>(
@@ -364,7 +374,7 @@ export class PgBrainStore {
 
       // References: those of the documents that changed or went are replaced.
       await client.query("delete from knowledge.brain_ref where project_id = $1 and path = any($2::text[])", [projectId, changedPaths]);
-      const changed = new Set(changedPaths);
+      const changed = changedSet;
       await insertRefs(client, projectId, parts.filter((part) => changed.has(part.path)).flatMap(brainRefRows));
 
       const tokens = tree.nodes.find((node) => node.id === BRAIN_ROOT_ID)?.subtreeTokens ?? 0;
@@ -649,6 +659,43 @@ async function setLinkTotals(client: PoolClient, projectId: string, nodes: reado
       where n.project_id = $1 and n.id = t.id`,
     [projectId, totals.map(([id]) => id), totals.map(([, total]) => total)],
   );
+}
+
+/** The text of the nodes of these parts that the tree has (a document the tree left out has no row). */
+function textsOf(parts: readonly BrainDocumentPart[], known: ReadonlySet<string>): BrainSearchText[] {
+  return parts.flatMap((part) => part.search.filter((text) => known.has(text.nodeId)));
+}
+
+/** The characters of text sent to Postgres in one statement. */
+const TEXT_CHUNK_CHARS = 4_000_000;
+
+/**
+ * The text index rows of nodes (ADR-0097 decision 7): the vector of each is the title at weight A, the headings under it
+ * and its labels at B and its own lines at C, in the `simple` configuration; Postgres keeps the lexemes, not the text.
+ */
+async function insertTexts(client: PoolClient, projectId: string, texts: readonly BrainSearchText[]): Promise<void> {
+  let batch: BrainSearchText[] = [];
+  let chars = 0;
+  const flush = async (): Promise<void> => {
+    if (batch.length === 0) return;
+    await client.query(
+      `insert into knowledge.brain_text (project_id, node_id, tsv)
+       select $1, t.node_id,
+              setweight(to_tsvector('simple', t.title), 'A') || setweight(to_tsvector('simple', t.headings), 'B') || setweight(to_tsvector('simple', t.body), 'C')
+         from unnest($2::text[], $3::text[], $4::text[], $5::text[]) as t(node_id, title, headings, body)
+       on conflict (project_id, node_id) do update set tsv = excluded.tsv`,
+      [projectId, batch.map((text) => text.nodeId), batch.map((text) => text.title), batch.map((text) => text.headings), batch.map((text) => text.body)],
+    );
+    batch = [];
+    chars = 0;
+  };
+  for (const text of texts) {
+    const size = text.title.length + text.headings.length + text.body.length;
+    if (batch.length > 0 && (chars + size > TEXT_CHUNK_CHARS || batch.length >= INSERT_CHUNK)) await flush();
+    batch.push(text);
+    chars += size;
+  }
+  await flush();
 }
 
 async function insertRefs(client: PoolClient, projectId: string, refs: readonly BrainRefRow[]): Promise<void> {

@@ -170,6 +170,8 @@ Builder 5 ran on the 37 documents and 23 questions of P2-007; P2-012 added a pag
 
 Phase 1 of the wiki roadmap adds the lookup by `label:` and `space:` that an agent uses (`brain_lookup`, [ADR-0097](../decisions/0097-brain-indexes-wiki-pages.md) decision 8) and four questions that ask for it: W25 and W26 by label (`label:Sev1`, and `label:Finance` for the page that writes its labels as a block list), W27 and W28 by space (`space:eng`, `space:Hr`). The questions give the key in another case than the pages do, so they also pin the rule that a space key is read in any case.
 
+**Builder 7 (P4-001).** The text index adds a table and changes no node, summary, link or read, so the baseline is not re-recorded: the whole eval (25 tests) runs on builder 7 and finds every score and cost of `wiki-baseline.json` as it was recorded.
+
 The baseline file was re-recorded with them (`kwp2-integration` b86ce6d9 + P2-021). Its 24 earlier questions did not change by a digit: the same scores, the same costs and the same statistics as the builder 6 recording above, so nothing is lost against the Phase 0 baseline. The four new questions score 100% in recall, precision and evidence (2, 2, 22 and 6 pages).
 
 | Run | Commit | Result |

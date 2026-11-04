@@ -32,10 +32,26 @@ export const BRAIN_SUMMARY_SOURCES = [
 ] as const;
 export type BrainSummarySource = (typeof BRAIN_SUMMARY_SOURCES)[number];
 
+/** The most characters of one node's own lines that the text index takes: a tsvector holds at most about a megabyte of lexemes. */
+export const BRAIN_SEARCH_BODY_MAX = 400_000;
+
+/** What the text index of one node is made of: the strings Postgres turns into a weighted tsvector (title A, headings B, body C). */
+export interface BrainSearchText {
+  nodeId: string;
+  title: string;
+  headings: string;
+  body: string;
+}
+
+/** A node's own lines for the text index: no NUL (Postgres refuses it) and no more than `BRAIN_SEARCH_BODY_MAX` characters. */
+function clipSearchBody(text: string): string {
+  return text.replace(/\0/g, " ").slice(0, BRAIN_SEARCH_BODY_MAX);
+}
+
 /** The id of the tree's root. A folder's id is its path with a trailing `/`, a document's its path, a section's `path#anchor`. */
 export const BRAIN_ROOT_ID = "/";
 /** Bumped when the builder changes what it produces, so every index is rebuilt once. */
-export const BRAIN_BUILDER_VERSION = 6;
+export const BRAIN_BUILDER_VERSION = 7;
 export const BRAIN_SUMMARY_MAX = 240;
 export const BRAIN_TITLE_MAX = 200;
 /** Larger files are left out, as the document read API refuses them (docs/reference/document-repo-read-path.md). */
@@ -575,6 +591,8 @@ function linksOf(fromId: string, fromPath: string, lines: readonly string[]): Pe
 
 interface DocumentNodes {
   nodes: BrainNode[];
+  /** What the text index of each node is made of (builder 7); the text itself is not stored. */
+  texts: BrainSearchText[];
   links: PendingLink[];
   /** Front matter `key` (or `space`) of a home page, upper-cased: the space it makes. Null when absent or not a valid key. */
   key: string | null;
@@ -609,6 +627,8 @@ export function buildBrainDocument(path: string, text: string): DocumentNodes {
   const ownStart = titleHeading !== undefined ? titleHeading.line + 1 : front.lines;
   const ownLines = lines.slice(ownStart, documentEnd);
   const documentIds = [front.fields.get("id")].filter((id): id is string => id !== undefined && isBrainReferenceId(id));
+  const texts: BrainSearchText[] = [];
+  const headingsOfNode = new Map<string, string[]>();
   const document: BrainNode = {
     id: path,
     parentId: null,
@@ -688,11 +708,18 @@ export function buildBrainDocument(path: string, text: string): DocumentNodes {
       node.summarySource = summary.source;
     }
     childTitles.set(parent.id, [...(childTitles.get(parent.id) ?? []), node.title]);
+    headingsOfNode.set(parent.id, [...(headingsOfNode.get(parent.id) ?? []), node.title]);
+    if (parent !== document) headingsOfNode.set(path, [...(headingsOfNode.get(path) ?? []), node.title]);
+    texts.push({ nodeId: nodeId, title: node.title, headings: "", body: clipSearchBody(own.join("\n")) });
     nodes.push(node);
     links.push(...linksOf(nodeId, path, own));
     stack.push({ level: heading.level, node });
   }
 
+  // The headings of each node, for the text index: those directly under it; a document has all those of its page, and its
+  // labels and ids, which are what a reader names a page by.
+  for (const text of texts) text.headings = (headingsOfNode.get(text.nodeId) ?? []).join(" ");
+  texts.unshift({ nodeId: path, title, headings: [...document.labels, ...document.ids, ...(headingsOfNode.get(path) ?? [])].join(" "), body: clipSearchBody(ownLines.join("\n")) });
   for (const node of nodes) {
     node.children = childCount.get(node.id) ?? 0;
     if (node.summarySource === "none") Object.assign(node, toNode(summaryOfChildren(childTitles.get(node.id) ?? [])));
@@ -721,7 +748,7 @@ export function buildBrainDocument(path: string, text: string): DocumentNodes {
   const writtenKey = front.fields.get("key") ?? front.fields.get("space");
   const upperKey = writtenKey?.toUpperCase();
   const valid = upperKey !== undefined && isPageKey(upperKey);
-  return { nodes, links, key: valid ? upperKey : null, invalidKey: writtenKey !== undefined && !valid ? writtenKey : null, order, cardAliases };
+  return { nodes, texts, links, key: valid ? upperKey : null, invalidKey: writtenKey !== undefined && !valid ? writtenKey : null, order, cardAliases };
 }
 
 /**
@@ -782,6 +809,12 @@ function readmeFirst(a: string, b: string): number {
 export interface BrainDocumentPart {
   path: string;
   nodes: BrainNode[];
+  /**
+   * What the text index of each node of the document is made of, in node order: the title (weight A), the headings under
+   * it and, for the document, its labels and ids (weight B), and its own lines (weight C). Empty for a part made from
+   * stored rows: the text of a document that was not read again stays as it is in the index.
+   */
+  search: BrainSearchText[];
   refs: BrainPendingLink[];
   /** Front matter `key` (or `space`) of a home page, upper-cased; null when absent or not a valid key. */
   key: string | null;
@@ -800,6 +833,7 @@ export function brainDocumentPart(source: BrainSourceDocument): BrainDocumentPar
   return {
     path: source.path,
     nodes: built.nodes,
+    search: built.texts,
     refs: built.links,
     key: built.key,
     invalidKey: built.invalidKey,
@@ -884,6 +918,7 @@ export function brainPartsFromRows(rows: ReadonlyArray<{ node: BrainNode; home: 
     parts.push({
       path,
       nodes,
+      search: [],
       refs: (refsByPath.get(path) ?? [])
         .sort((a, b) => a.ordinal - b.ordinal)
         .map((ref) => (ref.kind === "id" ? { fromId: ref.fromId, id: ref.targetId ?? "" } : { fromId: ref.fromId, path: ref.targetPath ?? "", ...(ref.targetAnchor === null ? {} : { anchor: ref.targetAnchor }) })),
