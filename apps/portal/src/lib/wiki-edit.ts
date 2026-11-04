@@ -803,3 +803,74 @@ export function deleteWarning(links: number): string {
   if (links === 0) return "No other page links to this page.";
   return `${links} ${links === 1 ? "link into this page" : "links into this page"} will break: ${links === 1 ? "it" : "they"} will show in the broken links report until fixed.`;
 }
+
+// ---- Attachments of a draft --------------------------------------------------------------------------------------
+// A file or an image added while editing is kept beside the draft and joins the repository, under the page's
+// `_attachments/` folder, when the page is published (threads/design-wiki-draft-publish, decision of 01:14).
+
+/** An attachment of a draft: the name the server gave it and the Markdown to insert. */
+export interface AttachmentView {
+  name: string;
+  contentType: string;
+  size: number;
+  markdown: string;
+}
+
+/** `POST wiki/draft/attachments`. */
+export interface AttachmentUpload {
+  path: string;
+  name: string;
+  contentType: string;
+  contentBase64: string;
+}
+
+/** The types an attachment may have (SVG is not one: it can carry script), by file extension. */
+export const ATTACHMENT_TYPES: Readonly<Record<string, string>> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  pdf: "application/pdf",
+};
+
+/** The most a file, and all the files of a draft, may weigh (the API refuses more). */
+export const ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
+export const ATTACHMENTS_MAX_BYTES = 20 * 1024 * 1024;
+
+/** The type of a file from its extension, or undefined when it is not one that may be attached. */
+export function attachmentTypeOf(name: string): string | undefined {
+  const extension = /\.([A-Za-z0-9]+)$/.exec(name)?.[1]?.toLowerCase();
+  return extension === undefined ? undefined : ATTACHMENT_TYPES[extension];
+}
+
+/** Why a file cannot be attached, in a person's words; undefined when it can. `held` is what the draft's attachments weigh already. */
+export function attachmentProblem(file: { name: string; size: number }, held: number): string | undefined {
+  if (attachmentTypeOf(file.name) === undefined) return `${file.name}: only images (png, jpg, gif, webp) and PDF files can be attached.`;
+  if (file.size === 0) return `${file.name} is empty.`;
+  if (file.size > ATTACHMENT_MAX_BYTES) return `${file.name} is larger than 5 MiB.`;
+  if (held + file.size > ATTACHMENTS_MAX_BYTES) return `${file.name} would take this page's attachments over 20 MiB.`;
+  return undefined;
+}
+
+/** The bytes of a file as base64, for the JSON body of an upload. */
+export function toBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let at = 0; at < bytes.length; at += 0x8000) binary += String.fromCharCode(...bytes.subarray(at, at + 0x8000));
+  return btoa(binary);
+}
+
+/** The address of an attachment of the person's own draft: what the editor's preview shows an image from. */
+export const draftAttachmentUrl = (projectId: string, path: string, name: string): string =>
+  `/api/projects/${encodeURIComponent(projectId)}/wiki/draft/attachments/file?${new URLSearchParams({ path, name }).toString()}`;
+
+/**
+ * Where an image the preview of a page being edited points at is served from while the page is a draft: an attachment
+ * the draft holds (`<page folder>/_attachments/<name>`), else nothing (the published route does not have it yet).
+ */
+export function draftImageUrl(projectId: string, pagePath: string, resolvedPath: string, held: readonly string[]): string | undefined {
+  const folder = `${pagePath.includes("/") ? pagePath.slice(0, pagePath.lastIndexOf("/")) : ""}/_attachments/`.replace(/^\//, "");
+  if (!resolvedPath.startsWith(folder)) return undefined;
+  const name = resolvedPath.slice(folder.length);
+  return name !== "" && !name.includes("/") && held.includes(name) ? draftAttachmentUrl(projectId, pagePath, name) : undefined;
+}

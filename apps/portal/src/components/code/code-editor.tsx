@@ -50,15 +50,25 @@ export default function CodeEditor({
   path,
   onChange,
   lineSeparator,
+  registerInsert,
+  onFiles,
 }: {
   text: string;
   path: string;
   onChange?: ((text: string) => void) | undefined;
   /** Joins and splits the lines with exactly this (the wiki editor keeps a page's own line endings). */
   lineSeparator?: string | undefined;
+  /** Gives the caller a function that puts text at the cursor (replacing the selection). */
+  registerInsert?: ((insert: (text: string) => void) => void) | undefined;
+  /** Files pasted or dropped into the editor: they are not inserted as text, the caller takes them. */
+  onFiles?: ((files: File[]) => void) | undefined;
 }): React.JSX.Element {
   const host = useRef<HTMLDivElement>(null);
   const changed = useRef(onChange);
+  const taken = useRef(onFiles);
+  useEffect(() => {
+    taken.current = onFiles;
+  }, [onFiles]);
   const editable = onChange !== undefined;
   useEffect(() => {
     changed.current = onChange;
@@ -80,14 +90,34 @@ export default function CodeEditor({
           EditorState.readOnly.of(!editable),
           EditorView.editable.of(editable),
           EditorView.lineWrapping,
+          EditorView.domEventHandlers({
+            paste: (event) => {
+              const files = [...(event.clipboardData?.files ?? [])];
+              if (files.length === 0 || taken.current === undefined) return false;
+              event.preventDefault();
+              taken.current(files);
+              return true;
+            },
+            drop: (event) => {
+              const files = [...(event.dataTransfer?.files ?? [])];
+              if (files.length === 0 || taken.current === undefined) return false;
+              event.preventDefault();
+              taken.current(files);
+              return true;
+            },
+          }),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) changed.current?.(update.state.sliceDoc());
           }),
         ],
       }),
     });
+    registerInsert?.((text) => {
+      view.dispatch(view.state.replaceSelection(text));
+      view.focus();
+    });
     return () => view.destroy();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rebuildOn, path, editable, lineSeparator]);
+  }, [rebuildOn, path, editable, lineSeparator, registerInsert]);
   return <div ref={host} className="h-full min-h-0" role="region" aria-label={`Contents of ${path}`} />;
 }

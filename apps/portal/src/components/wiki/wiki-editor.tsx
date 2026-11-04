@@ -3,12 +3,13 @@
 // saved to the person's draft as they go (lib/wiki-edit.ts `DraftSaver`), never to the repository. Publishing is the
 // next step (publish dialog); nothing here writes to the document repository.
 
-import { Eye, PencilLine, TriangleAlert } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Eye, Paperclip, PencilLine, TriangleAlert, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { CodeView } from "@/components/code/code-view";
 import { Loaded } from "@/components/loaded";
 import { Markdown } from "@/components/results/lazy-markdown";
+import { MarkdownImagesContext } from "@/components/results/use-markdown-images";
 import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
 import { documentsApi } from "@/lib/api/documents";
@@ -18,9 +19,10 @@ import { splitFrontMatter } from "@/lib/front-matter";
 import { useLoader } from "@/lib/use-loader";
 import { cn } from "@/lib/utils";
 import { nameOf, wikiPageLink, wikiRead } from "@/lib/wiki";
+import { useAttachments } from "./use-attachments";
 import { LabelChips } from "./wiki-label-chips";
 import { PublishFlow } from "./wiki-publish";
-import { type AccessView, DraftSaver, type DraftView, lineSeparatorOf, restoreMessage, SAVE_STATUS_LABEL, type SaverState } from "@/lib/wiki-edit";
+import { type AccessView, draftImageUrl, DraftSaver, type DraftView, lineSeparatorOf, restoreMessage, SAVE_STATUS_LABEL, type SaverState } from "@/lib/wiki-edit";
 
 /** A page's title for its default publish message: the `title` of its front matter, else its file name. */
 function pageTitle(text: string, path: string): string {
@@ -141,6 +143,19 @@ function Surface({
   // A text taken from the server remounts the editor with it.
   const [generation, setGeneration] = useState(0);
   const engine = useRef<DraftSaver | null>(null);
+  const insertAtCursor = useRef<(text: string) => void>(() => undefined);
+  const register = useCallback((insert: (text: string) => void) => {
+    insertAtCursor.current = insert;
+  }, []);
+  const attachments = useAttachments(
+    projectId,
+    path,
+    (markdown) => insertAtCursor.current(markdown),
+    () => engine.current?.whenSaved() ?? Promise.resolve(),
+  );
+  const fileInput = useRef<HTMLInputElement>(null);
+  const held = useMemo(() => attachments.items.map((item) => item.name), [attachments.items]);
+  const images = useMemo(() => ({ projectId, commit: startCommit ?? "", draftUrl: (resolved: string) => draftImageUrl(projectId, path, resolved, held) }), [projectId, path, held, startCommit]);
   const separator = useMemo(() => lineSeparatorOf(initial), [initial]);
 
   useEffect(() => {
@@ -263,6 +278,50 @@ function Surface({
           setGeneration((value) => value + 1);
         }}
       />
+      <section aria-label="Attachments" className="flex flex-col gap-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            ref={fileInput}
+            type="file"
+            multiple
+            accept=".png,.jpg,.jpeg,.gif,.webp,.pdf"
+            className="sr-only"
+            tabIndex={-1}
+            aria-label="Choose files to attach"
+            onChange={(event) => {
+              void attachments.attach([...(event.target.files ?? [])]);
+              event.target.value = "";
+            }}
+          />
+          <Button size="small" disabled={attachments.busy || saver.status === "locked"} onClick={() => fileInput.current?.click()}>
+            <Paperclip />
+            {attachments.busy ? "Attaching…" : "Attach"}
+          </Button>
+          <span className="text-[12px] text-text-muted">Images and PDF files, up to 5 MiB each. You can also paste or drop them into the text.</span>
+        </div>
+        {attachments.problem === null ? null : (
+          <p role="alert" className="text-[12px] text-[var(--ds-status-red)]">
+            {attachments.problem}
+          </p>
+        )}
+        {attachments.items.length === 0 ? null : (
+          <ul className="flex flex-wrap gap-1.5">
+            {attachments.items.map((item) => (
+              <li key={item.name} className="flex items-center gap-1 rounded-full bg-recessed py-0.5 pr-1 pl-2 text-[12px] text-text-secondary">
+                <span className="font-mono">{item.name}</span>
+                <button
+                  type="button"
+                  aria-label={`Remove the attachment ${item.name}`}
+                  className="grid size-4 place-items-center rounded-full text-text-muted hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
+                  onClick={() => void attachments.remove(item.name)}
+                >
+                  <X className="size-3" strokeWidth={2} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
       <div className="lg:hidden">
         <Tabs
           label="Source and preview"
@@ -279,13 +338,15 @@ function Surface({
           <p className="sr-only">
             <PencilLine aria-hidden="true" /> Source
           </p>
-          <CodeView key={generation} text={text} path={path} onChange={typed} lineSeparator={separator} />
+          <CodeView key={generation} text={text} path={path} onChange={typed} lineSeparator={separator} registerInsert={register} onFiles={(files) => void attachments.attach(files)} />
         </section>
         <section aria-label="Preview" className={cn("h-[60vh] min-h-[320px] overflow-auto rounded-lg p-4 shadow-border", pane === "source" && "hidden lg:block")}>
           <p className="sr-only">
             <Eye aria-hidden="true" /> Preview
           </p>
-          <Markdown text={splitFrontMatter(preview).body} path={path} />
+          <MarkdownImagesContext.Provider value={images}>
+            <Markdown text={splitFrontMatter(preview).body} path={path} />
+          </MarkdownImagesContext.Provider>
         </section>
       </div>
     </div>

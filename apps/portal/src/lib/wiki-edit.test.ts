@@ -20,7 +20,13 @@ import {
   LABELS_MAX,
   defaultDeleteMessage,
   deleteWarning,
+  ATTACHMENT_MAX_BYTES,
+  ATTACHMENTS_MAX_BYTES,
+  attachmentProblem,
+  attachmentTypeOf,
+  draftImageUrl,
   messageProblem,
+  toBase64,
   restoreMessage,
   setLabels,
   MOVE_REWRITE_LIMIT,
@@ -715,5 +721,44 @@ describe("restoring an older version", () => {
     const { saver, calls } = harness({ draft: draft({ text: "same", revision: 2 }) });
     expect(saver.current.text).toBe("same");
     expect(calls).toEqual([]);
+  });
+});
+
+describe("attachments of a draft", () => {
+  it("knows the types that may be attached by extension, in any case, and not SVG or scripts", () => {
+    expect(attachmentTypeOf("diagram.PNG")).toBe("image/png");
+    expect(attachmentTypeOf("photo.jpeg")).toBe("image/jpeg");
+    expect(attachmentTypeOf("spec.pdf")).toBe("application/pdf");
+    for (const name of ["logo.svg", "page.html", "run.sh", "archive.zip", "noextension", "x.png.exe"]) expect(attachmentTypeOf(name)).toBeUndefined();
+  });
+
+  it("refuses a file before upload, with the reason: type, empty, over 5 MiB, or over 20 MiB for the page", () => {
+    expect(attachmentProblem({ name: "a.png", size: 1000 }, 0)).toBeUndefined();
+    expect(attachmentProblem({ name: "a.svg", size: 1000 }, 0)).toMatch(/only images/);
+    expect(attachmentProblem({ name: "a.png", size: 0 }, 0)).toMatch(/empty/);
+    expect(attachmentProblem({ name: "a.png", size: ATTACHMENT_MAX_BYTES }, 0)).toBeUndefined();
+    expect(attachmentProblem({ name: "a.png", size: ATTACHMENT_MAX_BYTES + 1 }, 0)).toMatch(/5 MiB/);
+    expect(attachmentProblem({ name: "a.png", size: 1000 }, ATTACHMENTS_MAX_BYTES)).toMatch(/20 MiB/);
+  });
+
+  it("encodes bytes as base64, also for a file larger than one chunk", () => {
+    expect(toBase64(new Uint8Array([104, 105]))).toBe("aGk=");
+    const big = Uint8Array.from({ length: 100_000 }, (_, index) => index % 251);
+    expect(Uint8Array.from(Buffer.from(toBase64(big), "base64"))).toEqual(big);
+    expect(toBase64(new Uint8Array())).toBe("");
+  });
+
+  it("shows an image the draft holds from the draft's own route, and any other image not at all", () => {
+    const page = "20-spaces/eng/runbooks/db-failover.md";
+    expect(draftImageUrl("my project", page, "20-spaces/eng/runbooks/_attachments/failover.png", ["failover.png"])).toBe(
+      `/api/projects/my%20project/wiki/draft/attachments/file?path=${encodeURIComponent(page)}&name=failover.png`,
+    );
+    // Not held by the draft: it may be a published attachment, which the reader's route serves.
+    expect(draftImageUrl("p", page, "20-spaces/eng/runbooks/_attachments/other.png", ["failover.png"])).toBeUndefined();
+    // Another page's folder, a deeper path, an empty name.
+    expect(draftImageUrl("p", page, "20-spaces/eng/_attachments/failover.png", ["failover.png"])).toBeUndefined();
+    expect(draftImageUrl("p", page, "20-spaces/eng/runbooks/_attachments/sub/failover.png", ["sub/failover.png"])).toBeUndefined();
+    expect(draftImageUrl("p", page, "20-spaces/eng/runbooks/_attachments/", [""])).toBeUndefined();
+    expect(draftImageUrl("p", "top.md", "_attachments/a.png", ["a.png"])).toContain("name=a.png");
   });
 });
