@@ -1,7 +1,7 @@
 // The edit restrictions of a project in Postgres (knowledge.wiki_restriction).
 
 import { Injectable } from "@nestjs/common";
-import { getPool } from "#common/db/pool.js";
+import { getPool, withTransaction } from "#common/db/pool.js";
 import type { WikiRestriction, WikiRestrictionKind, WikiSubjectKind } from "../domain/wiki.js";
 import { WikiRestrictions } from "../domain/wiki.ports.js";
 
@@ -55,6 +55,21 @@ export class PgWikiRestrictions extends WikiRestrictions {
       [input.projectId, input.pathPrefix, input.subjectKind, input.subjectId, input.kind, input.createdBy],
     );
     return toRestriction(result.rows[0]!);
+  }
+
+  async replace(input: { projectId: string; pathPrefix: string; kind: WikiRestrictionKind; subjects: ReadonlyArray<{ kind: WikiSubjectKind; id: string }>; createdBy: string | null }): Promise<WikiRestriction[]> {
+    return withTransaction(async (tx) => {
+      await tx.query("delete from knowledge.wiki_restriction where project_id = $1 and path_prefix = $2 and kind = $3", [input.projectId, input.pathPrefix, input.kind]);
+      const rows: WikiRestriction[] = [];
+      for (const subject of input.subjects) {
+        const result = await tx.query<RestrictionRow>(
+          `insert into knowledge.wiki_restriction (project_id, path_prefix, subject_kind, subject_id, kind, created_by) values ($1, $2, $3, $4, $5, $6) returning ${COLUMNS}`,
+          [input.projectId, input.pathPrefix, subject.kind, subject.id, input.kind, input.createdBy],
+        );
+        rows.push(toRestriction(result.rows[0]!));
+      }
+      return rows;
+    });
   }
 
   async clear(projectId: string, pathPrefix: string, kind: WikiRestrictionKind): Promise<number> {

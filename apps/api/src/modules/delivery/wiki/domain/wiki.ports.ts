@@ -45,6 +45,22 @@ export abstract class WikiRestrictions {
   abstract covering(projectId: string, path: string): Promise<WikiRestriction[]>;
   /** Adds the restriction; the same one again changes nothing. */
   abstract add(input: { projectId: string; pathPrefix: string; subjectKind: WikiSubjectKind; subjectId: string; kind: WikiRestrictionKind; createdBy: string | null }): Promise<WikiRestriction>;
+  /** Makes `subjects` exactly who the prefix lets in for the kind, in one step: the rows it had are replaced. */
+  abstract replace(input: { projectId: string; pathPrefix: string; kind: WikiRestrictionKind; subjects: ReadonlyArray<{ kind: WikiSubjectKind; id: string }>; createdBy: string | null }): Promise<WikiRestriction[]>;
   /** Removes every row of the prefix and kind; the number removed. */
   abstract clear(projectId: string, pathPrefix: string, kind: WikiRestrictionKind): Promise<number>;
+}
+
+/** The people and roles restrictions name. */
+export abstract class WikiSubjects {
+  /** The ids of the roles a user holds. */
+  abstract rolesOf(userId: string): Promise<string[]>;
+  /** The names to show for users (their display name, or sign-in name) and roles; an id that does not exist is missing from the map. */
+  abstract names(kind: WikiSubjectKind, ids: readonly string[]): Promise<Map<string, string>>;
+}
+
+/** Where a page may be published straight to the default branch. */
+export abstract class WikiDirectPublish {
+  /** The globs of `directPublishPaths` in kintsugi.yaml at the head of the default branch; none when there are none or the file cannot be read. */
+  abstract globs(projectId: string): Promise<readonly string[]>;
 }

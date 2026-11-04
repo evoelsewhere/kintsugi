@@ -47,7 +47,7 @@ export class WikiDraftService {
    * overwritten); later saves must name the stored revision, and a stale one is a 409 the editor resolves.
    */
   async save(projectId: string, actor: Actor, input: SaveDraftInput): Promise<WikiDraftView> {
-    this.access.assertCanWrite(actor, input.path);
+    await this.access.assertCanWrite(projectId, actor, input.path, "draft");
     if (!isWikiEditablePath(input.path) || !input.path.toLowerCase().endsWith(".md")) throw new BadRequestException(`${input.path} is not a page that can be edited`);
     if (Buffer.byteLength(input.text, "utf8") > DRAFT_TEXT_MAX_BYTES) throw new BadRequestException(`A page is at most ${DRAFT_TEXT_MAX_BYTES / (1024 * 1024)} MiB of text`);
 
@@ -72,7 +72,7 @@ export class WikiDraftService {
 
   /** Discards the caller's draft of the page (nothing happens when there is none). */
   async discard(projectId: string, actor: Actor, path: string): Promise<void> {
-    this.access.assertCanWrite(actor, path);
+    this.access.assertHasWritePermission(actor);
     const draft = await this.drafts.find(projectId, actor.id, path);
     if (draft !== undefined) await this.drafts.remove(draft.id);
   }

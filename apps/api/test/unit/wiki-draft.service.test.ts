@@ -7,7 +7,7 @@ import type { Actor } from "../../src/common/auth/decorators.js";
 import { WikiAccessService } from "../../src/modules/delivery/wiki/application/wiki-access.service.js";
 import { DRAFT_TEXT_MAX_BYTES, WikiDraftService } from "../../src/modules/delivery/wiki/application/wiki-draft.service.js";
 import type { NewWikiDraft, WikiDraft } from "../../src/modules/delivery/wiki/domain/wiki.js";
-import { WikiDrafts } from "../../src/modules/delivery/wiki/domain/wiki.ports.js";
+import { WikiDirectPublish, WikiDrafts, WikiRestrictions, WikiSubjects } from "../../src/modules/delivery/wiki/domain/wiki.ports.js";
 
 const actor: Actor = { id: "u1", username: "ada", permissions: ["wiki.write"] };
 const COMMIT = "a".repeat(40);
@@ -45,6 +45,41 @@ class MemoryDrafts extends WikiDrafts {
   }
 }
 
+/** Nobody is restricted, nobody holds a role, nothing is published directly. */
+function openAccess(): WikiAccessService {
+  const restrictions = new (class extends WikiRestrictions {
+    async list() {
+      return [];
+    }
+    async covering() {
+      return [];
+    }
+    async add(): Promise<never> {
+      throw new Error("not used");
+    }
+    async replace(): Promise<never> {
+      throw new Error("not used");
+    }
+    async clear() {
+      return 0;
+    }
+  })();
+  const subjects = new (class extends WikiSubjects {
+    async rolesOf() {
+      return [];
+    }
+    async names() {
+      return new Map<string, string>();
+    }
+  })();
+  const direct = new (class extends WikiDirectPublish {
+    async globs() {
+      return [];
+    }
+  })();
+  return new WikiAccessService(restrictions, subjects, direct, { openPageWrite: async () => undefined } as never, { recordChange: async () => undefined } as never);
+}
+
 function setup() {
   const drafts = new MemoryDrafts();
   const context = { project: {}, repo: {}, defaultBranch: "main" };
@@ -57,7 +92,7 @@ function setup() {
   };
   // The writer: autosave must never call any of it.
   const writes = { find: vi.fn(async () => undefined), proposePage: vi.fn(), proposeCorrection: vi.fn(), publishManifest: vi.fn() };
-  const service = new WikiDraftService(drafts, documents as never, writes as never, new WikiAccessService());
+  const service = new WikiDraftService(drafts, documents as never, writes as never, openAccess());
   return { service, drafts, documents, writes };
 }
 
