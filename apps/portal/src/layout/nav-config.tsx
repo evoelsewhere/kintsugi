@@ -2,6 +2,7 @@
 // Adding a page: append an item here and register its route in App.tsx.
 import {
   Activity,
+  Bell,
   Blocks,
   BookOpenText,
   BookText,
@@ -63,6 +64,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { id: "delivery", label: "Delivery", icon: Package, to: "/delivery", childrenFrom: "delivery-stages" },
       { id: "brain", label: "Brain", icon: Brain, to: "/brain" },
       { id: "wiki", label: "Wiki", icon: BookText, to: "/wiki" },
+      { id: "inbox", label: "Inbox", icon: Bell, to: "/inbox" },
       { id: "monitoring", label: "Monitoring", icon: Activity, to: "/monitoring" },
       { id: "governance", label: "Governance", icon: ShieldCheck, to: "/governance" },
     ],

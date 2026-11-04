@@ -14,6 +14,8 @@ import { useHealth } from "../lib/use-health";
 import { useMediaQuery } from "../lib/use-media-query";
 import { cn } from "../lib/utils";
 import { useDynamicNavChildren } from "./dynamic-nav";
+import { useUnreadCount } from "../components/notifications/use-unread";
+import { bellCount } from "../lib/notifications";
 import { NAV_SECTIONS, type NavItem } from "./nav-config";
 
 const HEALTH_TONE = { checking: "orange", up: "green", down: "red" } as const;
@@ -45,6 +47,9 @@ function SidebarLink({
   grouped?: boolean;
 }): React.JSX.Element {
   const Icon = item.icon;
+  // The inbox shows how many notifications are not read.
+  const unread = useUnreadCount();
+  const badge = item.id === "inbox" ? bellCount(unread) : item.badge;
   const className = ({ isActive }: { isActive: boolean }): string =>
     cn(
       "flex h-9 min-w-0 w-full items-center gap-2.5 rounded-[10px] px-3 text-[14px] text-text-secondary hover:bg-hover hover:text-text",
@@ -65,8 +70,8 @@ function SidebarLink({
     <NavLink to={item.to} end={item.end} title={collapsed ? item.label : undefined} onClick={onClick} className={className}>
       <Icon className="size-4 shrink-0" strokeWidth={1.75} />
       {collapsed ? null : <span className="truncate">{item.label}</span>}
-      {collapsed || item.badge === undefined ? null : (
-        <span className="ml-auto rounded-[var(--geist-pill-radius)] bg-recessed px-1.5 py-0.5 text-[11px] leading-4 text-text-muted">{item.badge}</span>
+      {collapsed || badge === undefined ? null : (
+        <span className="ml-auto rounded-[var(--geist-pill-radius)] bg-recessed px-1.5 py-0.5 text-[11px] leading-4 text-text-muted" aria-label={item.id === "inbox" ? `${badge} unread` : undefined}>{badge}</span>
       )}
     </NavLink>
   );

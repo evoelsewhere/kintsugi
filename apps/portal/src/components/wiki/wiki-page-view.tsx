@@ -21,6 +21,7 @@ import { ExportMarkdownButton } from "./export-markdown-button";
 import { WikiBacklinks } from "./wiki-backlinks";
 import { WikiCompare } from "./wiki-compare";
 import { WikiToc } from "./wiki-toc";
+import { PageWatchButton } from "./watch-button";
 import { DeleteButton } from "./wiki-delete";
 import { WikiEditor } from "./wiki-editor";
 import { WikiHistory } from "./wiki-history";
@@ -46,7 +47,12 @@ export function WikiPageView({ projectId, commit, path }: WikiPageViewProps): Re
       <PageTrail projectId={projectId} path={path} />
       {node === undefined ? null : <PageFacts projectId={projectId} node={node} commit={commit} />}
       {mode.mode === "edit" ? null : <PageTabs projectId={projectId} path={path} mode={mode} />}
-      {mode.mode === "page" ? <EditEntry projectId={projectId} path={path} archived={node?.status === "archived"} /> : null}
+      {mode.mode === "page" ? (
+        <div className="flex flex-wrap items-start gap-2">
+          <PageWatchButton projectId={projectId} path={path} target={path} />
+          <EditEntry projectId={projectId} path={path} archived={node?.status === "archived"} />
+        </div>
+      ) : null}
       {mode.mode === "edit" ? (
         <WikiEditor projectId={projectId} commit={commit} path={path} restore={mode.restore} change={mode.change} />
       ) : mode.mode === "page" ? (
