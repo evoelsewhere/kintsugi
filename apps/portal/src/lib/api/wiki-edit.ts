@@ -1,7 +1,7 @@
 // Typed access to the wiki's writing routes (`/api/projects/:id/wiki/...`): what a person may do with a page, their draft of
 // it, and publishing. The shapes are those of threads/design-wiki-draft-publish; the API enforces every rule again.
 
-import type { AccessView, AttachmentUpload, AttachmentView, DeleteBody, DeleteResult, DraftApi, DraftSaveBody, DraftView, MoveBody, MovePreview, NewPageBody, PublishRequest, PublishResult, TemplateOption } from "../wiki-edit";
+import type { AccessView, AttachmentUpload, DraftSummary, AttachmentView, DeleteBody, DeleteResult, DraftApi, DraftSaveBody, DraftView, MoveBody, MovePreview, NewPageBody, PublishRequest, PublishResult, TemplateOption } from "../wiki-edit";
 import { apiGet, ApiError, apiSend } from "../api";
 
 const base = (projectId: string): string => `/api/projects/${encodeURIComponent(projectId)}/wiki`;
@@ -19,6 +19,9 @@ export const wikiEditApi = {
       throw failure;
     }
   },
+
+  /** The caller's own drafts of wiki pages. */
+  drafts: (projectId: string): Promise<DraftSummary[]> => apiGet(`${base(projectId)}/drafts`),
 
   saveDraft: (projectId: string, body: DraftSaveBody): Promise<DraftView> => apiSend(`${base(projectId)}/draft`, "PUT", body),
 

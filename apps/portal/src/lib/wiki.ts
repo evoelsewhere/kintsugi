@@ -178,7 +178,7 @@ export function headingIdOfHash(hash: string): string {
 // be compared at two of them. Which of these a page shows is in the address too: `?view=history`, `?version=<sha>`
 // and `?view=compare&from=<sha>&to=<sha>`; no parameter is the current page.
 
-export type PageMode = { mode: "page" } | { mode: "edit"; restore?: string } | { mode: "history" } | { mode: "version"; sha: string } | { mode: "compare"; from: string; to: string };
+export type PageMode = { mode: "page" } | { mode: "edit"; restore?: string; change?: "archive" | "unarchive" } | { mode: "history" } | { mode: "version"; sha: string } | { mode: "compare"; from: string; to: string };
 
 const COMMIT_ID = /^([0-9a-f]{40}|[0-9a-f]{64})$/;
 
@@ -190,6 +190,8 @@ export function readPageMode(params: URLSearchParams): PageMode {
   if (view === "history") return { mode: "history" };
   if (view === "edit") {
     const restore = (params.get("restore") ?? "").toLowerCase();
+    const change = params.get("change");
+    if (change === "archive" || change === "unarchive") return { mode: "edit", change };
     return COMMIT_ID.test(restore) ? { mode: "edit", restore } : { mode: "edit" };
   }
   const from = (params.get("from") ?? "").toLowerCase();
@@ -205,6 +207,7 @@ export function wikiPageLink(projectId: string, path: string, mode: PageMode = {
   if (mode.mode === "edit") {
     params.set("view", "edit");
     if (mode.restore !== undefined) params.set("restore", mode.restore);
+    if (mode.change !== undefined) params.set("change", mode.change);
   }
   if (mode.mode === "version") params.set("version", mode.sha);
   if (mode.mode === "compare") {
@@ -578,6 +581,12 @@ export const scrollSettled = (elapsedMs: number, scrolledByHand: boolean): boole
 // ---- Recent changes ---------------------------------------------------------------------------------------------
 
 /** The address of the recent changes of a project's wiki: a route of its own, so it never collides with the path of a page. */
+/** The address of the person's drafts of a project's wiki: a route of its own, so it never collides with the path of a page. */
+/** The address of the archived pages of a project's wiki: a route of its own, so it never collides with the path of a page. */
+export const wikiArchivedLink = (projectId: string): string => `${WIKI_BASE}/-/archived?project=${encodeURIComponent(projectId)}`;
+
+export const wikiDraftsLink = (projectId: string): string => `${WIKI_BASE}/-/drafts?project=${encodeURIComponent(projectId)}`;
+
 export const wikiRecentLink = (projectId: string): string => `${WIKI_BASE}/-/recent?project=${encodeURIComponent(projectId)}`;
 
 /** What a commit did to one page, in a word. */
@@ -612,13 +621,11 @@ export interface LabelWalk {
 }
 
 /**
- * Every page with `label` in the tree, found by reading each folder's children (`read(folderId, offset)`, a page of
- * them at a time) from the root: pages by title, with the folders above them; archived pages and templates, and folders
- * whose home page is archived, are left out as in the page tree. A folder that cannot be read is skipped, the root not.
+ * Reads the tree folder by folder from the root (`read(folderId, offset)`, a page of children at a time, six folders at once,
+ * at most `LABEL_WALK_MAX_FOLDERS`) and shows each child to `visit`; a folder is entered when `visit` says true. A folder that
+ * cannot be read is skipped, the root not (a refusal, an API that is down: that is an error, not an empty wiki).
  */
-export async function pagesWithLabel(read: (folderId: string, offset: number) => Promise<TreeChildren>, label: string, pageSize = 100): Promise<LabelWalk> {
-  const wanted = normalizeLabel(label);
-  const found = new Map<string, LabelledPage>();
+export async function walkTree(read: (folderId: string, offset: number) => Promise<TreeChildren>, visit: (child: BrainNode) => boolean, pageSize = 100): Promise<{ incomplete: boolean }> {
   const queue: string[] = [BRAIN_ROOT_ID];
   let folders = 0;
   let incomplete = false;
@@ -629,16 +636,12 @@ export async function pagesWithLabel(read: (folderId: string, offset: number) =>
       try {
         page = await read(folderId, offset);
       } catch (failure) {
-        // Without the root there is no list to speak of (a refusal, an API that is down): say so rather than "none".
         if (folderId === BRAIN_ROOT_ID) throw failure;
         return;
       }
-      for (const child of pageEntries(page.children)) {
-        if (child.kind === "folder") queue.push(child.id);
-        else if (wanted !== "" && child.labels.includes(wanted)) {
-          const trail = child.path.split("/").slice(0, -1);
-          found.set(child.path, { path: child.path, title: child.title, breadcrumb: trail, space: child.space, status: child.status, labels: child.labels });
-        }
+      for (const child of page.children) {
+        if (child.kind !== "folder" && child.kind !== "document") continue;
+        if (visit(child) && child.kind === "folder") queue.push(child.id);
       }
       if (page.children.length === 0 || offset + pageSize >= page.total) return;
     }
@@ -660,5 +663,42 @@ export async function pagesWithLabel(read: (folderId: string, offset: number) =>
     }
     await Promise.all(batch.map(readFolder));
   }
+  return { incomplete };
+}
+
+/**
+ * Every page with `label` in the tree: pages by title, with the folders above them; archived pages and templates, and
+ * folders whose home page is archived, are left out as in the page tree.
+ */
+export async function pagesWithLabel(read: (folderId: string, offset: number) => Promise<TreeChildren>, label: string, pageSize = 100): Promise<LabelWalk> {
+  const wanted = normalizeLabel(label);
+  const found = new Map<string, LabelledPage>();
+  const { incomplete } = await walkTree(
+    read,
+    (child) => {
+      if (isHiddenPage(child)) return false;
+      if (child.kind === "document" && wanted !== "" && child.labels.includes(wanted)) {
+        found.set(child.path, { path: child.path, title: child.title, breadcrumb: child.path.split("/").slice(0, -1), space: child.space, status: child.status, labels: child.labels });
+      }
+      return true;
+    },
+    pageSize,
+  );
+  return { pages: [...found.values()].sort((a, b) => a.title.localeCompare(b.title) || a.path.localeCompare(b.path)), incomplete };
+}
+
+/** Every page whose status is `archived`, which the tree hides: by title, with the folders above them. Folders are entered whatever their home page says. */
+export async function archivedPages(read: (folderId: string, offset: number) => Promise<TreeChildren>, pageSize = 100): Promise<LabelWalk> {
+  const found = new Map<string, LabelledPage>();
+  const { incomplete } = await walkTree(
+    read,
+    (child) => {
+      if (child.kind === "document" && child.status === "archived" && !child.template) {
+        found.set(child.path, { path: child.path, title: child.title, breadcrumb: child.path.split("/").slice(0, -1), space: child.space, status: child.status, labels: child.labels });
+      }
+      return true;
+    },
+    pageSize,
+  );
   return { pages: [...found.values()].sort((a, b) => a.title.localeCompare(b.title) || a.path.localeCompare(b.path)), incomplete };
 }

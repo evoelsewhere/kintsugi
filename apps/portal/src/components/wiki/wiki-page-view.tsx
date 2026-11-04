@@ -3,7 +3,7 @@
 // from the documents route, the page's attributes from the Brain's lookup; a failed lookup only leaves them out.
 
 import type { BrainNode } from "@kintsugi/domain";
-import { GitCommitHorizontal, PencilLine, Tag } from "lucide-react";
+import { Archive, ArchiveRestore, GitCommitHorizontal, PencilLine, Tag } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Loaded } from "@/components/loaded";
 import { Markdown } from "@/components/results/lazy-markdown";
@@ -46,9 +46,9 @@ export function WikiPageView({ projectId, commit, path }: WikiPageViewProps): Re
       <PageTrail projectId={projectId} path={path} />
       {node === undefined ? null : <PageFacts projectId={projectId} node={node} commit={commit} />}
       {mode.mode === "edit" ? null : <PageTabs projectId={projectId} path={path} mode={mode} />}
-      {mode.mode === "page" ? <EditEntry projectId={projectId} path={path} /> : null}
+      {mode.mode === "page" ? <EditEntry projectId={projectId} path={path} archived={node?.status === "archived"} /> : null}
       {mode.mode === "edit" ? (
-        <WikiEditor projectId={projectId} commit={commit} path={path} restore={mode.restore} />
+        <WikiEditor projectId={projectId} commit={commit} path={path} restore={mode.restore} change={mode.change} />
       ) : mode.mode === "page" ? (
         <PageText projectId={projectId} commit={commit} path={path} />
       ) : mode.mode === "version" ? (
@@ -67,7 +67,7 @@ export function WikiPageView({ projectId, commit, path }: WikiPageViewProps): Re
  * in the API's words when they may not, and a banner when a write of the page is waiting for review. A person without the
  * rights, or an API without the route, sees the page as before.
  */
-function EditEntry({ projectId, path }: { projectId: string; path: string }): React.JSX.Element | null {
+function EditEntry({ projectId, path, archived }: { projectId: string; path: string; archived: boolean }): React.JSX.Element | null {
   const navigate = useNavigate();
   const access = useLoader(`wiki/${projectId}/access/${path}`, () => wikiRead(() => wikiEditApi.access(projectId, path)));
   const view = access.data;
@@ -95,6 +95,10 @@ function EditEntry({ projectId, path }: { projectId: string; path: string }): Re
             Edit
           </Button>
           <MoveButton projectId={projectId} path={path} direct={view.direct} />
+          <Button size="small" onClick={() => void navigate(wikiPageLink(projectId, path, { mode: "edit", change: archived ? "unarchive" : "archive" }))}>
+            {archived ? <ArchiveRestore /> : <Archive />}
+            {archived ? "Unarchive" : "Archive"}
+          </Button>
           <DeleteButton projectId={projectId} path={path} direct={view.direct} />
           </>
         ) : (
