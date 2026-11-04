@@ -1,4 +1,4 @@
-import type { BrainChangesView, BrainGrepView, BrainLookupView, BrainReadView, BrainStatusView, BrainTreeView } from "@kintsugi/domain";
+import type { BrainBacklinksView, BrainChangesView, BrainGrepView, BrainLookupView, BrainReadView, BrainStatusView, BrainTreeView } from "@kintsugi/domain";
 import { apiGet, apiSend } from "../api";
 
 const path = (projectId: string): string => `/api/projects/${encodeURIComponent(projectId)}/brain`;
@@ -15,9 +15,13 @@ const nonEmpty = (value: string | undefined): string | undefined => (value === u
 export const brainApi = {
   status: (projectId: string) => apiGet<BrainStatusView>(path(projectId)),
   configure: (projectId: string, input: { enabled: boolean; branch?: string }) => apiSend<BrainStatusView>(path(projectId), "PUT", input),
+  /** Turns the project's wiki on (its Brain then follows the default branch) or off; needs `wiki.manage`. A refusal (409) says why. */
+  setWiki: (projectId: string, enabled: boolean) => apiSend<BrainStatusView>(`/api/projects/${encodeURIComponent(projectId)}/wiki`, "PUT", { enabled }),
   rebuild: (projectId: string) => apiSend<BrainStatusView>(`${path(projectId)}/rebuild`, "POST"),
   tree: (projectId: string, node: string | undefined, offset = 0, limit = 100) => apiGet<BrainTreeView>(`${path(projectId)}/tree${query({ node, offset, limit })}`),
   node: (projectId: string, node: string, fromLine?: number) => apiGet<BrainReadView>(`${path(projectId)}/node${query({ node, fromLine })}`),
+  /** The pages that link to a page, a heading or a card, a window of them (`nextOffset` is the offset of the next). */
+  backlinks: (projectId: string, node: string, offset = 0, limit = 20) => apiGet<BrainBacklinksView>(`${path(projectId)}/backlinks${query({ node, offset, limit })}`),
   lookup: (projectId: string, q: string) => apiGet<BrainLookupView>(`${path(projectId)}/lookup${query({ q })}`),
   /** `space` and `label` narrow the search to the pages of that space or with that label (the wiki's search box). */
   grep: (projectId: string, text: string, under?: string, filter: { space?: string; label?: string } = {}) =>

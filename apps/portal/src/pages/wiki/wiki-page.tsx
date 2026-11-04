@@ -2,7 +2,7 @@
 // page, or the folder, named by the address on the right: `/wiki/<path in the document repo>?project=<id>`. It reads
 // the Brain's tree and the documents of the commit the Brain indexed, so it needs the Brain on; nothing is written here.
 
-import { BookText, FolderKanban, ListTree, TriangleAlert, Unlink } from "lucide-react";
+import { FolderKanban, ListTree, TriangleAlert, Unlink } from "lucide-react";
 import { useMemo } from "react";
 import { Link, useMatch, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Breadcrumbs } from "@/components/breadcrumbs";
@@ -15,6 +15,8 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { BrokenLinksPanel } from "@/components/wiki/broken-links-panel";
 import { WikiLabelPage } from "@/components/wiki/wiki-label-page";
+import { WikiOff } from "@/components/wiki/wiki-off";
+import { WikiSpaceHome } from "@/components/wiki/wiki-space-home";
 import { WikiFolderView } from "@/components/wiki/wiki-folder-view";
 import { WikiPageView } from "@/components/wiki/wiki-page-view";
 import { WikiSearchBox } from "@/components/wiki/wiki-search-box";
@@ -25,7 +27,7 @@ import { projectsApi } from "@/lib/api/projects";
 import { projectLink } from "@/lib/links";
 import { useProjectSelection } from "@/lib/project-selection";
 import { useLoader } from "@/lib/use-loader";
-import { isPagePath, pathOfSplat, readWikiSearch, WIKI_BASE, wikiIsOff, type WikiProjectFlag, wikiLink, wikiRead } from "@/lib/wiki";
+import { isPagePath, pathOfSplat, readWikiSearch, WIKI_BASE, wikiLink, wikiRead, wikiPhase } from "@/lib/wiki";
 
 export function WikiPage(): React.JSX.Element {
   const projects = useLoader("projects", projectsApi.list);
@@ -69,19 +71,6 @@ export function WikiPage(): React.JSX.Element {
                 }
               />
             </Card>
-          ) : wikiIsOff(current as WikiProjectFlag | undefined) ? (
-            <Card>
-              <EmptyState
-                icon={BookText}
-                title="Wiki is off for this project"
-                description="Turn the wiki on for the project to read its document repository here. Nothing was loaded."
-                action={
-                  <Link to={projectLink(projectId)} className="text-[13px] text-accent hover:underline">
-                    Configure the project
-                  </Link>
-                }
-              />
-            </Card>
           ) : (
             <WikiProject key={projectId} projectId={projectId} projectName={current?.name ?? projectId} path={path} label={label} />
           )
@@ -91,13 +80,14 @@ export function WikiPage(): React.JSX.Element {
   );
 }
 
-/** The reader of one project: it opens once the Brain has a tree, and says what is missing until then. */
+/** The reader of one project: it opens once the wiki is on and its Brain has a tree, and says what is missing until then. */
 function WikiProject({ projectId, projectName, path, label }: { projectId: string; projectName: string; path: string; label: string | undefined }): React.JSX.Element {
   const status = useLoader(`wiki/${projectId}/status`, () => wikiRead(() => brainApi.status(projectId)), { live: [`brain:${projectId}`, `repositories`] });
   return (
     <Loaded loader={status} rows={6}>
       {(view) => {
-        if (!view.available) {
+        const phase = wikiPhase(view);
+        if (phase === "unavailable") {
           return (
             <Card>
               <EmptyState
@@ -113,23 +103,21 @@ function WikiProject({ projectId, projectName, path, label }: { projectId: strin
             </Card>
           );
         }
-        if (view.enabled && view.commit !== null) {
+        if (phase === "off") return <WikiOff projectId={projectId} onChanged={() => void status.reload()} />;
+        if (phase === "ready" && view.commit !== null) {
           // A rebuild of the same commit (a newer builder) changes the tree too: the build time keys what was loaded.
           return <WikiReader key={view.indexedAt ?? view.commit} projectId={projectId} commit={view.commit} path={path} label={label} />;
         }
-        const building = view.state === "queued" || view.state === "indexing";
-        const failed = view.state === "failed";
+        const failed = phase === "failed";
         return (
           <Card>
             <EmptyState
               icon={failed ? TriangleAlert : ListTree}
-              title={building ? `Building the index of ${projectName}…` : failed ? "The index could not be built" : "The index is not built"}
+              title={failed ? "The wiki could not be built" : `Building the wiki of ${projectName}…`}
               description={
-                building
-                  ? "The wiki reads the Brain's tree; this page follows the build and opens the pages when it is ready."
-                  : failed
-                    ? `The last build failed${view.error === null ? "" : `: ${view.error}`}`
-                    : "The wiki reads the Brain's tree, which is off or not built for this project. A person who manages the Brain turns it on."
+                failed
+                  ? `The last build failed${view.error === null ? "" : `: ${view.error}`}`
+                  : "The wiki reads the Brain's tree; this page follows the build and opens the pages when it is ready."
               }
               action={
                 <Link to={`/brain?project=${encodeURIComponent(projectId)}`} className="text-[13px] text-accent hover:underline">
@@ -153,11 +141,15 @@ function WikiReader({ projectId, commit, path, label }: { projectId: string; com
   const { q, space, label: searchLabel } = search;
   // `/wiki/-/broken` is the report of broken links; like the label page it cannot be the path of a page.
   const broken = useMatch(`${WIKI_BASE}/-/broken`) !== null;
+  // `/wiki/-/space/<KEY>` opens the home page of a space.
+  const spaceKey = useParams()["space"];
   // The page changes with the address: a key resets what the view of the previous page held.
   const view = useMemo(
     () =>
       label !== undefined ? (
         <WikiLabelPage key={label} projectId={projectId} commit={commit} label={label} />
+      ) : spaceKey !== undefined ? (
+        <WikiSpaceHome key={spaceKey} projectId={projectId} commit={commit} space={spaceKey} />
       ) : broken ? (
         <BrokenLinksPanel projectId={projectId} />
       ) : q !== "" ? (
@@ -167,7 +159,7 @@ function WikiReader({ projectId, commit, path, label }: { projectId: string; com
       ) : (
         <WikiFolderView key={path} projectId={projectId} commit={commit} path={path} />
       ),
-    [projectId, commit, path, label, broken, q, space, searchLabel],
+    [projectId, commit, path, label, broken, spaceKey, q, space, searchLabel],
   );
   return (
     <div className="flex min-h-[560px] flex-col overflow-hidden rounded-xl bg-surface shadow-border-medium lg:h-[calc(100vh-var(--page-header-height,0px)-8rem)] lg:flex-row">

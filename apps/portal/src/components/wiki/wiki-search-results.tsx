@@ -12,7 +12,7 @@ import { Select } from "@/components/ui/select";
 import { brainApi } from "@/lib/api/brain";
 import { searchProblem } from "@/lib/brain";
 import { useLoader } from "@/lib/use-loader";
-import { highlightParts, hitCount, hitPaths, searchFacets, searchHits, searchLineLink, type WikiSearch, wikiLink, wikiRead, wikiSearchLink, withDocuments } from "@/lib/wiki";
+import { highlightParts, hitCount, hitPaths, searchFacets, searchHits, searchLineLink, type WikiSearch, wikiLink, wikiRead, wikiSearchLink, wikiSpaceLink, withDocuments } from "@/lib/wiki";
 import { documentsOf } from "./hit-documents";
 
 export interface WikiSearchResultsProps {
@@ -82,7 +82,11 @@ function Results({ projectId, commit, search }: WikiSearchResultsProps): React.J
                       {hit.title}
                     </Link>
                     <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-text-muted">
-                      {hit.space === null ? null : <span className="font-mono">{hit.space}</span>}
+                      {hit.space === null ? null : (
+                        <Link to={wikiSpaceLink(projectId, hit.space)} title={`The home page of the space ${hit.space}`} className="font-mono hover:text-text hover:underline">
+                          {hit.space}
+                        </Link>
+                      )}
                       {hit.breadcrumb.map((name, index) => (
                         <Fragment key={`${index}:${name}`}>
                           {index === 0 && hit.space === null ? null : <span aria-hidden="true">/</span>}

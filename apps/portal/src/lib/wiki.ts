@@ -3,19 +3,29 @@
 // The reader is read-only (ADR-0096, ADR-0097): everything comes from the Brain's tree and the documents routes.
 
 import type { BrainGrepMatch, BrainNode } from "@kintsugi/domain";
-import { BRAIN_ROOT_ID, brainLabels } from "@kintsugi/domain";
+import { BRAIN_ROOT_ID, brainLabels, buildBrainDocument } from "@kintsugi/domain";
 import { resolveDocumentLink } from "./document-links";
 
 /** The wiki lives under `/wiki/<path of the page in the document repo>`; the project is the `?project=` of the URL. */
 export const WIKI_BASE = "/wiki";
 
-/** A project as the wiki reads it: the wiki switch is `wiki` on the project view (CO-P2-008); an API without it says nothing. */
-export interface WikiProjectFlag {
-  wiki?: boolean | undefined;
-}
+/** The permission that turns a project's wiki on and off (ADR-0099 decision 5); reading needs only Project Access. */
+export const WIKI_MANAGE = "wiki.manage";
 
-/** The wiki is off only when the API says so: a project view that carries no flag is read as on. */
-export const wikiIsOff = (project: WikiProjectFlag | undefined): boolean => project?.wiki === false;
+/** Where a project's wiki stands, from the Brain's status (the wiki switch is `wiki` on it, CO-P2-008). */
+export type WikiPhase = "unavailable" | "off" | "building" | "failed" | "ready";
+
+/**
+ * What the reader shows for a project: no document repository yet, the wiki switched off (nothing is read, even when
+ * the Brain is on), the build of its Brain in progress or failed, or the pages themselves. A wiki that is on has its
+ * Brain on the default branch, so an unbuilt one is being built.
+ */
+export function wikiPhase(status: { available: boolean; wiki: boolean; enabled: boolean; state: string; commit: string | null }): WikiPhase {
+  if (!status.available) return "unavailable";
+  if (!status.wiki) return "off";
+  if (status.enabled && status.commit !== null) return "ready";
+  return status.state === "failed" ? "failed" : "building";
+}
 
 const decode = (segment: string): string => {
   try {
@@ -436,5 +446,105 @@ export function labelledPages(matches: ReadonlyArray<BrainNode & { breadcrumb: R
       status: match.status,
       labels: match.labels,
     }))
+    .sort((a, b) => a.title.localeCompare(b.title) || a.path.localeCompare(b.path));
+}
+
+// ---- Backlinks --------------------------------------------------------------------------------------------------
+
+/** One place that links to the page: the heading (or card) it is under, and what it points at when that is not the page itself. */
+export interface BacklinkRef {
+  /** The address id of the heading the link is under; null when it is in the page's own opening text. */
+  anchor: string | null;
+  section: string | null;
+  /** The heading or card of this page the link points at; null when it points at the page. */
+  target: string | null;
+}
+
+/** A page that links to this one, with each of its links. */
+export interface BacklinkPage {
+  path: string;
+  title: string;
+  links: BacklinkRef[];
+}
+
+/**
+ * The pages of a window of backlinks, in the order the API gave them (path order), each once with all its links. `titles`
+ * maps a page's path to its title when it is known; any other page is called by its file name. Pages in `hidden` are left out.
+ */
+export function groupBacklinks(
+  items: ReadonlyArray<{ node: Pick<BrainNode, "kind" | "path" | "anchor" | "title">; target: Pick<BrainNode, "kind" | "title"> }>,
+  titles: ReadonlyMap<string, string>,
+  hidden: ReadonlySet<string> = new Set(),
+): BacklinkPage[] {
+  const pages = new Map<string, BacklinkPage>();
+  for (const item of items) {
+    const path = item.node.path;
+    // Archived pages and templates are not part of what people read (as in the tree, the search and a label's pages).
+    if (hidden.has(path)) continue;
+    const page = pages.get(path) ?? { path, title: titles.get(path) ?? nameOf(path), links: [] };
+    const inHeading = item.node.kind === "section" || item.node.kind === "card";
+    page.links.push({
+      anchor: inHeading ? item.node.anchor : null,
+      section: inHeading ? item.node.title : null,
+      target: item.target.kind === "section" || item.target.kind === "card" ? item.target.title : null,
+    });
+    pages.set(path, page);
+  }
+  return [...pages.values()];
+}
+
+/** The paths among `documents` that are not shown in the wiki: archived pages and templates. */
+export const hiddenPaths = (documents: ReadonlyMap<string, Pick<BrainNode, "status" | "template">>): Set<string> => new Set([...documents].filter(([, document]) => isHiddenPage(document)).map(([path]) => path));
+
+// ---- Table of contents ------------------------------------------------------------------------------------------
+
+/** One heading of a page in its table of contents. */
+export interface TocEntry {
+  /** The id of the heading in the rendered page: what an address `#anchor` scrolls to. */
+  anchor: string;
+  title: string;
+  /** 0 for a heading right under the page's title, one more for each level below. */
+  indent: number;
+}
+
+/** A page with fewer headings than this has no table of contents: it is short enough to read from the top. */
+export const TOC_MIN_HEADINGS = 3;
+
+/**
+ * The headings of a page, in order, as the Brain's builder reads them (so each anchor is the id the renderer gave the
+ * heading, repeats numbered the same way, and a heading inside a code fence is not one). A page with fewer than
+ * `TOC_MIN_HEADINGS` has none.
+ */
+export function tocOf(path: string, text: string): TocEntry[] {
+  const entries = buildBrainDocument(path, text)
+    .nodes.filter((entry) => entry.kind === "section" && entry.anchor !== null)
+    .map((entry) => ({ anchor: entry.anchor ?? "", title: entry.title, indent: Math.max(0, entry.depth - 1) }));
+  return entries.length < TOC_MIN_HEADINGS ? [] : entries;
+}
+
+// ---- Spaces -----------------------------------------------------------------------------------------------------
+// A space is a folder whose home page has a `key` (ADR-0096). Its page is the home page: the README of the folder.
+
+/** The address of the home page of a space: a route of its own, so it never collides with the path of a page. */
+export function wikiSpaceLink(projectId: string, key: string): string {
+  return `${WIKI_BASE}/-/space/${encodeURIComponent(key)}?project=${encodeURIComponent(projectId)}`;
+}
+
+/**
+ * The home page of a space among the pages the Brain found for it (`space:<KEY>`): the README or index of its topmost
+ * folder, the shallowest one when the space has several (a sub-folder's README is its own page, not the space's).
+ */
+export function spaceHomePath(pages: ReadonlyArray<Pick<BrainNode, "kind" | "path" | "space" | "status" | "template">>, key: string): string | undefined {
+  const wanted = key.toUpperCase();
+  const homes = pages.filter((page) => isHomePage(page) && page.space?.toUpperCase() === wanted && !isHiddenPage(page));
+  homes.sort((a, b) => a.path.split("/").length - b.path.split("/").length || a.path.localeCompare(b.path));
+  return homes[0]?.path;
+}
+
+/** The pages the Brain found for a space (documents only, none archived or a template), by title. */
+export function spacePages(matches: ReadonlyArray<Pick<BrainNode, "kind" | "path" | "title" | "status" | "template">>): Array<{ path: string; title: string }> {
+  return matches
+    .filter((match) => match.kind === "document" && !isHiddenPage(match))
+    .map((match) => ({ path: match.path, title: match.title }))
     .sort((a, b) => a.title.localeCompare(b.title) || a.path.localeCompare(b.path));
 }

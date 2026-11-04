@@ -1,7 +1,7 @@
 import type { BrainGrepMatch, BrainNode } from "@kintsugi/domain";
 import { describe, expect, it } from "vitest";
 import { resolveDocumentLink } from "./document-links";
-import { attachmentUrl, hitCount, isFrontMatterLine, readableExcerpt, imageSource, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiIsOff, wikiLink, wikiRead, hitPaths, withDocuments, highlightParts, normalizeLabel, normalizeSpace, readWikiSearch, searchFacets, searchHits, searchLineLink, wikiSearchLink, labelledPages, wikiLabelLink } from "./wiki";
+import { attachmentUrl, hitCount, isFrontMatterLine, readableExcerpt, imageSource, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiLink, wikiRead, hitPaths, withDocuments, highlightParts, normalizeLabel, normalizeSpace, readWikiSearch, searchFacets, searchHits, searchLineLink, wikiSearchLink, labelledPages, wikiLabelLink, wikiPhase, hiddenPaths, groupBacklinks, tocOf, spacePages, spaceHomePath, wikiSpaceLink } from "./wiki";
 
 const node = (over: Partial<BrainNode> & Pick<BrainNode, "id" | "kind" | "path">): BrainNode => ({
   parentId: null,
@@ -77,11 +77,29 @@ describe("the address of a page", () => {
 });
 
 describe("the wiki switch", () => {
-  it("is off only when the project says so", () => {
-    expect(wikiIsOff({ wiki: false })).toBe(true);
-    expect(wikiIsOff({ wiki: true })).toBe(false);
-    expect(wikiIsOff({})).toBe(false);
-    expect(wikiIsOff(undefined)).toBe(false);
+  const status = { available: true, wiki: true, enabled: true, state: "ready", commit: "abc" };
+
+  it("opens the pages only when the wiki is on and its Brain has a tree", () => {
+    expect(wikiPhase(status)).toBe("ready");
+    // A rebuild of a wiki that has a tree keeps the pages open.
+    expect(wikiPhase({ ...status, state: "indexing" })).toBe("ready");
+  });
+
+  it("is off whenever the switch is off, even with the Brain on and built", () => {
+    expect(wikiPhase({ ...status, wiki: false })).toBe("off");
+    expect(wikiPhase({ ...status, wiki: false, enabled: false, state: "off", commit: null })).toBe("off");
+  });
+
+  it("says that the wiki is being built, or that the build failed, while it has no tree", () => {
+    expect(wikiPhase({ ...status, state: "queued", commit: null })).toBe("building");
+    expect(wikiPhase({ ...status, state: "indexing", commit: null })).toBe("building");
+    expect(wikiPhase({ ...status, state: "not-built", commit: null })).toBe("building");
+    expect(wikiPhase({ ...status, state: "failed", commit: null })).toBe("failed");
+  });
+
+  it("has nothing to read without a document repository, whatever the switch says", () => {
+    expect(wikiPhase({ ...status, available: false })).toBe("unavailable");
+    expect(wikiPhase({ ...status, available: false, wiki: false })).toBe("unavailable");
   });
 });
 
@@ -432,5 +450,108 @@ describe("the page of a label", () => {
       { path: "20-spaces/ops/on-call.md", title: "On call", breadcrumb: ["Spaces", "Operations"], space: "OPS", status: "approved", labels: ["runbook"] },
     ]);
     expect(labelledPages([])).toEqual([]);
+  });
+});
+
+describe("the backlinks of a page", () => {
+  const link = (path: string, over: Partial<BrainNode>, targetKind: "document" | "section" = "document", targetTitle = "Target"): { node: BrainNode; target: BrainNode } => ({
+    node: node({ id: `${path}#x`, kind: "section", path, anchor: "x", title: "Steps", ...over }),
+    target: node({ id: "t.md", kind: targetKind, path: "t.md", title: targetTitle }),
+  });
+
+  it("lists each linking page once with all its links, in the order of the API", () => {
+    const pages = groupBacklinks([link("a/one.md", { anchor: "steps", title: "Steps" }), link("a/one.md", { anchor: "recovery", title: "Recovery" }, "section", "Install"), link("b/two.md", { kind: "document", anchor: null, title: "Two" })], new Map([["a/one.md", "Page One"]]));
+    expect(pages).toEqual([
+      {
+        path: "a/one.md",
+        title: "Page One",
+        links: [
+          { anchor: "steps", section: "Steps", target: null },
+          { anchor: "recovery", section: "Recovery", target: "Install" },
+        ],
+      },
+      { path: "b/two.md", title: "two", links: [{ anchor: null, section: null, target: null }] },
+    ]);
+  });
+
+  it("leaves out the pages that are archived or templates, the other links of a page staying", () => {
+    const items = [link("a/old.md", { title: "Old" }), link("b/live.md", { title: "Live" })];
+    const documents = new Map([
+      ["a/old.md", page("a/old.md", { status: "archived" })],
+      ["b/live.md", page("b/live.md")],
+      ["c/draft.md", page("c/draft.md", { template: true })],
+    ]);
+    expect(hiddenPaths(documents)).toEqual(new Set(["a/old.md", "c/draft.md"]));
+    expect(groupBacklinks(items, new Map(), hiddenPaths(documents)).map((entry) => entry.path)).toEqual(["b/live.md"]);
+  });
+
+  it("is empty for no backlinks", () => {
+    expect(groupBacklinks([], new Map())).toEqual([]);
+  });
+});
+
+describe("the table of contents of a page", () => {
+  const text = ["---", "title: Runbook", "---", "", "# Database failover", "", "intro", "", "## Symptoms", "", "text", "", "### Writes fail", "", "## Recovery", "", "```md", "## not a heading", "```", "", "## Symptoms", ""].join("\n");
+
+  it("lists the headings in order with their level, the page's own title left out", () => {
+    expect(tocOf("a/failover.md", text)).toEqual([
+      { anchor: "symptoms", title: "Symptoms", indent: 0 },
+      { anchor: "writes-fail", title: "Writes fail", indent: 1 },
+      { anchor: "recovery", title: "Recovery", indent: 0 },
+      { anchor: "symptoms-1", title: "Symptoms", indent: 0 },
+    ]);
+  });
+
+  it("gives the anchors the rendered headings carry, repeats included, and skips a heading in a code fence", () => {
+    const anchors = tocOf("a/failover.md", text).map((entry) => entry.anchor);
+    expect(anchors).not.toContain("not-a-heading");
+    expect(new Set(anchors).size).toBe(anchors.length);
+  });
+
+  it("has none for a short page", () => {
+    expect(tocOf("a/short.md", "# Title\n\n## One\n\n## Two\n")).toEqual([]);
+    expect(tocOf("a/empty.md", "")).toEqual([]);
+  });
+});
+
+describe("the home page of a space", () => {
+  it("has an address of its own that cannot be the path of a page", () => {
+    expect(wikiSpaceLink("billing", "ENG")).toBe("/wiki/-/space/ENG?project=billing");
+    expect(wikiSpaceLink("a b", "E/G")).toBe("/wiki/-/space/E%2FG?project=a%20b");
+  });
+
+  it("is the README of the topmost folder of the space, not that of a folder inside it", () => {
+    const pages = [
+      page("20-spaces/eng/runbooks/README.md", { space: "ENG" }),
+      page("20-spaces/eng/README.md", { space: "ENG" }),
+      page("20-spaces/eng/decisions/adr-1.md", { space: "ENG" }),
+      page("20-spaces/hr/README.md", { space: "HR" }),
+    ];
+    expect(spaceHomePath(pages, "ENG")).toBe("20-spaces/eng/README.md");
+    expect(spaceHomePath(pages, "eng")).toBe("20-spaces/eng/README.md");
+    expect(spaceHomePath(pages, "HR")).toBe("20-spaces/hr/README.md");
+    expect(spaceHomePath([page("x/index.md", { space: "OPS" })], "OPS")).toBe("x/index.md");
+  });
+
+  it("is none when the space has no home page, or it is archived or a template", () => {
+    expect(spaceHomePath([page("20-spaces/eng/a.md", { space: "ENG" })], "ENG")).toBeUndefined();
+    expect(spaceHomePath([page("20-spaces/eng/README.md", { space: "ENG", status: "archived" })], "ENG")).toBeUndefined();
+    expect(spaceHomePath([page("20-spaces/eng/README.md", { space: "ENG", template: true })], "ENG")).toBeUndefined();
+    expect(spaceHomePath([], "ENG")).toBeUndefined();
+  });
+});
+
+describe("the pages of a space without a home page", () => {
+  it("lists its pages by title, without sections, archived pages or templates", () => {
+    const matches = [
+      page("20-spaces/eng/b.md", { title: "Beta" }),
+      page("20-spaces/eng/a.md", { title: "Alpha" }),
+      page("20-spaces/eng/old.md", { title: "Old", status: "archived" }),
+      node({ id: "20-spaces/eng/a.md#x", kind: "section", path: "20-spaces/eng/a.md", title: "Intro" }),
+    ];
+    expect(spacePages(matches)).toEqual([
+      { path: "20-spaces/eng/a.md", title: "Alpha" },
+      { path: "20-spaces/eng/b.md", title: "Beta" },
+    ]);
   });
 });
