@@ -38,3 +38,17 @@ The workspace names `@kintsugi/cli` and `@kintsugi/kintsugi-client` are reposito
 ## Client support claims
 
 The package lifecycle above was probed with Claude Code 2.1.278 and Codex CLI 0.163.0-alpha.10.2. Setup goes ahead with another version of either client and says so on stderr ([ADR-0072](../decisions/0072-init-install-and-plugins-as-plugins.md)): it uses only the plain plugin commands, and clients update faster than a release can be probed. A client that was never probed is refused. This is not a claim of end-to-end MCP support: that needs plugin-launched stdio startup, authentication, refresh, update and clean removal on exact recorded versions and supported operating systems.
+
+## Features header: new fields without breaking an installed CLI
+
+An installed CLI parses every response of `/api/member/v1` with a strict schema, so a field it does not know makes the call fail. The schema version stays `"1"`; a field is added only for a client that asks for it ([ADR-0097](../decisions/0097-brain-indexes-wiki-pages.md) decision 8: reads gain fields, not new shapes).
+
+| | |
+|---|---|
+| Header | `Kintsugi-Member-Features`, a comma-separated list of names, read in any case. The Kintsugi client sends it on every request |
+| `page-attributes` | Every Brain node in `brain_tree`, `brain_read`, `brain_lookup`, `brain_grep` and `brain_changes` (a node, a child, a link, a match, a changed node) also carries `labels`, `space`, `status`, `owner` and `template`. Without the name the nodes are exactly as before |
+| Unknown or missing | A name the server does not know is ignored, so a later feature needs no change here. A header longer than 200 characters is ignored whole, only the first 10 names are read, and a header is never the reason for a `400` |
+| Older server | It ignores the header and answers in the old shape; the client's schema takes the new fields as optional, so both parse |
+| Tests | `apps/api/test/unit/member-api-features.test.ts` parses the response of all five Brain reads, without and with the header, against a frozen copy of the version 1 schemas (`apps/api/test/unit/fixtures/member-brain-v1-schemas.ts`). Never edit that copy to make a test pass |
+
+The local MCP bridge prints a second line of text after the JSON of a Brain tool when a node has attributes (`path — labels: a, b · space: ENG · status: current`). The values come from a page's front matter, so they are printed as plain text, clipped, one line each, and never put into a tool description.

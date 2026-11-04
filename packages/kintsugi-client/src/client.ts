@@ -15,6 +15,8 @@ import {
   documentFileQuerySchema,
   documentTreeQuerySchema,
   documentTreeSchema,
+  MEMBER_FEATURE_PAGE_ATTRIBUTES,
+  MEMBER_FEATURES_HEADER,
   pluginBundleQuerySchema,
   pluginBundleSchema,
   pluginListQuerySchema,
@@ -203,7 +205,7 @@ export function createMemberClient(options: MemberClientOptions): MemberPort {
       try {
         response = await fetcher(url, {
           method,
-          headers: { accept: "application/json", authorization: `Bearer ${token}`, ...(method === "POST" ? { "content-type": "application/json" } : {}) },
+          headers: { accept: "application/json", authorization: `Bearer ${token}`, [MEMBER_FEATURES_HEADER]: MEMBER_FEATURE_PAGE_ATTRIBUTES, ...(method === "POST" ? { "content-type": "application/json" } : {}) },
           ...(method === "POST" ? { body: JSON.stringify(payload) } : {}),
           redirect: "manual",
           ...(signal === undefined ? {} : { signal }),

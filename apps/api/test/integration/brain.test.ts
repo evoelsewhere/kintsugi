@@ -158,6 +158,17 @@ describe.skipIf(!hasDatabase)("brain (integration)", () => {
     const memberLabel = await new Client(app).request<BrainLookupView>("GET", "/member/v1/brain/lookup?projectId=shop&query=label:sev1", bearer(token));
     expect(memberLabel.body.data?.matches.map((node) => node.id)).toEqual(["20-spaces/team/db.md"]);
     expect(memberLabel.body.data?.matches[0]).not.toHaveProperty("labels");
+    // A client that names page-attributes (any case, among other names) gets the page's labels and space; one whose header
+    // is unknown, empty or far too long gets the version 1 shape and never an error (P2-020).
+    const asking = (value: string) => ({ csrf: false, headers: { authorization: `Bearer ${token}`, "kintsugi-member-features": value } });
+    const withAttributes = await new Client(app).request<BrainLookupView>("GET", "/member/v1/brain/lookup?projectId=shop&query=space:team", asking("future-thing, Page-Attributes"));
+    expect(withAttributes.status).toBe(200);
+    expect(withAttributes.body.data?.matches[0]).toMatchObject({ id: "20-spaces/team/README.md", space: "TEAM", labels: expect.any(Array) });
+    for (const value of ["future-thing", "", "x".repeat(500)]) {
+      const plain = await new Client(app).request<BrainLookupView>("GET", "/member/v1/brain/lookup?projectId=shop&query=space:team", asking(value));
+      expect(plain.status, value.slice(0, 20)).toBe(200);
+      expect(plain.body.data?.matches[0]).not.toHaveProperty("space");
+    }
 
     const grep = await new Client(app).request<BrainGrepView>("GET", "/member/v1/brain/grep?projectId=shop&text=late%20FEE", bearer(token));
     expect(grep.status).toBe(200);

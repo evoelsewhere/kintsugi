@@ -7,6 +7,7 @@ import {
   DEFAULT_LIST_LIMIT,
   DistributableError,
   MEMBER_SCHEMA_VERSION,
+  type MemberFeatures,
   assertSafeHooks,
   type ActivityInput,
   type ActivityReceipt,
@@ -53,21 +54,19 @@ const BUNDLE_TEXT = /\.(?:md|txt|json|ya?ml|csv)$/i;
 const BRAIN_READ_CHARS = 24_000;
 const BRAIN_READ_CHILDREN = 30;
 
+/** What a request that did not name a feature gets: the version 1 shape, as before the page attributes. */
+const NO_FEATURES: MemberFeatures = { pageAttributes: false };
+
 /**
- * A Brain node as the member contract shows it: its place in the tree is the breadcrumb, and the page attributes of
- * builder 6 are not part of the contract yet (installed CLIs reject a field they do not know).
+ * A Brain node as the member contract shows it: its place in the tree is the breadcrumb. The page attributes of builder
+ * 6 are added only for a client that asked for them in the features header, because installed CLIs reject a field they
+ * do not know. Every node on the wire goes through this one function, so none can carry a field the client did not ask for.
  */
-const memberNode = <T extends BrainNode>({
-  parentId: _parent,
-  ordinal: _ordinal,
-  depth: _depth,
-  labels: _labels,
-  status: _status,
-  owner: _owner,
-  template: _template,
-  space: _space,
-  ...node
-}: T): Omit<T, "parentId" | "ordinal" | "depth" | "labels" | "status" | "owner" | "template" | "space"> => node;
+const memberNode = <T extends BrainNode>(
+  { parentId: _parent, ordinal: _ordinal, depth: _depth, labels, status, owner, template, space, ...node }: T,
+  features: MemberFeatures,
+): Omit<T, "parentId" | "ordinal" | "depth" | "labels" | "status" | "owner" | "template" | "space"> & Partial<Pick<BrainNode, "labels" | "status" | "owner" | "template" | "space">> =>
+  features.pageAttributes ? { ...node, labels, status, owner, template, space } : node;
 
 const sha256 = (value: string): string => createHash("sha256").update(value, "utf8").digest("hex");
 
@@ -115,18 +114,18 @@ export class MemberApiService {
   }
 
   /** One level of the project's Brain with summaries (ADR-0091). */
-  async brainTree(query: BrainTreeQuery): Promise<BrainTree> {
+  async brainTree(query: BrainTreeQuery, features: MemberFeatures = NO_FEATURES): Promise<BrainTree> {
     const view = await this.brain.tree(query.projectId, { node: query.node, depth: query.depth === 2 ? 2 : 1, offset: query.offset ?? 0, limit: query.limit ?? 50 });
     return {
       schemaVersion: MEMBER_SCHEMA_VERSION,
       ...view,
-      node: memberNode(view.node),
-      children: view.children.map(({ nodes, ...child }) => ({ ...memberNode(child), ...(nodes === undefined ? {} : { nodes: nodes.map((node) => memberNode(node)) }) })),
+      node: memberNode(view.node, features),
+      children: view.children.map(({ nodes, ...child }) => ({ ...memberNode(child, features), ...(nodes === undefined ? {} : { nodes: nodes.map((node) => memberNode(node, features)) }) })),
     };
   }
 
   /** A node's text with its citation; recorded as a read of the project's knowledge. */
-  async brainRead(userId: string, query: BrainReadQuery): Promise<BrainRead> {
+  async brainRead(userId: string, query: BrainReadQuery, features: MemberFeatures = NO_FEATURES): Promise<BrainRead> {
     const view = await this.brain.read(query.projectId, { node: query.node, scope: query.scope ?? "auto", fromLine: query.fromLine, maxChars: BRAIN_READ_CHARS, lineNumbers: true });
     if (view.citation !== null) {
       await this.activity.observe({
@@ -140,27 +139,27 @@ export class MemberApiService {
     return {
       schemaVersion: MEMBER_SCHEMA_VERSION,
       ...view,
-      node: memberNode(view.node),
-      children: view.children.slice(0, BRAIN_READ_CHILDREN).map((node) => memberNode(node)),
-      outgoing: view.outgoing.map((node) => memberNode(node)),
-      incoming: view.incoming.map((node) => memberNode(node)),
+      node: memberNode(view.node, features),
+      children: view.children.slice(0, BRAIN_READ_CHILDREN).map((node) => memberNode(node, features)),
+      outgoing: view.outgoing.map((node) => memberNode(node, features)),
+      incoming: view.incoming.map((node) => memberNode(node, features)),
     };
   }
 
-  async brainLookup(query: BrainLookupQuery): Promise<BrainLookup> {
+  async brainLookup(query: BrainLookupQuery, features: MemberFeatures = NO_FEATURES): Promise<BrainLookup> {
     const view = await this.brain.lookup(query.projectId, query.query);
-    return { schemaVersion: MEMBER_SCHEMA_VERSION, ...view, matches: view.matches.map((node) => memberNode(node)) };
+    return { schemaVersion: MEMBER_SCHEMA_VERSION, ...view, matches: view.matches.map((node) => memberNode(node, features)) };
   }
 
-  async brainGrep(query: BrainGrepQuery): Promise<BrainGrep> {
+  async brainGrep(query: BrainGrepQuery, features: MemberFeatures = NO_FEATURES): Promise<BrainGrep> {
     const view = await this.brain.grep(query.projectId, { text: query.text, under: query.under, ignoreCase: query.ignoreCase ?? true });
-    return { schemaVersion: MEMBER_SCHEMA_VERSION, ...view, matches: view.matches.map((match) => ({ ...match, node: memberNode(match.node) satisfies MemberBrainNode })) };
+    return { schemaVersion: MEMBER_SCHEMA_VERSION, ...view, matches: view.matches.map((match) => ({ ...match, node: memberNode(match.node, features) satisfies MemberBrainNode })) };
   }
 
   /** What changed in the Brain's documents since an earlier commit. */
-  async brainChanges(query: BrainChangesQuery): Promise<BrainChanges> {
+  async brainChanges(query: BrainChangesQuery, features: MemberFeatures = NO_FEATURES): Promise<BrainChanges> {
     const view = await this.brain.changes(query.projectId, { since: query.since, under: query.under });
-    return { schemaVersion: MEMBER_SCHEMA_VERSION, ...view, files: view.files.map((file) => ({ ...file, nodes: file.nodes.map((node) => memberNode(node)) })) };
+    return { schemaVersion: MEMBER_SCHEMA_VERSION, ...view, files: view.files.map((file) => ({ ...file, nodes: file.nodes.map((node) => memberNode(node, features)) })) };
   }
 
   /** The member plugins the user may use in the project. */

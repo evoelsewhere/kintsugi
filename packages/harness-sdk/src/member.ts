@@ -141,10 +141,11 @@ export interface MemberPort {
 
 /**
  * A node of the Brain as a member's agent sees it (its place in the tree is the breadcrumb). The page attributes of
- * builder 6 (labels, status, owner, template, space) stay off the member contract until its schema version moves
- * with them: the installed CLIs reject a node with a field they do not know.
+ * builder 6 (labels, status, owner, template, space) come only when the client sent the features header
+ * `Kintsugi-Member-Features: page-attributes`: the installed CLIs reject a node with a field they do not know.
  */
-export type MemberBrainNode = Omit<BrainNode, "parentId" | "ordinal" | "depth" | "labels" | "status" | "owner" | "template" | "space">;
+export type MemberBrainNode = Omit<BrainNode, "parentId" | "ordinal" | "depth" | "labels" | "status" | "owner" | "template" | "space"> &
+  Partial<Pick<BrainNode, "labels" | "status" | "owner" | "template" | "space">>;
 
 export interface BrainTreeQuery {
   schemaVersion?: MemberSchemaVersion;
