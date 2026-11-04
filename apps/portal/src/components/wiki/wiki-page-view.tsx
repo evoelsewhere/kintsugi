@@ -15,6 +15,7 @@ import { splitFrontMatter } from "@/lib/front-matter";
 import { useLoader } from "@/lib/use-loader";
 import { type PageMode, pathTrail, readPageMode, wikiLink, wikiPageLink, wikiRead } from "@/lib/wiki";
 import { useScrollToHeading, useWikiLinks } from "./use-wiki-links";
+import { ExportMarkdownButton } from "./export-markdown-button";
 import { WikiCompare } from "./wiki-compare";
 import { WikiHistory } from "./wiki-history";
 
@@ -72,7 +73,19 @@ function PageTabs({ projectId, path, mode }: { projectId: string; path: string; 
 function PageText({ projectId, commit, path }: WikiPageViewProps): React.JSX.Element {
   const file = useLoader(`wiki/${projectId}/${commit}/file/${path}`, () => wikiRead(() => documentsApi.file(projectId, path, commit)));
   useScrollToHeading(file.data !== undefined);
-  return <Loaded loader={file}>{(loaded) => <Markdown text={splitFrontMatter(loaded.content).body} path={path} />}</Loaded>;
+  return (
+    <Loaded loader={file}>
+      {(loaded) => (
+        <>
+          {/* The whole file, front matter included: the export is the source byte for byte. */}
+          <div className="flex justify-end">
+            <ExportMarkdownButton path={path} text={loaded.content} />
+          </div>
+          <Markdown text={splitFrontMatter(loaded.content).body} path={path} />
+        </>
+      )}
+    </Loaded>
+  );
 }
 
 /** The page as it was at one of its commits, with the way back to the current one. */
@@ -93,7 +106,14 @@ function VersionText({ projectId, path, sha }: { projectId: string; path: string
         </Link>
       </p>
       <Loaded loader={file} rows={8}>
-        {(loaded) => <Markdown text={splitFrontMatter(loaded.content).body} path={path} />}
+        {(loaded) => (
+          <>
+            <div className="flex justify-end">
+              <ExportMarkdownButton path={path} text={loaded.content} />
+            </div>
+            <Markdown text={splitFrontMatter(loaded.content).body} path={path} />
+          </>
+        )}
       </Loaded>
     </>
   );

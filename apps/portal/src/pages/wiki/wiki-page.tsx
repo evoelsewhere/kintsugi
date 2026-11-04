@@ -2,9 +2,9 @@
 // page, or the folder, named by the address on the right: `/wiki/<path in the document repo>?project=<id>`. It reads
 // the Brain's tree and the documents of the commit the Brain indexed, so it needs the Brain on; nothing is written here.
 
-import { BookText, FolderKanban, ListTree, TriangleAlert } from "lucide-react";
+import { BookText, FolderKanban, ListTree, TriangleAlert, Unlink } from "lucide-react";
 import { useMemo } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useMatch, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Loaded } from "@/components/loaded";
 import { ProjectNotFound, ProjectSelector } from "@/components/project-selector";
@@ -13,6 +13,7 @@ import { MarkdownImagesContext } from "@/components/results/use-markdown-images"
 import { StickyHeader } from "@/components/sticky-header";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { BrokenLinksPanel } from "@/components/wiki/broken-links-panel";
 import { WikiFolderView } from "@/components/wiki/wiki-folder-view";
 import { WikiPageView } from "@/components/wiki/wiki-page-view";
 import { WikiSearchBox } from "@/components/wiki/wiki-search-box";
@@ -23,7 +24,7 @@ import { projectsApi } from "@/lib/api/projects";
 import { projectLink } from "@/lib/links";
 import { useProjectSelection } from "@/lib/project-selection";
 import { useLoader } from "@/lib/use-loader";
-import { isPagePath, pathOfSplat, readWikiSearch, wikiIsOff, type WikiProjectFlag, wikiLink, wikiRead } from "@/lib/wiki";
+import { isPagePath, pathOfSplat, readWikiSearch, WIKI_BASE, wikiIsOff, type WikiProjectFlag, wikiLink, wikiRead } from "@/lib/wiki";
 
 export function WikiPage(): React.JSX.Element {
   const projects = useLoader("projects", projectsApi.list);
@@ -146,17 +147,21 @@ function WikiReader({ projectId, commit, path }: { projectId: string; commit: st
   const [params] = useSearchParams();
   const search = readWikiSearch(params);
   const { q, space, label } = search;
+  // `/wiki/-/broken` is the report of broken links; like the label page it cannot be the path of a page.
+  const broken = useMatch(`${WIKI_BASE}/-/broken`) !== null;
   // The page changes with the address: a key resets what the view of the previous page held.
   const view = useMemo(
     () =>
-      q !== "" ? (
+      broken ? (
+        <BrokenLinksPanel projectId={projectId} />
+      ) : q !== "" ? (
         <WikiSearchResults projectId={projectId} commit={commit} search={{ q, space, label }} />
       ) : isPagePath(path) ? (
         <WikiPageView key={path} projectId={projectId} commit={commit} path={path} />
       ) : (
         <WikiFolderView key={path} projectId={projectId} commit={commit} path={path} />
       ),
-    [projectId, commit, path, q, space, label],
+    [projectId, commit, path, broken, q, space, label],
   );
   return (
     <div className="flex min-h-[560px] flex-col overflow-hidden rounded-xl bg-surface shadow-border-medium lg:h-[calc(100vh-var(--page-header-height,0px)-8rem)] lg:flex-row">
@@ -169,6 +174,12 @@ function WikiReader({ projectId, commit, path }: { projectId: string; commit: st
         </div>
         <div className="min-h-0 flex-1 overflow-auto p-2">
           <WikiTree projectId={projectId} selectedPath={path} />
+        </div>
+        <div className="p-2 pt-0 text-[12px]">
+          <Link to={`${WIKI_BASE}/-/broken?project=${encodeURIComponent(projectId)}`} className="flex items-center gap-1.5 rounded-sm px-1.5 py-1 text-text-muted hover:text-text hover:underline focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]">
+            <Unlink className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
+            Broken links
+          </Link>
         </div>
       </aside>
       <section className="min-h-0 min-w-0 flex-1 overflow-auto p-4 md:p-6" aria-label="Page">
