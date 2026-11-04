@@ -7,7 +7,7 @@ import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   BOT_NAME,
   CheckoutStorage,
@@ -20,6 +20,9 @@ import {
   writeFiles,
 } from "../src/index.js";
 import { type GitHttpServer, startGitHttpServer } from "../src/testing.js";
+
+// Every test clones a repository and some commit hundreds of files: more than the default five seconds on a loaded machine.
+vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 const remoteOptions = { allowHttp: true } as const;
 const identity = { name: BOT_NAME, email: "kintsugi-bot@kintsugi.invalid" };
