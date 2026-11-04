@@ -150,7 +150,11 @@ describe.skipIf(!hasDatabase)("brain index (integration)", () => {
     expect((await store.byLabel("shop", "runbook", 10)).map((node) => node.id)).toEqual(["00-project/team/first.md"]);
     expect(await store.byLabel("shop", "nothing", 10)).toEqual([]);
     expect((await store.bySpace("shop", "TEAM", 10)).map((node) => node.id)).toEqual(["00-project/team/README.md", "00-project/team/first.md", "00-project/team/second.md"]);
-    expect(await store.bySpace("shop", "team", 10)).toEqual([]);
+    // The key is compared in one case (P-019), also when the index holds a key written in lower case.
+    expect((await store.bySpace("shop", "team", 10)).map((node) => node.id)).toEqual(["00-project/team/README.md", "00-project/team/first.md", "00-project/team/second.md"]);
+    await db.pool.query("update knowledge.brain_node set space = 'Team' where project_id = 'shop' and space = 'TEAM'");
+    expect((await store.bySpace("shop", "TEAM", 10)).map((node) => node.id)).toEqual(["00-project/team/README.md", "00-project/team/first.md", "00-project/team/second.md"]);
+    expect(await store.bySpace("shop", "OTHER", 10)).toEqual([]);
   });
 
   it("fails the build of a project without a document repository", async () => {
