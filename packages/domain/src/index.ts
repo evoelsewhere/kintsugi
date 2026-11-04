@@ -285,3 +285,4 @@ export * from "./text-merge.js";
 export * from "./page-move.js";
 export * from "./page-template.js";
 export * from "./mentions.js";
+export * from "./comment-anchor.js";
