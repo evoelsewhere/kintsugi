@@ -93,6 +93,20 @@ describe("GitMirrorDocumentReader grep and diff", () => {
     expect(files["keep/in.md"]).toMatchObject({ status: "renamed", previousPath: "other/in.md", hunks: [{ start: 5, end: 5 }] });
   });
 
+  it("lists the commits that changed Markdown files, newest first, with their files and renames", async () => {
+    const commits = await reader.recent(repo, second);
+    expect(commits.map((entry) => entry.sha)).toEqual([second, first]);
+    expect(commits[0]).toMatchObject({ subject: "two", authorName: "t", trailerMinor: false });
+    const files = byPath(commits[0]!.files);
+    expect(files["gone/out.md"]).toMatchObject({ status: "renamed", previousPath: "keep/out.md" });
+    expect(files["keep/in.md"]).toMatchObject({ status: "renamed", previousPath: "other/in.md" });
+    expect(files["Docs/UP.MD"]).toMatchObject({ status: "modified", previousPath: null });
+    expect(files["notes/tài liệu.md"]).toMatchObject({ status: "modified" });
+    // A file that is not Markdown is not a change.
+    expect(Object.keys(files).some((path) => path === "README.txt")).toBe(false);
+    expect(commits[1]!.files.map((file) => file.status)).toContain("added");
+  });
+
   it("sees a document moved into or out of a folder as moved, with its lines", async () => {
     const diff = await reader.diff(repo, first, second, "keep");
     const files = byPath(diff!.files);

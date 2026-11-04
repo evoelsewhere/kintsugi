@@ -15,8 +15,8 @@ import { type CompareQuery, compareQuerySchema, gapAnswerSchema } from "./docume
 import type { DocumentCompare } from "../domain/document.js";
 import { DocumentsService } from "../application/documents.service.js";
 import { StageResultsService } from "../application/stage-results.service.js";
-import type { DocumentFile, DocumentHistory, DocumentRefs, DocumentTree, StageHeadline, StageResults } from "../domain/document.js";
-import { type FileQuery, type HistoryQuery, type ResultsQuery, type TreeQuery, type UnderstandResultsQuery, fileQuerySchema, historyQuerySchema, resultsQuerySchema, treeQuerySchema, understandResultsQuerySchema } from "./document.dto.js";
+import type { DocumentFile, DocumentHistory, DocumentRecent, DocumentRefs, DocumentTree, StageHeadline, StageResults } from "../domain/document.js";
+import { type FileQuery, type HistoryQuery, type RecentQuery, type ResultsQuery, type TreeQuery, type UnderstandResultsQuery, fileQuerySchema, historyQuerySchema, recentQuerySchema, resultsQuerySchema, treeQuerySchema, understandResultsQuerySchema } from "./document.dto.js";
 
 @ApiTags("delivery · documents")
 @Controller("projects/:id")
@@ -93,6 +93,16 @@ export class DocumentsController {
   @ApiOkResponse({ description: "The versions and the cursor of the next page; an empty list for a path no commit touched." })
   history(@Param("id") id: string, @Query({ schema: historyQuerySchema }) query: HistoryQuery): Promise<DocumentHistory> {
     return this.documents.history(id, query.ref, query.path, query.limit, query.before);
+  }
+
+  @Get("documents/recent")
+  @ApiOperation({
+    summary: "The newest commits of the document repo that changed Markdown files, newest first, each with its files; never restricted/ or .git",
+    description: "Each commit has its sha, date, subject, actor, minor flag (as in /documents/history) and the Markdown files it changed (status, path, previousPath for a rename; at most 100, moreFiles says there were more). A file renamed into or out of restricted/ is shown as added or deleted without naming the other path; a commit that changed only restricted files is left out. limit defaults to 50 (at most 200); pass the answer's next as before for older commits. Only the newest 2,000 commits that changed a Markdown file are reached; merge commits are not listed.",
+  })
+  @ApiOkResponse({ description: "The commits and the cursor of the next page." })
+  recent(@Param("id") id: string, @Query({ schema: recentQuerySchema }) query: RecentQuery): Promise<DocumentRecent> {
+    return this.documents.recent(id, query.ref, query.limit, query.before);
   }
 
   @Get("applications/:appId/stages/:stage/results")
