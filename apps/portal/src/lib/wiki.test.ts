@@ -1,7 +1,7 @@
 import type { BrainGrepMatch, BrainNode } from "@kintsugi/domain";
 import { describe, expect, it } from "vitest";
 import { resolveDocumentLink } from "./document-links";
-import { attachmentUrl, hitCount, isFrontMatterLine, readableExcerpt, imageSource, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiLink, wikiRead, hitPaths, withDocuments, highlightParts, normalizeLabel, normalizeSpace, readWikiSearch, searchFacets, searchHits, searchLineLink, wikiSearchLink, labelledPages, wikiLabelLink, wikiPhase } from "./wiki";
+import { attachmentUrl, hitCount, isFrontMatterLine, readableExcerpt, imageSource, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiLink, wikiRead, hitPaths, withDocuments, highlightParts, normalizeLabel, normalizeSpace, readWikiSearch, searchFacets, searchHits, searchLineLink, wikiSearchLink, labelledPages, wikiLabelLink, wikiPhase, hiddenPaths, groupBacklinks } from "./wiki";
 
 const node = (over: Partial<BrainNode> & Pick<BrainNode, "id" | "kind" | "path">): BrainNode => ({
   parentId: null,
@@ -450,5 +450,42 @@ describe("the page of a label", () => {
       { path: "20-spaces/ops/on-call.md", title: "On call", breadcrumb: ["Spaces", "Operations"], space: "OPS", status: "approved", labels: ["runbook"] },
     ]);
     expect(labelledPages([])).toEqual([]);
+  });
+});
+
+describe("the backlinks of a page", () => {
+  const link = (path: string, over: Partial<BrainNode>, targetKind: "document" | "section" = "document", targetTitle = "Target"): { node: BrainNode; target: BrainNode } => ({
+    node: node({ id: `${path}#x`, kind: "section", path, anchor: "x", title: "Steps", ...over }),
+    target: node({ id: "t.md", kind: targetKind, path: "t.md", title: targetTitle }),
+  });
+
+  it("lists each linking page once with all its links, in the order of the API", () => {
+    const pages = groupBacklinks([link("a/one.md", { anchor: "steps", title: "Steps" }), link("a/one.md", { anchor: "recovery", title: "Recovery" }, "section", "Install"), link("b/two.md", { kind: "document", anchor: null, title: "Two" })], new Map([["a/one.md", "Page One"]]));
+    expect(pages).toEqual([
+      {
+        path: "a/one.md",
+        title: "Page One",
+        links: [
+          { anchor: "steps", section: "Steps", target: null },
+          { anchor: "recovery", section: "Recovery", target: "Install" },
+        ],
+      },
+      { path: "b/two.md", title: "two", links: [{ anchor: null, section: null, target: null }] },
+    ]);
+  });
+
+  it("leaves out the pages that are archived or templates, the other links of a page staying", () => {
+    const items = [link("a/old.md", { title: "Old" }), link("b/live.md", { title: "Live" })];
+    const documents = new Map([
+      ["a/old.md", page("a/old.md", { status: "archived" })],
+      ["b/live.md", page("b/live.md")],
+      ["c/draft.md", page("c/draft.md", { template: true })],
+    ]);
+    expect(hiddenPaths(documents)).toEqual(new Set(["a/old.md", "c/draft.md"]));
+    expect(groupBacklinks(items, new Map(), hiddenPaths(documents)).map((entry) => entry.path)).toEqual(["b/live.md"]);
+  });
+
+  it("is empty for no backlinks", () => {
+    expect(groupBacklinks([], new Map())).toEqual([]);
   });
 });

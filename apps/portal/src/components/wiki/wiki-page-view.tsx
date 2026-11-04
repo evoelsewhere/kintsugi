@@ -16,6 +16,7 @@ import { useLoader } from "@/lib/use-loader";
 import { type PageMode, pathTrail, readPageMode, wikiLabelLink, wikiLink, wikiPageLink, wikiRead } from "@/lib/wiki";
 import { useScrollToHeading, useWikiLinks } from "./use-wiki-links";
 import { ExportMarkdownButton } from "./export-markdown-button";
+import { WikiBacklinks } from "./wiki-backlinks";
 import { WikiCompare } from "./wiki-compare";
 import { WikiHistory } from "./wiki-history";
 
@@ -82,6 +83,7 @@ function PageText({ projectId, commit, path }: WikiPageViewProps): React.JSX.Ele
             <ExportMarkdownButton path={path} text={loaded.content} />
           </div>
           <Markdown text={splitFrontMatter(loaded.content).body} path={path} />
+          <WikiBacklinks projectId={projectId} commit={commit} path={path} />
         </>
       )}
     </Loaded>

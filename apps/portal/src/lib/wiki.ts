@@ -448,3 +448,50 @@ export function labelledPages(matches: ReadonlyArray<BrainNode & { breadcrumb: R
     }))
     .sort((a, b) => a.title.localeCompare(b.title) || a.path.localeCompare(b.path));
 }
+
+// ---- Backlinks --------------------------------------------------------------------------------------------------
+
+/** One place that links to the page: the heading (or card) it is under, and what it points at when that is not the page itself. */
+export interface BacklinkRef {
+  /** The address id of the heading the link is under; null when it is in the page's own opening text. */
+  anchor: string | null;
+  section: string | null;
+  /** The heading or card of this page the link points at; null when it points at the page. */
+  target: string | null;
+}
+
+/** A page that links to this one, with each of its links. */
+export interface BacklinkPage {
+  path: string;
+  title: string;
+  links: BacklinkRef[];
+}
+
+/**
+ * The pages of a window of backlinks, in the order the API gave them (path order), each once with all its links. `titles`
+ * maps a page's path to its title when it is known; any other page is called by its file name. Pages in `hidden` are left out.
+ */
+export function groupBacklinks(
+  items: ReadonlyArray<{ node: Pick<BrainNode, "kind" | "path" | "anchor" | "title">; target: Pick<BrainNode, "kind" | "title"> }>,
+  titles: ReadonlyMap<string, string>,
+  hidden: ReadonlySet<string> = new Set(),
+): BacklinkPage[] {
+  const pages = new Map<string, BacklinkPage>();
+  for (const item of items) {
+    const path = item.node.path;
+    // Archived pages and templates are not part of what people read (as in the tree, the search and a label's pages).
+    if (hidden.has(path)) continue;
+    const page = pages.get(path) ?? { path, title: titles.get(path) ?? nameOf(path), links: [] };
+    const inHeading = item.node.kind === "section" || item.node.kind === "card";
+    page.links.push({
+      anchor: inHeading ? item.node.anchor : null,
+      section: inHeading ? item.node.title : null,
+      target: item.target.kind === "section" || item.target.kind === "card" ? item.target.title : null,
+    });
+    pages.set(path, page);
+  }
+  return [...pages.values()];
+}
+
+/** The paths among `documents` that are not shown in the wiki: archived pages and templates. */
+export const hiddenPaths = (documents: ReadonlyMap<string, Pick<BrainNode, "status" | "template">>): Set<string> => new Set([...documents].filter(([, document]) => isHiddenPage(document)).map(([path]) => path));

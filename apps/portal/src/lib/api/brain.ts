@@ -1,4 +1,4 @@
-import type { BrainChangesView, BrainGrepView, BrainLookupView, BrainReadView, BrainStatusView, BrainTreeView } from "@kintsugi/domain";
+import type { BrainBacklinksView, BrainChangesView, BrainGrepView, BrainLookupView, BrainReadView, BrainStatusView, BrainTreeView } from "@kintsugi/domain";
 import { apiGet, apiSend } from "../api";
 
 const path = (projectId: string): string => `/api/projects/${encodeURIComponent(projectId)}/brain`;
@@ -20,6 +20,8 @@ export const brainApi = {
   rebuild: (projectId: string) => apiSend<BrainStatusView>(`${path(projectId)}/rebuild`, "POST"),
   tree: (projectId: string, node: string | undefined, offset = 0, limit = 100) => apiGet<BrainTreeView>(`${path(projectId)}/tree${query({ node, offset, limit })}`),
   node: (projectId: string, node: string, fromLine?: number) => apiGet<BrainReadView>(`${path(projectId)}/node${query({ node, fromLine })}`),
+  /** The pages that link to a page, a heading or a card, a window of them (`nextOffset` is the offset of the next). */
+  backlinks: (projectId: string, node: string, offset = 0, limit = 20) => apiGet<BrainBacklinksView>(`${path(projectId)}/backlinks${query({ node, offset, limit })}`),
   lookup: (projectId: string, q: string) => apiGet<BrainLookupView>(`${path(projectId)}/lookup${query({ q })}`),
   /** `space` and `label` narrow the search to the pages of that space or with that label (the wiki's search box). */
   grep: (projectId: string, text: string, under?: string, filter: { space?: string; label?: string } = {}) =>
