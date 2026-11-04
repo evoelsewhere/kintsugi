@@ -1,7 +1,7 @@
 import type { BrainGrepMatch, BrainNode } from "@kintsugi/domain";
 import { describe, expect, it } from "vitest";
 import { resolveDocumentLink } from "./document-links";
-import { attachmentUrl, hitCount, isFrontMatterLine, readableExcerpt, imageSource, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiIsOff, wikiLink, wikiRead, hitPaths, withDocuments, highlightParts, normalizeLabel, normalizeSpace, readWikiSearch, searchFacets, searchHits, searchLineLink, wikiSearchLink, labelledPages, wikiLabelLink } from "./wiki";
+import { attachmentUrl, hitCount, isFrontMatterLine, readableExcerpt, imageSource, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiLink, wikiRead, hitPaths, withDocuments, highlightParts, normalizeLabel, normalizeSpace, readWikiSearch, searchFacets, searchHits, searchLineLink, wikiSearchLink, labelledPages, wikiLabelLink, wikiPhase } from "./wiki";
 
 const node = (over: Partial<BrainNode> & Pick<BrainNode, "id" | "kind" | "path">): BrainNode => ({
   parentId: null,
@@ -77,11 +77,29 @@ describe("the address of a page", () => {
 });
 
 describe("the wiki switch", () => {
-  it("is off only when the project says so", () => {
-    expect(wikiIsOff({ wiki: false })).toBe(true);
-    expect(wikiIsOff({ wiki: true })).toBe(false);
-    expect(wikiIsOff({})).toBe(false);
-    expect(wikiIsOff(undefined)).toBe(false);
+  const status = { available: true, wiki: true, enabled: true, state: "ready", commit: "abc" };
+
+  it("opens the pages only when the wiki is on and its Brain has a tree", () => {
+    expect(wikiPhase(status)).toBe("ready");
+    // A rebuild of a wiki that has a tree keeps the pages open.
+    expect(wikiPhase({ ...status, state: "indexing" })).toBe("ready");
+  });
+
+  it("is off whenever the switch is off, even with the Brain on and built", () => {
+    expect(wikiPhase({ ...status, wiki: false })).toBe("off");
+    expect(wikiPhase({ ...status, wiki: false, enabled: false, state: "off", commit: null })).toBe("off");
+  });
+
+  it("says that the wiki is being built, or that the build failed, while it has no tree", () => {
+    expect(wikiPhase({ ...status, state: "queued", commit: null })).toBe("building");
+    expect(wikiPhase({ ...status, state: "indexing", commit: null })).toBe("building");
+    expect(wikiPhase({ ...status, state: "not-built", commit: null })).toBe("building");
+    expect(wikiPhase({ ...status, state: "failed", commit: null })).toBe("failed");
+  });
+
+  it("has nothing to read without a document repository, whatever the switch says", () => {
+    expect(wikiPhase({ ...status, available: false })).toBe("unavailable");
+    expect(wikiPhase({ ...status, available: false, wiki: false })).toBe("unavailable");
   });
 });
 

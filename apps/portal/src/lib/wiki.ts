@@ -9,13 +9,23 @@ import { resolveDocumentLink } from "./document-links";
 /** The wiki lives under `/wiki/<path of the page in the document repo>`; the project is the `?project=` of the URL. */
 export const WIKI_BASE = "/wiki";
 
-/** A project as the wiki reads it: the wiki switch is `wiki` on the project view (CO-P2-008); an API without it says nothing. */
-export interface WikiProjectFlag {
-  wiki?: boolean | undefined;
-}
+/** The permission that turns a project's wiki on and off (ADR-0099 decision 5); reading needs only Project Access. */
+export const WIKI_MANAGE = "wiki.manage";
 
-/** The wiki is off only when the API says so: a project view that carries no flag is read as on. */
-export const wikiIsOff = (project: WikiProjectFlag | undefined): boolean => project?.wiki === false;
+/** Where a project's wiki stands, from the Brain's status (the wiki switch is `wiki` on it, CO-P2-008). */
+export type WikiPhase = "unavailable" | "off" | "building" | "failed" | "ready";
+
+/**
+ * What the reader shows for a project: no document repository yet, the wiki switched off (nothing is read, even when
+ * the Brain is on), the build of its Brain in progress or failed, or the pages themselves. A wiki that is on has its
+ * Brain on the default branch, so an unbuilt one is being built.
+ */
+export function wikiPhase(status: { available: boolean; wiki: boolean; enabled: boolean; state: string; commit: string | null }): WikiPhase {
+  if (!status.available) return "unavailable";
+  if (!status.wiki) return "off";
+  if (status.enabled && status.commit !== null) return "ready";
+  return status.state === "failed" ? "failed" : "building";
+}
 
 const decode = (segment: string): string => {
   try {

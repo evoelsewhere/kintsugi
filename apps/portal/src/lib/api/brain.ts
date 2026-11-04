@@ -15,6 +15,8 @@ const nonEmpty = (value: string | undefined): string | undefined => (value === u
 export const brainApi = {
   status: (projectId: string) => apiGet<BrainStatusView>(path(projectId)),
   configure: (projectId: string, input: { enabled: boolean; branch?: string }) => apiSend<BrainStatusView>(path(projectId), "PUT", input),
+  /** Turns the project's wiki on (its Brain then follows the default branch) or off; needs `wiki.manage`. A refusal (409) says why. */
+  setWiki: (projectId: string, enabled: boolean) => apiSend<BrainStatusView>(`/api/projects/${encodeURIComponent(projectId)}/wiki`, "PUT", { enabled }),
   rebuild: (projectId: string) => apiSend<BrainStatusView>(`${path(projectId)}/rebuild`, "POST"),
   tree: (projectId: string, node: string | undefined, offset = 0, limit = 100) => apiGet<BrainTreeView>(`${path(projectId)}/tree${query({ node, offset, limit })}`),
   node: (projectId: string, node: string, fromLine?: number) => apiGet<BrainReadView>(`${path(projectId)}/node${query({ node, fromLine })}`),
