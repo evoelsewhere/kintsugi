@@ -764,3 +764,27 @@ export function labelCheck(input: string, existing: readonly string[]): { cleane
   if (existing.length >= LABELS_MAX) return { cleaned, problem: `A page has at most ${LABELS_MAX} labels.` };
   return { cleaned, problem: undefined };
 }
+
+// ---- Deleting a page ---------------------------------------------------------------------------------------------
+
+/** `POST wiki/delete`: the page goes in one write; links to it become broken links. */
+export interface DeleteBody {
+  path: string;
+  message: string;
+}
+
+/** The answer of a delete: like a publish, with how many links into the page break. */
+export interface DeleteResult {
+  outcome: "published";
+  write: WriteSummary;
+  brokenLinks: number;
+}
+
+/** The message a delete starts with. */
+export const defaultDeleteMessage = (path: string): string => `Delete ${path}`.slice(0, PUBLISH_MESSAGE_MAX);
+
+/** What the dialog says about the links into the page, before anything is confirmed. */
+export function deleteWarning(links: number): string {
+  if (links === 0) return "No other page links to this page.";
+  return `${links} ${links === 1 ? "link into this page" : "links into this page"} will break: ${links === 1 ? "it" : "they"} will show in the broken links report until fixed.`;
+}

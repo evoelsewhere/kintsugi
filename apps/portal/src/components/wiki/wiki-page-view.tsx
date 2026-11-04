@@ -21,6 +21,7 @@ import { ExportMarkdownButton } from "./export-markdown-button";
 import { WikiBacklinks } from "./wiki-backlinks";
 import { WikiCompare } from "./wiki-compare";
 import { WikiToc } from "./wiki-toc";
+import { DeleteButton } from "./wiki-delete";
 import { WikiEditor } from "./wiki-editor";
 import { WikiHistory } from "./wiki-history";
 import { MoveButton } from "./wiki-move";
@@ -94,6 +95,7 @@ function EditEntry({ projectId, path }: { projectId: string; path: string }): Re
             Edit
           </Button>
           <MoveButton projectId={projectId} path={path} direct={view.direct} />
+          <DeleteButton projectId={projectId} path={path} direct={view.direct} />
           </>
         ) : (
           <Button size="small" disabled title={view.refusal?.message}>

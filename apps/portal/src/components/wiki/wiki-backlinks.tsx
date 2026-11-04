@@ -31,7 +31,7 @@ export function WikiBacklinks({ projectId, commit, path }: WikiBacklinksProps): 
     }),
   );
   return (
-    <section aria-label="Backlinks" className="mt-6 flex flex-col gap-2 border-t border-[rgba(0,0,0,0.08)] pt-4">
+    <section id="backlinks" aria-label="Backlinks" className="mt-6 flex flex-col gap-2 border-t border-[rgba(0,0,0,0.08)] pt-4">
       <h2 className="flex items-center gap-1.5 text-[13px] font-medium text-text">
         <Link2 className="size-3.5 text-text-muted" strokeWidth={1.75} aria-hidden="true" />
         Backlinks{first.data === undefined ? "" : ` (${first.data.view.total})`}

@@ -18,6 +18,8 @@ import {
   labelCheck,
   labelsOf,
   LABELS_MAX,
+  defaultDeleteMessage,
+  deleteWarning,
   messageProblem,
   setLabels,
   MOVE_REWRITE_LIMIT,
@@ -648,5 +650,18 @@ describe("the labels of a page in its front matter", () => {
     expect(labelCheck("runbook", ["runbook"]).problem).toMatch(/already/);
     expect(labelCheck("x".repeat(LABEL_MAX_LENGTH + 1), []).problem).toMatch(/100/);
     expect(labelCheck("new", Array.from({ length: LABELS_MAX }, (_, index) => `l${index}`)).problem).toMatch(/at most/);
+  });
+});
+
+describe("deleting a page", () => {
+  it("says before confirming how many links into the page will break", () => {
+    expect(deleteWarning(0)).toBe("No other page links to this page.");
+    expect(deleteWarning(1)).toBe("1 link into this page will break: it will show in the broken links report until fixed.");
+    expect(deleteWarning(37)).toBe("37 links into this page will break: they will show in the broken links report until fixed.");
+  });
+
+  it("starts the message with Delete <path>, within the limit", () => {
+    expect(defaultDeleteMessage("a/b.md")).toBe("Delete a/b.md");
+    expect(defaultDeleteMessage(`a/${"b".repeat(400)}.md`)).toHaveLength(PUBLISH_MESSAGE_MAX);
   });
 });
