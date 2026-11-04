@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import { buildBrainDocument } from "../src/brain.js";
-import { type AnchorSection, type CommentAnchor, ANCHOR_CONTEXT_MAX, ANCHOR_EXACT_MAX, createAnchor, plainTextOf, reanchor } from "../src/comment-anchor.js";
+import { type AnchorSection, type CommentAnchor, ANCHOR_CONTEXT_MAX, ANCHOR_EXACT_MAX, createAnchor, plainTextOf, reanchor, reanchorAll } from "../src/comment-anchor.js";
 
 const lines = (text: string): string[] => text.split("\n");
 const sectionsOf = (text: string): AnchorSection[] =>
@@ -237,5 +237,43 @@ describe("pages written to be slow", () => {
     const page = ["a".repeat(1_000_000)];
     const anchor = createAnchor(page, { start: 10, end: 11 }, "section");
     expect(reanchor(page, anchor, [])).toMatchObject({ status: "moved" });
+  });
+});
+
+describe("reanchorAll", () => {
+  const page = "---\nid: PAGE-DOC-0001\n---\n\nIntro with a repeated phrase here.\n\n## Setup\n\nInstall the package first, then run the [setup script](setup.md) twice.\n\nA repeated phrase here.\n\n## Usage\n\nCall the service with a token.\n";
+  const sections = [
+    { anchor: "setup", lineStart: 7, lineEnd: 11 },
+    { anchor: "usage", lineStart: 13, lineEnd: 15 },
+  ];
+  const anchors = [
+    { node: "setup", exact: "Install the package first, then run the setup script twice.", prefix: "", suffix: "" },
+    { node: "usage", exact: "Install the package first", prefix: "", suffix: "" },
+    { node: "setup", exact: "repeated phrase here", prefix: "Intro with a ", suffix: "." },
+    { node: "setup", exact: "Words nobody wrote", prefix: "", suffix: "" },
+    { node: "no-such-section", exact: "Call the service", prefix: "", suffix: "" },
+    { node: "", exact: "with a token", prefix: "", suffix: "" },
+    { node: "setup", exact: "", prefix: "", suffix: "" },
+  ];
+
+  it("gives the same places as placing each quote alone, in the same order", () => {
+    expect(reanchorAll(page, anchors, sections)).toEqual(anchors.map((anchor) => reanchor(page, anchor, sections)));
+    expect(reanchorAll(page, anchors, sections).map((found) => found.status)).toEqual(["anchored", "moved", "anchored", "orphaned", "moved", "anchored", "orphaned"]);
+  });
+
+  it("takes the lines of a page too, an empty page and no quotes", () => {
+    expect(reanchorAll(page.split("\n").map((line) => `${line}\n`), anchors, sections)).toEqual(reanchorAll(page, anchors, sections));
+    expect(reanchorAll("", anchors, sections).every((found) => found.status === "orphaned")).toBe(true);
+    expect(reanchorAll(page, [], sections)).toEqual([]);
+  });
+
+  it("reads a page of 200 KB for a hundred quotes in well under the time of placing them one by one", () => {
+    const big = Array.from({ length: 2000 }, (_, at) => `Paragraph ${at} has some words about topic ${at % 17}, with a [link](x${at}.md) and **bold** text.`).join("\n\n");
+    const many = Array.from({ length: 100 }, (_, at) => ({ node: "n", exact: `topic ${at % 17}, with a link and bold text`, prefix: "", suffix: "" }));
+    const wide = [{ anchor: "n", lineStart: 1, lineEnd: big.split("\n").length }];
+    const started = Date.now();
+    const found = reanchorAll(big, many, wide);
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(found.every((place) => place.status === "anchored")).toBe(true);
   });
 });
