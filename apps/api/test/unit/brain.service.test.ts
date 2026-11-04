@@ -3,7 +3,7 @@
 // search) and what changed since an earlier commit. The stored index and Git have tests of their own.
 
 import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
-import { type BrainLink, type BrainNode, type BrainSource, buildBrainTree, isBrainIndexedPath } from "@kintsugi/domain";
+import { BRAIN_MAX_BROKEN_LINKS, type BrainLink, type BrainNode, type BrainSource, buildBrainTree, isBrainIndexedPath } from "@kintsugi/domain";
 import { describe, expect, it, vi } from "vitest";
 import type { AuditTrail } from "../../src/common/audit/audit-trail.js";
 import { BrainService, termsOf } from "../../src/modules/delivery/brain/application/brain.service.js";
@@ -56,6 +56,10 @@ class MemoryIndex extends BrainIndex {
   async configure(projectId: string, input: { branch: string; enabled: boolean }, actor: string) {
     this.row = source({ ...this.row, projectId, ...input, updatedBy: actor });
     return this.row;
+  }
+  broken_: Array<{ from: string; target: string }> = [];
+  async broken() {
+    return this.broken_;
   }
   async request(_projectId: string, actor: string) {
     if (this.row?.enabled !== true) return undefined;
@@ -470,6 +474,22 @@ describe("BrainService.lookup by label and space", () => {
     for (const query of ["label:", "label:   ", `label:${"x".repeat(65)}`, "label:!!", "space:", `space:${"X".repeat(65)}`]) {
       await expect(brain.lookup("shop", query), query).rejects.toThrow(/label|space|characters/i);
     }
+  });
+});
+
+describe("BrainService.broken", () => {
+  it("serves what the build stored with the indexed commit, and says when the build hit its limit", async () => {
+    const { brain, index } = setup();
+    index.broken_ = [{ from: "a.md", target: "gone.md" }, { from: "b.md", target: "x/missing.md" }];
+    expect(await brain.broken("shop")).toEqual({ projectId: "shop", branch: "main", commit: COMMIT, links: index.broken_, truncated: false });
+    index.broken_ = Array.from({ length: BRAIN_MAX_BROKEN_LINKS }, (_, at) => ({ from: `p${at}.md`, target: "gone.md" }));
+    expect((await brain.broken("shop")).truncated).toBe(true);
+  });
+
+  it("is refused like the other reads while the index is off or not built", async () => {
+    await expect(setup({ noRow: true }).brain.broken("shop")).rejects.toThrow(ConflictException);
+    await expect(setup({ row: { enabled: false } }).brain.broken("shop")).rejects.toThrow(ConflictException);
+    await expect(setup({ row: { indexedCommit: null, state: "queued" } }).brain.broken("shop")).rejects.toThrow(ConflictException);
   });
 });
 

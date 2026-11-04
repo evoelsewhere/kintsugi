@@ -6,7 +6,7 @@ import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { BrainChangesView, BrainGrepView, BrainLookupView, BrainReadView, BrainStatusView, BrainTreeView } from "@kintsugi/domain";
+import type { BrainBrokenView, BrainChangesView, BrainGrepView, BrainLookupView, BrainReadView, BrainStatusView, BrainTreeView } from "@kintsugi/domain";
 import { CheckoutStorage, cloneMirror } from "@kintsugi/git";
 import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
 import { RepositoryStore } from "@kintsugi/orchestrator";
@@ -226,6 +226,20 @@ describe.skipIf(!hasDatabase)("brain (integration)", () => {
     expect(untouched.node.changed?.commit).toBe(firstCommit);
     const root = (await admin.get<BrainTreeView>("/projects/shop/brain/tree")).body.data!;
     expect(root.node.changed?.commit).toBe(secondCommit);
+  });
+
+  it("lists the broken links the build stored, for readers with Project Access only", async () => {
+    // The column is written by the build (a later ticket); the route serves what is there, and nothing before a build.
+    expect((await admin.get<BrainBrokenView>("/projects/shop/brain/broken")).body.data).toMatchObject({ links: [], truncated: false, branch: "main" });
+    await app.db.query("update knowledge.brain_source set broken = $1::jsonb where project_id = 'shop'", [JSON.stringify([{ from: "01-standards/README.md", target: "gone.md" }, { from: "20-spaces/team/db.md", target: "../missing/page.md" }])]);
+    const broken = (await admin.get<BrainBrokenView>("/projects/shop/brain/broken")).body.data!;
+    expect(broken).toMatchObject({ projectId: "shop", truncated: false });
+    expect(broken.commit).toBe((await admin.get<BrainStatusView>("/projects/shop/brain")).body.data?.commit);
+    expect(broken.links).toEqual([{ from: "01-standards/README.md", target: "gone.md" }, { from: "20-spaces/team/db.md", target: "../missing/page.md" }]);
+    // No Project Access, administrators included: 403.
+    const { client: outsider } = await memberClient(app, admin, "broken-outsider", ["admin"], []);
+    expect((await outsider.get("/projects/shop/brain/broken")).status).toBe(403);
+    await app.db.query("update knowledge.brain_source set broken = '[]'::jsonb where project_id = 'shop'");
   });
 
   it("follows another branch and turns off", async () => {

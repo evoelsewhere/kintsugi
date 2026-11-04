@@ -3,7 +3,7 @@
 
 import { Body, Controller, Get, HttpCode, Param, Post, Put, Query, UseGuards } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
-import type { BrainChangesView, BrainGrepView, BrainLookupView, BrainReadView, BrainStatusView, BrainTreeView } from "@kintsugi/domain";
+import type { BrainBrokenView, BrainChangesView, BrainGrepView, BrainLookupView, BrainReadView, BrainStatusView, BrainTreeView } from "@kintsugi/domain";
 import { type Actor, CurrentActor, RequirePermission } from "#common/auth/decorators.js";
 import { ProjectAccessGuard } from "#modules/admin/project-access/index.js";
 import { BrainService } from "../application/brain.service.js";
@@ -74,6 +74,12 @@ export class BrainController {
   @ApiOperation({ summary: "The nodes whose text holds a fixed string" })
   grep(@Param("id") id: string, @Query({ schema: brainGrepQuerySchema }) query: BrainGrepQueryDto): Promise<BrainGrepView> {
     return this.brain.grep(id, query);
+  }
+
+  @Get("broken")
+  @ApiOperation({ summary: "The links of the indexed documents to Markdown files the repository does not have" })
+  broken(@Param("id") id: string): Promise<BrainBrokenView> {
+    return this.brain.broken(id);
   }
 
   @Get("changes")

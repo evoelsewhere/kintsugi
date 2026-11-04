@@ -7,6 +7,7 @@ import {
   BRAIN_ROOT_ID,
   type BrainIndexState,
   type BrainLink,
+  type BrainBrokenLink,
   type BrainLinks,
   type BrainNode,
   type BrainNodeKind,
@@ -326,6 +327,12 @@ export class PgBrainStore {
       [projectId, space, limit],
     );
     return result.rows.map(toNode);
+  }
+
+  /** The broken links the last build stored (an index that was never built has none). */
+  async broken(projectId: string): Promise<BrainBrokenLink[]> {
+    const result = await this.db.query<{ broken: BrainBrokenLink[] }>("select broken from knowledge.brain_source where project_id = $1", [projectId]);
+    return result.rows[0]?.broken ?? [];
   }
 
   /** The folder or document at a repository path, for a reader who pasted a path. */
