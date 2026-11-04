@@ -25,6 +25,7 @@ export const AUDIT_ACTIONS = {
   projectMemoryRestore: "project-memory.restore",
   projectMemoryReview: "project-memory.review",
   brainConfigure: "brain.configure",
+  wikiSwitch: "wiki.switch",
   brainRebuild: "brain.rebuild",
   projectCreate: "project.create",
   projectUpdate: "project.update",

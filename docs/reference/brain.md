@@ -93,6 +93,16 @@ Managing the Brain:
 
 Both need `project.brain.manage` and are audited (`brain.configure`, `brain.rebuild`).
 
+### The wiki switch
+
+A project's wiki is a flag on its Brain source (`knowledge.brain_source.wiki`, migration 052; `wiki` in the status view). While it is on, the Brain follows the repository's default branch and stays on (ADR-0097 decision 5):
+
+| Method | Route | Contract |
+| --- | --- | --- |
+| PUT | `/api/projects/:id/wiki` | `{ "enabled": true }` turns the Brain on for the default branch and queues a build; `{ "enabled": false }` clears the flag and leaves the Brain as it is, its branch free to choose again. Asking for the state the project is in changes and queues nothing. 409 when the project has no document repository or its default branch is not in the mirror yet |
+
+The switch needs `wiki.manage` on top of Project Access, and is audited (`wiki.switch`, with the branch). It takes no branch, so it needs no `project.brain.manage`. While the wiki is on, `PUT /api/projects/:id/brain` answers 409 when it names another branch ("A wiki project's Brain follows the default branch") or turns the Brain off ("Turn the wiki off before turning the Brain off"); the default branch, or none, still works. Known limit: the Brain moves when a sync moves the default branch, but a change of the default branch itself, made at the remote, is not followed until the switch is turned off and on again.
+
 ## How an agent uses it
 
 The MCP server's instructions and the tool descriptions say how to use the Brain:

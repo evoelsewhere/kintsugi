@@ -147,6 +147,7 @@ export class BrainService {
       ...(reason === undefined ? {} : { reason }),
       configured: source !== undefined,
       enabled: source?.enabled ?? false,
+      wiki: source?.wiki ?? false,
       state,
       branch,
       defaultBranch,
@@ -171,7 +172,12 @@ export class BrainService {
   async configure(projectId: string, input: { branch?: string | undefined; enabled: boolean }, actor: Actor): Promise<BrainStatusView> {
     const context = await this.documents.context(projectId);
     const current = await this.index.source(projectId);
-    const branch = input.branch ?? current?.branch ?? context.defaultBranch;
+    if (current?.wiki === true) {
+      // ADR-0097 decision 5: a wiki project's Brain stays on and follows the default branch.
+      if (!input.enabled) throw new ConflictException("Turn the wiki off before turning the Brain off");
+      if (input.branch !== undefined && input.branch !== context.defaultBranch) throw new ConflictException("A wiki project's Brain follows the default branch");
+    }
+    const branch = current?.wiki === true ? context.defaultBranch : (input.branch ?? current?.branch ?? context.defaultBranch);
     if (input.enabled) {
       if (branch.startsWith(OUTPUT_BRANCH)) throw new BadRequestException(`${branch} is an output branch of Kintsugi, not reviewed yet: index a branch people merge into.`);
       const { tips } = await this.documents.branchTips(context);
@@ -180,6 +186,31 @@ export class BrainService {
     await this.index.configure(projectId, { branch, enabled: input.enabled }, actor.username ?? actor.id);
     if (input.enabled) await this.queue.enqueue(projectId);
     await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.brainConfigure, { projectId, detail: { branch, enabled: input.enabled } }));
+    return this.status(projectId);
+  }
+
+  /**
+   * Turns the project's wiki on or off (ADR-0097 decision 5). On: the Brain is turned on for the repository's default
+   * branch and built, and keeps following it; off: the Brain stays as it is and its branch can be chosen again. Asking
+   * for the state the project is in changes and queues nothing.
+   */
+  async setWiki(projectId: string, enabled: boolean, actor: Actor): Promise<BrainStatusView> {
+    const who = actor.username ?? actor.id;
+    const current = await this.index.source(projectId);
+    if (!enabled) {
+      if (current?.wiki !== true) return this.status(projectId);
+      await this.index.setWiki(projectId, false, who);
+      await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.wikiSwitch, { projectId, detail: { enabled: false, branch: current.branch } }));
+      return this.status(projectId);
+    }
+    const context = await this.documents.context(projectId);
+    const branch = context.defaultBranch;
+    const { tips } = await this.documents.branchTips(context);
+    if (!tips.has(branch)) throw new ConflictException(`The default branch ${branch} is not in the mirror of the document repository yet: try again once it is synced.`);
+    if (current?.wiki === true && current.enabled && current.branch === branch) return this.status(projectId);
+    await this.index.configure(projectId, { branch, enabled: true, wiki: true }, who);
+    await this.queue.enqueue(projectId);
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.wikiSwitch, { projectId, detail: { enabled: true, branch } }));
     return this.status(projectId);
   }
 

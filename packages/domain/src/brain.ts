@@ -1127,6 +1127,8 @@ export interface BrainStatusView {
   reason?: string;
   configured: boolean;
   enabled: boolean;
+  /** The wiki is on for the project: its Brain follows the default branch and cannot be turned off or moved. */
+  wiki: boolean;
   state: BrainState;
   branch: string;
   defaultBranch: string | null;
@@ -1304,6 +1306,8 @@ export interface BrainSource {
   projectId: string;
   branch: string;
   enabled: boolean;
+  /** The project's wiki is on (ADR-0097 decision 5): the Brain follows the default branch and stays on. */
+  wiki: boolean;
   state: BrainIndexState;
   indexedCommit: string | null;
   attemptedCommit: string | null;

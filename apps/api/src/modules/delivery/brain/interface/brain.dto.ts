@@ -17,6 +17,9 @@ export const brainConfigureSchema = z
   .strict();
 export type BrainConfigureBody = z.infer<typeof brainConfigureSchema>;
 
+export const wikiSwitchSchema = z.object({ enabled: z.boolean() }).strict();
+export type WikiSwitchBody = z.infer<typeof wikiSwitchSchema>;
+
 export const brainTreeQuerySchema = z.object({
   node: brainNodeIdSchema.optional(),
   depth: z.coerce.number().int().min(1).max(2).default(1).transform((value) => value as 1 | 2),
