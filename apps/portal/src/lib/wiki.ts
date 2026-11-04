@@ -566,3 +566,17 @@ export const headingOffPlace = (offset: number | null): boolean => offset !== nu
 
 /** Whether the reader is done holding the heading: the page has settled, or the person has scrolled by hand. */
 export const scrollSettled = (elapsedMs: number, scrolledByHand: boolean): boolean => scrolledByHand || elapsedMs >= SCROLL_SETTLE_MS;
+
+// ---- Recent changes ---------------------------------------------------------------------------------------------
+
+/** The address of the recent changes of a project's wiki: a route of its own, so it never collides with the path of a page. */
+export const wikiRecentLink = (projectId: string): string => `${WIKI_BASE}/-/recent?project=${encodeURIComponent(projectId)}`;
+
+/** What a commit did to one page, in a word. */
+export const CHANGE_LABEL = { added: "added", modified: "edited", deleted: "deleted", renamed: "renamed" } as const;
+
+/**
+ * Where a changed file opens in the reader: a page that still exists opens, one the commit deleted has nothing to open
+ * (its history is under the page that replaced it, if any).
+ */
+export const changedFileTarget = (file: { path: string; status: string }): string | undefined => (file.status === "deleted" ? undefined : file.path);
