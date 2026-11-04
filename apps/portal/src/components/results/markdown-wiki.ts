@@ -1,6 +1,7 @@
 // The wiki steps of the Markdown renderer, as a rehype plugin on the hast tree: heading ids and GitHub alerts.
 
 import { atxHeading, createHeadingSlugger, isBrainReferenceId, plainInlineText } from "@kintsugi/domain";
+import { mentionRanges } from "@/lib/wiki-mentions";
 
 /** The part of a hast node the wiki step reads. */
 export interface HastNode {
@@ -69,7 +70,37 @@ export function wikiMarkdown() {
       heading.node.properties = { ...heading.node.properties, id: card !== undefined ? slugger.reserve(card) : slugger.slug(heading.text) };
     }
     for (const child of tree.children ?? []) if (child.type === "element" && child.tagName === "blockquote") markAlert(child);
+    markMentions(tree);
   };
+}
+
+const NO_MENTIONS = new Set(["code", "pre", "a", "kbd", "samp"]);
+
+/**
+ * Wraps each `@name` of the text of a document (not in code, a link or a heading id) in `<span data-mention="name">`, so the
+ * renderer can show the people of the project as chips. A name nobody knows is rendered back as the plain text it was.
+ */
+function markMentions(node: HastNode): void {
+  if (node.children === undefined) return;
+  if (node.type === "element" && node.tagName !== undefined && NO_MENTIONS.has(node.tagName)) return;
+  const next: HastNode[] = [];
+  for (const child of node.children) {
+    if (child.type !== "text" || child.value === undefined || !child.value.includes("@")) {
+      markMentions(child);
+      next.push(child);
+      continue;
+    }
+    const text = child.value;
+    let at = 0;
+    for (const range of mentionRanges(text)) {
+      if (range.start > at) next.push({ type: "text", value: text.slice(at, range.start) });
+      next.push({ type: "element", tagName: "span", properties: { dataMention: range.username }, children: [{ type: "text", value: text.slice(range.start, range.end) }] });
+      at = range.end;
+    }
+    if (at === 0) next.push(child);
+    else if (at < text.length) next.push({ type: "text", value: text.slice(at) });
+  }
+  node.children = next;
 }
 
 /** The text of a hast node's descendants. */

@@ -22,6 +22,7 @@ import { ExportMarkdownButton } from "./export-markdown-button";
 import { WikiBacklinks } from "./wiki-backlinks";
 import { WikiCompare } from "./wiki-compare";
 import { WikiToc } from "./wiki-toc";
+import { MentionDirectory } from "./mention-directory";
 import { WikiComments } from "./wiki-comments";
 import { DeleteButton } from "./wiki-delete";
 import { WikiEditor } from "./wiki-editor";
@@ -149,7 +150,9 @@ function PageText({ projectId, commit, path }: WikiPageViewProps): React.JSX.Ele
           <div className="flex flex-col gap-6 xl:grid xl:grid-cols-[minmax(0,1fr)_300px]">
             <div className="min-w-0">
               <div ref={article}>
-                <Markdown text={splitFrontMatter(loaded.content).body} path={path} />
+                <MentionDirectory projectId={projectId} texts={[splitFrontMatter(loaded.content).body]}>
+                  <Markdown text={splitFrontMatter(loaded.content).body} path={path} />
+                </MentionDirectory>
               </div>
               <WikiBacklinks projectId={projectId} commit={commit} path={path} />
             </div>
