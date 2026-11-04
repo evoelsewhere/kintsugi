@@ -16,8 +16,15 @@ import { draftApiOf, wikiEditApi } from "@/lib/api/wiki-edit";
 import { splitFrontMatter } from "@/lib/front-matter";
 import { useLoader } from "@/lib/use-loader";
 import { cn } from "@/lib/utils";
-import { wikiPageLink, wikiRead } from "@/lib/wiki";
+import { nameOf, wikiPageLink, wikiRead } from "@/lib/wiki";
+import { PublishFlow } from "./wiki-publish";
 import { type AccessView, DraftSaver, type DraftView, lineSeparatorOf, SAVE_STATUS_LABEL, type SaverState } from "@/lib/wiki-edit";
+
+/** A page's title for its default publish message: the `title` of its front matter, else its file name. */
+function pageTitle(text: string, path: string): string {
+  const title = splitFrontMatter(text).fields.find(([key]) => key === "title")?.[1];
+  return title !== undefined && title !== "" ? title : nameOf(path);
+}
 
 /** The preview follows the typing after this long. */
 const PREVIEW_DELAY_MS = 250;
@@ -55,7 +62,7 @@ function Refused({ projectId, path, access }: { projectId: string; path: string;
 }
 
 /** What the editor starts from: the person's draft, or the page as the Brain indexed it (and the commit that is). */
-function OpenedEditor({ projectId, commit, path }: WikiEditorProps & { access: AccessView }): React.JSX.Element {
+function OpenedEditor({ projectId, commit, path, access }: WikiEditorProps & { access: AccessView }): React.JSX.Element {
   const start = useLoader(`wiki/${projectId}/${commit}/edit-start/${path}`, () =>
     wikiRead(async () => {
       const draft = await wikiEditApi.draft(projectId, path);
@@ -66,17 +73,18 @@ function OpenedEditor({ projectId, commit, path }: WikiEditorProps & { access: A
   );
   return (
     <Loaded loader={start} rows={8}>
-      {({ draft, file }) => <Surface projectId={projectId} path={path} draft={draft} startText={file?.content ?? ""} startCommit={file?.commit ?? null} />}
+      {({ draft, file }) => <Surface projectId={projectId} path={path} direct={access.direct} draft={draft} startText={file?.content ?? ""} startCommit={file?.commit ?? null} />}
     </Loaded>
   );
 }
 
-function Surface({ projectId, path, draft, startText, startCommit }: { projectId: string; path: string; draft: DraftView | null; startText: string; startCommit: string | null }): React.JSX.Element {
+function Surface({ projectId, path, direct, draft, startText, startCommit }: { projectId: string; path: string; direct: boolean; draft: DraftView | null; startText: string; startCommit: string | null }): React.JSX.Element {
   const initial = draft?.text ?? startText;
   const [text, setText] = useState(initial);
   const [preview, setPreview] = useState(initial);
   const [saver, setSaver] = useState<SaverState>({ status: "saved", revision: draft?.revision ?? null, others: draft?.others ?? [], message: null });
   const [conflict, setConflict] = useState<DraftView | null>(null);
+  const [publishing, setPublishing] = useState(false);
   const [pane, setPane] = useState<"source" | "preview">("source");
   // A text taken from the server remounts the editor with it.
   const [generation, setGeneration] = useState(0);
@@ -130,6 +138,9 @@ function Surface({ projectId, path, draft, startText, startCommit }: { projectId
             </Button>
           ) : null}
         </p>
+        <Button size="small" variant="solid" disabled={saver.status === "locked" || conflict !== null} onClick={() => setPublishing(true)}>
+          Publish
+        </Button>
       </div>
       {saver.message === null ? null : (
         <p role="alert" className="text-[12px] text-[var(--ds-status-red)]">
@@ -170,6 +181,20 @@ function Surface({ projectId, path, draft, startText, startCommit }: { projectId
           </div>
         </div>
       )}
+      <PublishFlow
+        key={publishing ? "open" : "closed"}
+        projectId={projectId}
+        path={path}
+        title={pageTitle(text, path)}
+        direct={direct}
+        open={publishing}
+        saveDraft={async () => {
+          const saved = engine.current;
+          if (saved === null) throw new Error("The editor is not ready.");
+          return saved.whenSaved();
+        }}
+        onClose={() => setPublishing(false)}
+      />
       <div className="lg:hidden">
         <Tabs
           label="Source and preview"
