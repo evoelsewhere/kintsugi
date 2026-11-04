@@ -4,7 +4,7 @@
 // the Brain indexed it, which the server checks and the client cannot choose.
 
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import { pageIdOf, reanchor } from "@kintsugi/domain";
+import { pageIdOf, reanchor, reanchorAll } from "@kintsugi/domain";
 import type { Actor } from "#common/auth/decorators.js";
 import { BrainService } from "#modules/delivery/brain/index.js";
 import { DocumentsService } from "#modules/delivery/documents/index.js";
@@ -35,7 +35,8 @@ export class WikiCommentService {
   async list(projectId: string, path: string, limit: number, after: string | undefined): Promise<WikiCommentList> {
     const page = await this.#page(projectId, path);
     const found = await this.comments.listOfPage(projectId, page.key, limit, after);
-    return { page: { key: page.key, path }, comments: found.rows.map((row) => toView(row)), next: found.next };
+    const placements = await this.#placements(projectId, path, found.rows);
+    return { page: { key: page.key, path }, comments: found.rows.map((row) => toView(row, placements.get(row.id))), next: found.next };
   }
 
   /**
@@ -71,7 +72,39 @@ export class WikiCommentService {
     if ("tooMany" in result) {
       throw new ConflictException({ message: `This page already has ${COMMENTS_OPEN_MAX} open comments; resolve some before adding more`, details: { code: "too-many", limit: COMMENTS_OPEN_MAX } });
     }
-    return toView(result.comment, placed === undefined ? undefined : { line: placed.line });
+    return toView(result.comment, placed === undefined ? undefined : { status: "anchored", line: placed.line });
+  }
+
+  /**
+   * Where each inline comment's passage is now: placed again in the page at the commit the Brain indexed, from the quote.
+   * Anchored in its own heading, moved to another one, or orphaned (the quote is nowhere: the comment is not lost, it keeps
+   * its quote). Nothing is said while the Brain, or the page in it, is not there to place against: the comment then reads as it
+   * was written.
+   */
+  async #placements(projectId: string, path: string, rows: readonly WikiCommentRow[]): Promise<Map<string, Placement>> {
+    const inline = rows.filter((row) => row.anchor !== null && row.deletedAt === null);
+    const placements = new Map<string, Placement>();
+    if (inline.length === 0) return placements;
+    let outline;
+    try {
+      outline = await this.brain.outline(projectId, path);
+    } catch (error) {
+      if (error instanceof ConflictException) return placements;
+      throw error;
+    }
+    const context = await this.documents.context(projectId);
+    const text = await this.documents.readText(context, outline.commit, path, PAGE_MAX_BYTES);
+    if (text === undefined) return placements;
+    // The page path names what comes before the first heading.
+    const sections = [...outline.sections, { anchor: path, lineStart: 1, lineEnd: text.split("\n").length }];
+    // The page is read once for all of its comments: a page may have a hundred.
+    const found = reanchorAll(text, inline.map((row) => row.anchor!), sections);
+    inline.forEach((row, at) => {
+      const place = found[at]!;
+      if (place.status === "orphaned") placements.set(row.id, { status: "orphaned", line: null });
+      else placements.set(row.id, { status: place.status, line: place.line, node: sectionAt(sections, place.line, path) });
+    });
+    return placements;
   }
 
   /** The page at the head of the default branch: its key (its id, else its path) and that it exists; 404 when it does not. */
@@ -100,8 +133,27 @@ export class WikiCommentService {
   }
 }
 
-/** A comment as the panel reads it; where a passage is now is `placement` (P3-003), the passage as it was written otherwise. */
-export function toView(row: WikiCommentRow, placement?: { status?: WikiCommentView["status"]; line?: number | null }): WikiCommentView {
+/** Where a comment's passage is now. */
+interface Placement {
+  status: WikiCommentView["status"];
+  line: number | null;
+  /** The heading or card it is under now, when that is not the one it was written under. */
+  node?: string;
+}
+
+/** The section whose own lines hold the line, the narrowest one; the page path (what comes before the first heading) when none does. */
+function sectionAt(sections: ReadonlyArray<{ anchor: string; lineStart: number; lineEnd: number }>, line: number, path: string): string {
+  let best: { anchor: string; size: number } | undefined;
+  for (const section of sections) {
+    if (section.anchor === path || section.lineStart > line || section.lineEnd < line) continue;
+    const size = section.lineEnd - section.lineStart;
+    if (best === undefined || size < best.size) best = { anchor: section.anchor, size };
+  }
+  return best?.anchor ?? path;
+}
+
+/** A comment as the panel reads it; where a passage is now is `placement`, the passage as it was written otherwise. */
+export function toView(row: WikiCommentRow, placement?: Placement): WikiCommentView {
   const deleted = row.deletedAt !== null;
   return {
     id: row.id,
@@ -112,7 +164,7 @@ export function toView(row: WikiCommentRow, placement?: { status?: WikiCommentVi
     editedAt: row.editedAt,
     resolved: row.status === "resolved",
     deleted,
-    node: row.anchor === null ? null : row.anchor.node,
+    node: row.anchor === null ? null : (placement?.node ?? row.anchor.node),
     status: row.anchor === null ? "anchored" : (placement?.status ?? "anchored"),
     line: row.anchor === null ? null : (placement?.line ?? null),
     quote: row.anchor === null ? null : row.anchor.exact,

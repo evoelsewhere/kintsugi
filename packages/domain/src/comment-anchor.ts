@@ -308,6 +308,65 @@ function contextScore(before: string, after: string, anchor: CommentAnchor): num
   return score + tail;
 }
 
+/** A page's text prepared for placing quotes in it: its plain blocks and where each starts in the plain text of the whole page. */
+interface PreparedPage {
+  lines: readonly string[];
+  blocks: PlainBlock[];
+  offsets: number[];
+  whole: string;
+}
+
+function preparePage(pageText: string | readonly string[]): PreparedPage {
+  const lines = linesOf(pageText);
+  const blocks = plainBlocks(lines);
+  const offsets: number[] = [];
+  let total = 0;
+  for (const block of blocks) {
+    offsets.push(total);
+    total += block.text.length + 1;
+  }
+  return { lines, blocks, offsets, whole: blocks.map((block) => block.text).join("\n") };
+}
+
+function placeQuote(page: PreparedPage, anchor: CommentAnchor, sections: readonly AnchorSection[], options: { near?: number }): Reanchored {
+  const { lines, blocks, offsets, whole } = page;
+  const exact = normalised(anchor.exact);
+  if (exact === "" || blocks.length === 0) return { status: "orphaned" };
+
+  const locate = (from: number, to: number): { start: number; end: number; line: number } | undefined => {
+    const region = blocks.map((block, at) => ({ block, at })).filter(({ block }) => block.line >= from && block.line <= to);
+    const first = region[0];
+    if (first === undefined) return undefined;
+    const base = offsets[first.at] ?? 0;
+    const text = region.map(({ block }) => block.text).join("\n");
+    const places = occurrences(text, exact);
+    if (places.length === 0) return undefined;
+    const scored = places.map((place) => {
+      const start = base + place;
+      const end = start + exact.length;
+      return { start, end, score: contextScore(whole.slice(Math.max(0, start - ANCHOR_CONTEXT_MAX), start), whole.slice(end, end + ANCHOR_CONTEXT_MAX), anchor) };
+    });
+    const best = scored.reduce((most, place) => Math.max(most, place.score), 0);
+    const candidates = scored.filter((place) => place.score === best);
+    const near = options.near;
+    const chosen = near === undefined ? candidates[0] : candidates.reduce((closest, place) => (Math.abs(place.start - near) < Math.abs(closest.start - near) ? place : closest));
+    if (chosen === undefined) return undefined;
+    const block = blocks.reduce((found, candidate, at) => ((offsets[at] ?? 0) <= chosen.start ? candidate : found), blocks[0] as PlainBlock);
+    return { start: chosen.start, end: Math.min(chosen.end, whole.length), line: block.line };
+  };
+
+  const section = sections.find((candidate) => candidate.anchor === anchor.node);
+  if (section !== undefined) {
+    const inside = locate(section.lineStart, section.lineEnd);
+    if (inside !== undefined) return { status: "anchored", ...inside };
+  } else if (anchor.node === "") {
+    const everywhere = locate(1, lines.length);
+    if (everywhere !== undefined) return { status: "anchored", ...everywhere };
+  }
+  const elsewhere = locate(1, lines.length);
+  return elsewhere === undefined ? { status: "orphaned" } : { status: "moved", ...elsewhere };
+}
+
 /**
  * Finds where a comment's quote is in the page now. `sections` are the Brain's sections of the page at the commit read,
  * so the quote is looked for in its own section first, then in the whole page. One place is that place; several: the
@@ -316,51 +375,28 @@ function contextScore(before: string, after: string, anchor: CommentAnchor): num
  */
 export function reanchor(pageText: string | readonly string[], anchor: CommentAnchor, sections: readonly AnchorSection[], options: { near?: number } = {}): Reanchored {
   try {
-    const lines = linesOf(pageText);
-    const blocks = plainBlocks(lines);
-    const exact = normalised(anchor.exact);
-    if (exact === "" || blocks.length === 0) return { status: "orphaned" };
-    const offsets: number[] = [];
-    let total = 0;
-    for (const block of blocks) {
-      offsets.push(total);
-      total += block.text.length + 1;
-    }
-    const whole = blocks.map((block) => block.text).join("\n");
-
-    const locate = (from: number, to: number): { start: number; end: number; line: number } | undefined => {
-      const region = blocks.map((block, at) => ({ block, at })).filter(({ block }) => block.line >= from && block.line <= to);
-      const first = region[0];
-      if (first === undefined) return undefined;
-      const base = offsets[first.at] ?? 0;
-      const text = region.map(({ block }) => block.text).join("\n");
-      const places = occurrences(text, exact);
-      if (places.length === 0) return undefined;
-      const scored = places.map((place) => {
-        const start = base + place;
-        const end = start + exact.length;
-        return { start, end, score: contextScore(whole.slice(Math.max(0, start - ANCHOR_CONTEXT_MAX), start), whole.slice(end, end + ANCHOR_CONTEXT_MAX), anchor) };
-      });
-      const best = scored.reduce((most, place) => Math.max(most, place.score), 0);
-      const candidates = scored.filter((place) => place.score === best);
-      const near = options.near;
-      const chosen = near === undefined ? candidates[0] : candidates.reduce((closest, place) => (Math.abs(place.start - near) < Math.abs(closest.start - near) ? place : closest));
-      if (chosen === undefined) return undefined;
-      const block = blocks.reduce((found, candidate, at) => ((offsets[at] ?? 0) <= chosen.start ? candidate : found), blocks[0] as PlainBlock);
-      return { start: chosen.start, end: Math.min(chosen.end, whole.length), line: block.line };
-    };
-
-    const section = sections.find((candidate) => candidate.anchor === anchor.node);
-    if (section !== undefined) {
-      const inside = locate(section.lineStart, section.lineEnd);
-      if (inside !== undefined) return { status: "anchored", ...inside };
-    } else if (anchor.node === "") {
-      const everywhere = locate(1, lines.length);
-      if (everywhere !== undefined) return { status: "anchored", ...everywhere };
-    }
-    const elsewhere = locate(1, lines.length);
-    return elsewhere === undefined ? { status: "orphaned" } : { status: "moved", ...elsewhere };
+    return placeQuote(preparePage(pageText), anchor, sections, options);
   } catch {
     return { status: "orphaned" };
   }
+}
+
+/**
+ * The places of many quotes of one page, in the order of `anchors`: each as `reanchor` gives it, but the page is read once
+ * (reading it is most of the work, and a page may have a hundred comments).
+ */
+export function reanchorAll(pageText: string | readonly string[], anchors: readonly CommentAnchor[], sections: readonly AnchorSection[]): Reanchored[] {
+  let page: PreparedPage;
+  try {
+    page = preparePage(pageText);
+  } catch {
+    return anchors.map(() => ({ status: "orphaned" }));
+  }
+  return anchors.map((anchor) => {
+    try {
+      return placeQuote(page, anchor, sections, {});
+    } catch {
+      return { status: "orphaned" };
+    }
+  });
 }
