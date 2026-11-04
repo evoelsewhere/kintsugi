@@ -28,6 +28,12 @@ class MemoryDrafts extends WikiDrafts {
     Object.assign(row, { text, revision: row.revision + 1, writeId: row.text === text ? row.writeId : null });
     return row;
   }
+  async reissueId(id: string, baseRevision: number, text: string, pageId: string) {
+    const row = this.rows.find((candidate) => candidate.id === id && candidate.revision === baseRevision);
+    if (row === undefined) return undefined;
+    Object.assign(row, { text, pageId, writeId: null, revision: row.revision + 1 });
+    return row;
+  }
   async setWrite(id: string, writeId: string | null) {
     const row = this.rows.find((candidate) => candidate.id === id);
     if (row !== undefined) row.writeId = writeId;
