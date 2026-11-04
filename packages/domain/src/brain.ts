@@ -483,6 +483,9 @@ interface PendingLink {
   id?: string;
 }
 
+/** A reference a document makes, before it is resolved against the other documents: a Markdown link or a mention of an id. */
+export type BrainPendingLink = PendingLink;
+
 interface Heading {
   line: number; // 0-based
   level: number;
@@ -760,6 +763,131 @@ function readmeFirst(a: string, b: string): number {
  * left out and counted in `skipped`.
  */
 /**
+ * What the tree needs of one document, and nothing that depends on the other documents: its nodes (the document first,
+ * depths counted from the document), the references it makes, the front matter its folder reads, and the commit that
+ * last changed it. A part comes from the document's text (`brainDocumentPart`) or from the rows a build stored
+ * (`brainPartsFromRows`); `assembleBrainTree` turns a set of parts into the tree, the same way whichever they came from
+ * (ADR-0097 decision 6).
+ */
+export interface BrainDocumentPart {
+  path: string;
+  nodes: BrainNode[];
+  refs: BrainPendingLink[];
+  /** Front matter `key` (or `space`) of a home page, upper-cased; null when absent or not a valid key. */
+  key: string | null;
+  /** The key as written when it is not valid even upper-cased, so the tree can warn about it. */
+  invalidKey: string | null;
+  /** Front matter `order` of a home page. */
+  order: string[];
+  /** For each card, the GitHub-style slug of its heading text. */
+  cardAliases: Array<[string, string]>;
+  changed: BrainChange | null;
+}
+
+/** The part of one document: built from its text alone, so it never depends on another document. */
+export function brainDocumentPart(source: BrainSourceDocument): BrainDocumentPart {
+  const built = buildBrainDocument(source.path, source.text);
+  return {
+    path: source.path,
+    nodes: built.nodes,
+    refs: built.links,
+    key: built.key,
+    invalidKey: built.invalidKey,
+    order: built.order,
+    cardAliases: built.cardAliases,
+    changed: source.changed ?? null,
+  };
+}
+
+/** A reference of a document as a stored row; the order of a document's rows is the order its references were found in. */
+export interface BrainRefRow {
+  path: string;
+  ordinal: number;
+  fromId: string;
+  kind: "link" | "id";
+  targetPath: string | null;
+  targetAnchor: string | null;
+  targetId: string | null;
+}
+
+/** What a node keeps of its document's front matter that the tree reads again: a home page's key and order, a card's anchor alias. */
+export interface BrainHome {
+  key?: string;
+  invalidKey?: string;
+  order?: string[];
+  alias?: string;
+}
+
+/** The rows of a document's references, as a build stores them. */
+export function brainRefRows(part: BrainDocumentPart): BrainRefRow[] {
+  return part.refs.map((ref, ordinal) => ({
+    path: part.path,
+    ordinal,
+    fromId: ref.fromId,
+    kind: ref.id !== undefined ? "id" : "link",
+    targetPath: ref.path ?? null,
+    targetAnchor: ref.anchor ?? null,
+    targetId: ref.id ?? null,
+  }));
+}
+
+/** What a build stores next to a node of the part so the part can be built again from rows; null when there is nothing. */
+export function brainHomeOf(part: BrainDocumentPart, node: BrainNode): BrainHome | null {
+  if (node.kind === "card") {
+    const alias = part.cardAliases.find(([id]) => id === node.id)?.[1];
+    return alias === undefined ? null : { alias };
+  }
+  if (node.kind !== "document") return null;
+  const home: BrainHome = {};
+  if (part.key !== null) home.key = part.key;
+  if (part.invalidKey !== null) home.invalidKey = part.invalidKey;
+  if (part.order.length > 0) home.order = part.order;
+  return Object.keys(home).length === 0 ? null : home;
+}
+
+/**
+ * The parts of the documents a build stored, from their node rows (as stored: depths from the root, ordinals and
+ * spaces as the tree set them) and reference rows. Folder and root rows are ignored: `assembleBrainTree` makes them
+ * again. The result is what `brainDocumentPart` gave when the rows were written, so assembling it with the parts of the
+ * documents that changed gives the tree of a whole build.
+ */
+export function brainPartsFromRows(rows: ReadonlyArray<{ node: BrainNode; home: BrainHome | null }>, refs: readonly BrainRefRow[]): BrainDocumentPart[] {
+  const byPath = new Map<string, Array<{ node: BrainNode; home: BrainHome | null }>>();
+  for (const row of rows) {
+    if (row.node.kind !== "document" && row.node.kind !== "section" && row.node.kind !== "card") continue;
+    byPath.set(row.node.path, [...(byPath.get(row.node.path) ?? []), row]);
+  }
+  const refsByPath = new Map<string, BrainRefRow[]>();
+  for (const ref of refs) refsByPath.set(ref.path, [...(refsByPath.get(ref.path) ?? []), ref]);
+  const parts: BrainDocumentPart[] = [];
+  for (const [path, group] of byPath) {
+    // The document's heading lines come in the order its headings did: the document first, then by line.
+    const ordered = [...group].sort((a, b) => (a.node.kind === "document" ? -1 : b.node.kind === "document" ? 1 : (a.node.lineStart ?? 0) - (b.node.lineStart ?? 0)));
+    const document = ordered[0];
+    if (document === undefined || document.node.kind !== "document") continue;
+    const base = document.node.depth;
+    const nodes = ordered.map(({ node }) => ({ ...node, ids: [...node.ids], labels: [...node.labels], depth: node.depth - base }));
+    const head = nodes[0];
+    if (head === undefined) continue;
+    Object.assign(head, { parentId: null, ordinal: 0, space: null, changed: null });
+    const home = document.home;
+    parts.push({
+      path,
+      nodes,
+      refs: (refsByPath.get(path) ?? [])
+        .sort((a, b) => a.ordinal - b.ordinal)
+        .map((ref) => (ref.kind === "id" ? { fromId: ref.fromId, id: ref.targetId ?? "" } : { fromId: ref.fromId, path: ref.targetPath ?? "", ...(ref.targetAnchor === null ? {} : { anchor: ref.targetAnchor }) })),
+      key: home?.key ?? null,
+      invalidKey: home?.invalidKey ?? null,
+      order: home?.order ?? [],
+      cardAliases: ordered.flatMap(({ node, home: nodeHome }) => (nodeHome?.alias === undefined ? [] : [[node.id, nodeHome.alias] as [string, string]])),
+      changed: document.node.changed,
+    });
+  }
+  return parts;
+}
+
+/**
  * A folder's entries with the ones its home page lists in `order` first, in list order, the rest as they were. A name
  * matches a folder of that name, else a document `<name>` or `<name>.md`; a folder wins when both match, a name that
  * matches nothing is ignored and an entry is placed once (ADR-0097 decision 2).
@@ -779,6 +907,21 @@ function withManualOrder<T extends { name: string; folder: boolean }>(entries: r
 export function buildBrainTree(sources: readonly BrainSourceDocument[], rootTitle: string): BrainTree {
   const indexed = sources.filter((source) => isBrainIndexedPath(source.path)).sort((a, b) => a.path.localeCompare(b.path, "en"));
   const kept = indexed.slice(0, BRAIN_MAX_DOCUMENTS);
+  return assembleBrainTree(kept.map(brainDocumentPart), rootTitle, indexed.length);
+}
+
+/** A copy of a part the assembly may change: it sets parents, depths, ordinals, spaces and the commit of the nodes it holds. */
+function clonePart(part: BrainDocumentPart): BrainDocumentPart {
+  return { ...part, nodes: part.nodes.map((node) => ({ ...node })) };
+}
+
+/**
+ * The tree of a set of document parts: folders, order, summaries, spaces, links and broken links, everything that
+ * depends on more than one document. The parts are not changed and may come in any order. `indexed` is how many
+ * documents the repository holds that the Brain indexes, which is more than `parts` when the cap cut some off.
+ */
+export function assembleBrainTree(parts: readonly BrainDocumentPart[], rootTitle: string, indexed: number = parts.length): BrainTree {
+  const kept = [...parts].sort((a, b) => a.path.localeCompare(b.path, "en")).map(clonePart);
   const root: BrainNode = {
     id: BRAIN_ROOT_ID,
     parentId: null,
@@ -816,27 +959,26 @@ export function buildBrainTree(sources: readonly BrainSourceDocument[], rootTitl
     return folder;
   };
 
-  const documents: DocumentNodes[] = [];
+  const documents: BrainDocumentPart[] = [];
   const orderOf = new Map<string, string[]>();
   const keyOf = new Map<string, string>();
   const warnings: BrainWarning[] = [];
   const folderChildren = new Map<string, Array<{ name: string; node: BrainNode; folder: boolean }>>();
-  for (const source of kept) {
-    const built = buildBrainDocument(source.path, source.text);
-    const slash = source.path.lastIndexOf("/");
-    const folder = folderOf(slash < 0 ? "" : source.path.slice(0, slash));
+  for (const built of kept) {
+    const slash = built.path.lastIndexOf("/");
+    const folder = folderOf(slash < 0 ? "" : built.path.slice(0, slash));
     const document = built.nodes[0];
     if (document === undefined) continue;
     document.parentId = folder.id;
-    document.changed = source.changed ?? null;
+    document.changed = built.changed;
     documents.push(built);
-    if (built.order.length > 0) orderOf.set(source.path, built.order);
-    if (built.key !== null) keyOf.set(source.path, built.key);
+    if (built.order.length > 0) orderOf.set(built.path, built.order);
+    if (built.key !== null) keyOf.set(built.path, built.key);
     // Only a home page makes a space, so only its key is worth a warning.
-    if (built.invalidKey !== null && README_FILES.includes(source.path.split("/").pop()?.toLowerCase() ?? "")) {
-      warnings.push({ path: source.path, message: `The space key "${clip(built.invalidKey, 40)}" is not a space key: use 2 to 10 letters or digits, starting with a letter.` });
+    if (built.invalidKey !== null && README_FILES.includes(built.path.split("/").pop()?.toLowerCase() ?? "")) {
+      warnings.push({ path: built.path, message: `The space key "${clip(built.invalidKey, 40)}" is not a space key: use 2 to 10 letters or digits, starting with a letter.` });
     }
-    folderChildren.set(folder.id, [...(folderChildren.get(folder.id) ?? []), { name: source.path, node: document, folder: false }]);
+    folderChildren.set(folder.id, [...(folderChildren.get(folder.id) ?? []), { name: built.path, node: document, folder: false }]);
   }
   for (const folder of folders.values()) {
     if (folder.parentId === null) continue;
@@ -844,7 +986,7 @@ export function buildBrainTree(sources: readonly BrainSourceDocument[], rootTitl
   }
 
   // Depths of everything under a folder follow the folder's own depth.
-  const shift = (built: DocumentNodes, base: number): void => {
+  const shift = (built: BrainDocumentPart, base: number): void => {
     for (const node of built.nodes) node.depth += base;
   };
   for (const built of documents) {
@@ -939,7 +1081,7 @@ export function buildBrainTree(sources: readonly BrainSourceDocument[], rootTitl
     if (count <= BRAIN_MAX_LINKS_PER_NODE) links.push({ fromId, toId, kind });
   };
   for (const built of documents) {
-    for (const link of built.links) {
+    for (const link of built.refs) {
       if (link.id !== undefined) {
         const targets = definers.get(link.id) ?? [];
         if (targets.length <= 3) for (const target of targets) add(link.fromId, target, "id");
@@ -961,7 +1103,7 @@ export function buildBrainTree(sources: readonly BrainSourceDocument[], rootTitl
 
   root.children = (folderChildren.get(root.id) ?? []).length;
   const linkTotals = Object.fromEntries([...perNode].filter(([, count]) => count > BRAIN_MAX_LINKS_PER_NODE));
-  return { nodes, links, documents: documents.length, identifiers: definers.size, skipped: indexed.length - kept.length, linkTotals, broken, warnings };
+  return { nodes, links, documents: documents.length, identifiers: definers.size, skipped: indexed - kept.length, linkTotals, broken, warnings };
 }
 
 // ---------------------------------------------------------------------------
