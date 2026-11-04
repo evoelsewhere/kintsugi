@@ -22,6 +22,7 @@ import { MembersPermissionsPage } from "./pages/members-permissions";
 import { NotFoundPage } from "./pages/not-found";
 import { ProjectDetailPage } from "./pages/projects/project-detail-page";
 import { ProjectsPage } from "./pages/projects/projects-page";
+import { WikiPage } from "./pages/wiki/wiki-page";
 
 function RequireAuth({ children }: { children: React.ReactNode }): React.JSX.Element {
   const { user, loading } = useAuth();
@@ -59,6 +60,13 @@ export function App(): React.JSX.Element {
             <Route path="delivery/:stage" element={<DeliveryStagePage />} />
             <Route path="delivery/*" element={<Navigate to="/delivery" replace />} />
             <Route path="brain" element={<BrainPage />} />
+            {/* The splat is the page's path in the document repo, so a heading link (#slug) and a reload open the same page. */}
+            <Route path="wiki/-/broken" element={<WikiPage />} />
+            <Route path="wiki/-/recent" element={<WikiPage />} />
+            <Route path="wiki/-/label/:label" element={<WikiPage />} />
+
+            <Route path="wiki/-/space/:space" element={<WikiPage />} />
+            <Route path="wiki/*" element={<WikiPage />} />
             <Route path="monitoring" element={<MonitoringPage />} />
             <Route path="governance" element={<GovernancePage />} />
             <Route path="projects" element={<ProjectsPage />} />

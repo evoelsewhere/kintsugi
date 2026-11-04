@@ -33,6 +33,14 @@ export const historyQuerySchema = z.object({
 });
 export type HistoryQuery = z.infer<typeof historyQuerySchema>;
 
+/** `?ref&limit&before` of the recent changes: `before` is the `next` of the previous page. */
+export const recentQuerySchema = z.object({
+  ref: refSchema,
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  before: z.string().regex(/^([0-9a-f]{40}|[0-9a-f]{64})$/, "must be a commit id").optional(),
+});
+export type RecentQuery = z.infer<typeof recentQuerySchema>;
+
 /** `?ref&compare` of a stage's results; compare=true adds the previous run's counts. */
 export const resultsQuerySchema = z.object({
   ref: refSchema,

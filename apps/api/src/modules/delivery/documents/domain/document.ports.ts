@@ -1,7 +1,7 @@
 // Port of document repo reads: the mirror Kintsugi keeps of a project's document repository
 // (ADR-0025), read-only. Implemented over the git CLI (packages/git).
 
-import type { BytesRead, DocumentDiff, DocumentRepo, FileRead, FileVersion, GrepLine, MirrorBranch, TreeEntry } from "./document.js";
+import type { BytesRead, DocumentDiff, DocumentRepo, FileRead, FileVersion, GrepLine, MirrorBranch, RecentCommit, TreeEntry } from "./document.js";
 
 export abstract class DocumentRepoReader {
   /** Whether the mirror exists (the worker clones it on the first sync). */
@@ -29,9 +29,10 @@ export abstract class DocumentRepoReader {
   abstract patch(repo: DocumentRepo, from: string, to: string, path: string): Promise<string>;
   /**
    * The lines of the Markdown files at a commit that contain every one of `terms` (fixed strings, not patterns),
-   * under `under` when given; at most `limit` lines, and whether more matched.
+   * under `under` when given and only in the files of `only` when given (applied before `limit`); at most `limit`
+   * lines, and whether more matched.
    */
-  abstract grep(repo: DocumentRepo, commit: string, terms: readonly string[], options: { ignoreCase: boolean; under?: string; limit: number }): Promise<{ matches: GrepLine[]; truncated: boolean }>;
+  abstract grep(repo: DocumentRepo, commit: string, terms: readonly string[], options: { ignoreCase: boolean; under?: string; only?: ReadonlySet<string>; limit: number }): Promise<{ matches: GrepLine[]; truncated: boolean }>;
   /**
    * The Markdown files that changed from `from` (any commit of the mirror, short ids too) to `to`, under `under`
    * when given; undefined when `from` is not a commit of the mirror.
@@ -42,5 +43,11 @@ export abstract class DocumentRepoReader {
    * exist. `before` is a version of the file: the page starts after it (none when it is not one). Only the newest
    * 2,000 versions are read.
    */
+  /**
+   * The newest commits from `commit` that changed Markdown files, each with those files (renames detected), as Git
+   * records them: nothing is filtered for the reader. Merge commits have no files and are left out. At most the newest
+   * 2,000 such commits are read.
+   */
+  abstract recent(repo: DocumentRepo, commit: string): Promise<RecentCommit[]>;
   abstract history(repo: DocumentRepo, commit: string, path: string, options: { limit: number; before?: string }): Promise<{ entries: FileVersion[]; more: boolean }>;
 }

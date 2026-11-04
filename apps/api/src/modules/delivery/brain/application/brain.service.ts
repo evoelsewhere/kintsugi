@@ -5,7 +5,11 @@
 
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import {
+  BRAIN_MAX_DOCUMENTS,
+  BRAIN_MAX_BROKEN_LINKS,
   BRAIN_ROOT_ID,
+  type BrainBrokenView,
+  type BrainBacklinksView,
   type BrainCrumb,
   type BrainGrepMatch,
   type BrainChangedFile,
@@ -40,6 +44,9 @@ const LOOKUP_LIMIT = 20;
 const ATTRIBUTE_LOOKUP = /^(label|space):(.*)$/is;
 const ATTRIBUTE_VALUE_MAX = 64;
 const GREP_LIMIT = 50;
+/** Raw lines `git grep` returns before the Brain keeps `GREP_LIMIT` of them; a space or label filter looks at more. */
+const GREP_RAW_LINES = GREP_LIMIT * 4;
+const GREP_FILTERED_RAW_LINES = 2_000;
 const EXCERPT = 240;
 const OUTPUT_BRANCH = "kintsugi/";
 
@@ -63,6 +70,15 @@ export interface BrainGrepQuery {
   text: string;
   under?: string | undefined;
   ignoreCase: boolean;
+  /** Only the pages of this space (a key, any case) and, with `label`, that carry this label (already cleaned, lowercase). */
+  space?: string | undefined;
+  label?: string | undefined;
+}
+
+export interface BrainBacklinksQuery {
+  node: string;
+  offset: number;
+  limit: number;
 }
 
 export interface BrainChangesQuery {
@@ -131,6 +147,7 @@ export class BrainService {
       ...(reason === undefined ? {} : { reason }),
       configured: source !== undefined,
       enabled: source?.enabled ?? false,
+      wiki: source?.wiki ?? false,
       state,
       branch,
       defaultBranch,
@@ -155,7 +172,12 @@ export class BrainService {
   async configure(projectId: string, input: { branch?: string | undefined; enabled: boolean }, actor: Actor): Promise<BrainStatusView> {
     const context = await this.documents.context(projectId);
     const current = await this.index.source(projectId);
-    const branch = input.branch ?? current?.branch ?? context.defaultBranch;
+    if (current?.wiki === true) {
+      // ADR-0097 decision 5: a wiki project's Brain stays on and follows the default branch.
+      if (!input.enabled) throw new ConflictException("Turn the wiki off before turning the Brain off");
+      if (input.branch !== undefined && input.branch !== context.defaultBranch) throw new ConflictException("A wiki project's Brain follows the default branch");
+    }
+    const branch = current?.wiki === true ? context.defaultBranch : (input.branch ?? current?.branch ?? context.defaultBranch);
     if (input.enabled) {
       if (branch.startsWith(OUTPUT_BRANCH)) throw new BadRequestException(`${branch} is an output branch of Kintsugi, not reviewed yet: index a branch people merge into.`);
       const { tips } = await this.documents.branchTips(context);
@@ -165,6 +187,46 @@ export class BrainService {
     if (input.enabled) await this.queue.enqueue(projectId);
     await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.brainConfigure, { projectId, detail: { branch, enabled: input.enabled } }));
     return this.status(projectId);
+  }
+
+  /**
+   * Turns the project's wiki on or off (ADR-0097 decision 5). On: the Brain is turned on for the repository's default
+   * branch and built, and keeps following it; off: the Brain stays as it is and its branch can be chosen again. Asking
+   * for the state the project is in changes and queues nothing.
+   */
+  async setWiki(projectId: string, enabled: boolean, actor: Actor): Promise<BrainStatusView> {
+    const who = actor.username ?? actor.id;
+    const current = await this.index.source(projectId);
+    if (!enabled) {
+      if (current?.wiki !== true) return this.status(projectId);
+      await this.index.setWiki(projectId, false, who);
+      await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.wikiSwitch, { projectId, detail: { enabled: false, branch: current.branch } }));
+      return this.status(projectId);
+    }
+    const context = await this.documents.context(projectId);
+    const branch = context.defaultBranch;
+    const { tips } = await this.documents.branchTips(context);
+    if (!tips.has(branch)) throw new ConflictException(`The default branch ${branch} is not in the mirror of the document repository yet: try again once it is synced.`);
+    if (current?.wiki === true && current.enabled && current.branch === branch) return this.status(projectId);
+    await this.index.configure(projectId, { branch, enabled: true, wiki: true }, who);
+    await this.queue.enqueue(projectId);
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.wikiSwitch, { projectId, detail: { enabled: true, branch } }));
+    return this.status(projectId);
+  }
+
+  /**
+   * The default branch of a document repository changed (ADR-0097 decision 5): the Brain of every wiki project that
+   * keeps its documents there follows it, and is built when the mirror already has the branch (otherwise the sync that
+   * brings it queues the build). The change is audited like a Brain configuration, under the actor who made it.
+   */
+  async followDefaultBranch(repositoryId: string, branch: string, actor: Actor): Promise<void> {
+    for (const project of await this.index.wikiProjectsOf(repositoryId)) {
+      if (project.branch === branch) continue;
+      await this.index.configure(project.projectId, { branch, enabled: true, wiki: true }, actor.username ?? actor.id);
+      const { tips } = await this.documents.branchTips(await this.documents.context(project.projectId));
+      if (tips.has(branch)) await this.queue.enqueue(project.projectId);
+      await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.brainConfigure, { projectId: project.projectId, detail: { branch, enabled: true, wiki: true, reason: "default-branch" } }));
+    }
   }
 
   /** Builds the index again from the tip of its branch. */
@@ -319,11 +381,18 @@ export class BrainService {
     if (text.length < 2) throw new BadRequestException("Search for at least two characters.");
     const scope = query.under === undefined || query.under === "" || query.under === BRAIN_ROOT_ID ? undefined : await this.nodeOf(projectId, query.under);
     const under = scope === undefined ? undefined : parseBrainNodeId(scope.id).path;
+    const space = query.space?.toUpperCase() ?? null;
+    const label = query.label ?? null;
+    // A space or label belongs to a page, so the lines are filtered by the page's path before the limit cuts them.
+    const only = await this.pagesOf(projectId, space, label);
+    const view = { projectId, branch: source.branch, commit: source.indexedCommit, text, under: scope?.id ?? null, space, label };
+    if (only?.size === 0) return { ...view, matches: [], truncated: false };
     const context = await this.documents.context(projectId);
     const found = await this.documents.grep(context, source.indexedCommit, termsOf(text), {
       ignoreCase: query.ignoreCase,
       ...(under === undefined || under === "" ? {} : { under }),
-      limit: GREP_LIMIT * 4,
+      ...(only === undefined ? {} : { only }),
+      limit: only === undefined ? GREP_RAW_LINES : GREP_FILTERED_RAW_LINES,
     });
     const inScope = found.matches.filter(
       (match) =>
@@ -340,15 +409,46 @@ export class BrainService {
       if (!crumbs.has(node.id)) crumbs.set(node.id, await this.breadcrumb(projectId, node));
       matches.push({ node, breadcrumb: crumbs.get(node.id) ?? [], line: match.line, excerpt: excerptOf(match.text, termsOf(text)[0] ?? text) });
     }
-    return {
-      projectId,
-      branch: source.branch,
-      commit: source.indexedCommit,
-      text,
-      under: scope?.id ?? null,
-      matches,
-      truncated: found.truncated || inScope.length > kept.length,
-    };
+    return { ...view, matches, truncated: found.truncated || inScope.length > kept.length };
+  }
+
+  /** The paths of the pages in a space and/or with a label (both: the pages that have both); undefined when neither is asked. */
+  private async pagesOf(projectId: string, space: string | null, label: string | null): Promise<ReadonlySet<string> | undefined> {
+    if (space === null && label === null) return undefined;
+    const lists = await Promise.all([
+      space === null ? undefined : this.index.bySpace(projectId, space, BRAIN_MAX_DOCUMENTS),
+      label === null ? undefined : this.index.byLabel(projectId, label, BRAIN_MAX_DOCUMENTS),
+    ]);
+    const sets = lists.flatMap((nodes) => (nodes === undefined ? [] : [new Set(nodes.map((node) => node.path))]));
+    const [first, ...rest] = sets;
+    return new Set([...(first ?? [])].filter((path) => rest.every((other) => other.has(path))));
+  }
+
+  /** The links of the indexed documents to Markdown files the repository does not have, as the last build found them. */
+  async broken(projectId: string): Promise<BrainBrokenView> {
+    const { source } = await this.ready(projectId);
+    const links = await this.index.broken(projectId);
+    return { projectId, branch: source.branch, commit: source.indexedCommit, links, truncated: links.length >= BRAIN_MAX_BROKEN_LINKS };
+  }
+
+  /**
+   * The pages that link to a page (the page itself or any of its headings and cards), or to one heading or card, from
+   * other pages: a window of them, ordered by the linking node's path and line. Links inside the same page are not
+   * backlinks. `brain_read`'s `incoming` keeps its meaning: the links to exactly that node.
+   */
+  async backlinks(projectId: string, query: BrainBacklinksQuery): Promise<BrainBacklinksView> {
+    const { source } = await this.ready(projectId);
+    const node = await this.nodeOf(projectId, query.node);
+    if (node.kind !== "document" && node.kind !== "section" && node.kind !== "card") throw new BadRequestException("Backlinks are read for a page, a heading or a card.");
+    const found = await this.index.backlinks(projectId, { id: node.id, path: node.path, kind: node.kind }, query.offset, query.limit);
+    const nodes = new Map((await this.index.nodesByIds(projectId, found.rows.flatMap((row) => [row.fromId, row.toId]))).map((each) => [each.id, each] as const));
+    const items = found.rows.flatMap((row) => {
+      const from = nodes.get(row.fromId);
+      const target = nodes.get(row.toId);
+      return from === undefined || target === undefined ? [] : [{ node: from, target, linkKind: row.kind }];
+    });
+    const end = query.offset + found.rows.length;
+    return { projectId, branch: source.branch, commit: source.indexedCommit, node, items, total: found.total, offset: query.offset, nextOffset: end < found.total && found.rows.length > 0 ? end : null };
   }
 
   /**

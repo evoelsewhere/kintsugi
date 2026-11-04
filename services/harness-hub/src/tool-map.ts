@@ -1,6 +1,8 @@
 import {
   activityInputSchema,
   activityReceiptSchema,
+  brainBacklinksQuerySchema,
+  brainBacklinksSchema,
   brainChangesQuerySchema,
   brainChangesSchema,
   brainGrepQuerySchema,
@@ -22,6 +24,7 @@ import {
   type MemberPort,
 } from "@kintsugi/harness-sdk";
 import type { McpServer } from "@modelcontextprotocol/server";
+import { backlinksPart, pageAttributesPart } from "./page-attributes.js";
 
 export const MEMBER_TOOL_NAMES = [
   "project_list",
@@ -32,6 +35,7 @@ export const MEMBER_TOOL_NAMES = [
   "brain_lookup",
   "brain_grep",
   "brain_changes",
+  "brain_backlinks",
   "plugin_list",
   "activity_record",
 ] as const;
@@ -73,11 +77,17 @@ function toolFailure(error: unknown) {
   };
 }
 
-async function invokeRead<T extends object>(read: () => Promise<T>) {
+async function invokeRead<T extends object>(read: () => Promise<T>, extra?: (result: T) => string[]) {
   try {
     const result = await read();
+    // Further text parts after the JSON, each plain text that says what the JSON holds in a way an agent reads at a glance.
+    const parts = extra?.(result) ?? [];
     return {
-      content: [{ type: "text" as const, text: JSON.stringify(result) }],
+      content: [
+        { type: "text" as const, text: JSON.stringify(result) },
+        // Only when there is something to say, so a reader of the JSON part sees the same text as before.
+        ...parts.map((text) => ({ type: "text" as const, text })),
+      ],
       structuredContent: { ...result },
     };
   } catch (error) {
@@ -122,7 +132,7 @@ export function registerMemberTools(server: McpServer, member: MemberPort): void
     inputSchema: brainTreeQuerySchema,
     outputSchema: brainTreeSchema,
     annotations: READ_ONLY,
-  }, (query) => invokeRead(() => member.brainTree(query)));
+  }, (query) => invokeRead(() => member.brainTree(query), pageAttributesPart));
 
   server.registerTool("brain_read", {
     title: "Read a node of the Brain",
@@ -134,15 +144,18 @@ export function registerMemberTools(server: McpServer, member: MemberPort): void
     inputSchema: brainReadQuerySchema,
     outputSchema: brainReadSchema,
     annotations: READ_ONLY,
-  }, (query) => invokeRead(() => member.brainRead(query)));
+  }, (query) => invokeRead(() => member.brainRead(query), pageAttributesPart));
 
   server.registerTool("brain_lookup", {
     title: "Find a node by id or path",
-    description: "The Brain nodes a reference id (RULE-…, SEC-…, GAP-…, COM-…, REQ-…), a node id or a repository path names, each with its breadcrumb.",
+    description:
+      "The Brain nodes a reference id (RULE-…, SEC-…, GAP-…, COM-…, REQ-…), a node id or a repository path names, each with its breadcrumb. " +
+      "`label:<name>` finds the pages that carry a label and `space:<KEY>` the pages of a space (the key in any case). " +
+      "A node also carries its labels, space, status and owner when the page has them.",
     inputSchema: brainLookupQuerySchema,
     outputSchema: brainLookupSchema,
     annotations: READ_ONLY,
-  }, (query) => invokeRead(() => member.brainLookup(query)));
+  }, (query) => invokeRead(() => member.brainLookup(query), pageAttributesPart));
 
   server.registerTool("brain_grep", {
     title: "Find the nodes that contain a text",
@@ -153,7 +166,7 @@ export function registerMemberTools(server: McpServer, member: MemberPort): void
     inputSchema: brainGrepQuerySchema,
     outputSchema: brainGrepSchema,
     annotations: READ_ONLY,
-  }, (query) => invokeRead(() => member.brainGrep(query)));
+  }, (query) => invokeRead(() => member.brainGrep(query), pageAttributesPart));
 
   server.registerTool("brain_changes", {
     title: "What changed since a commit",
@@ -164,7 +177,18 @@ export function registerMemberTools(server: McpServer, member: MemberPort): void
     inputSchema: brainChangesQuerySchema,
     outputSchema: brainChangesSchema,
     annotations: READ_ONLY,
-  }, (query) => invokeRead(() => member.brainChanges(query)));
+  }, (query) => invokeRead(() => member.brainChanges(query), pageAttributesPart));
+
+  server.registerTool("brain_backlinks", {
+    title: "Which pages link to a page",
+    description:
+      "The pages that link to a page, to one of its headings or to a card, from other pages, a window of them in path order with the total (`total`, and `nextOffset` when there are more: ask again with offset = nextOffset). " +
+      "Each entry names the deepest node that holds the link, what it points at and the kind of link. Read the entries you need with brain_read. " +
+      "`brain_read` lists only the links to exactly that node and the first 20.",
+    inputSchema: brainBacklinksQuerySchema,
+    outputSchema: brainBacklinksSchema,
+    annotations: READ_ONLY,
+  }, (query) => invokeRead(() => member.brainBacklinks(query), (result) => [...backlinksPart(result), ...pageAttributesPart(result)]));
 
   server.registerTool("plugin_list", {
     title: "List member plugins",

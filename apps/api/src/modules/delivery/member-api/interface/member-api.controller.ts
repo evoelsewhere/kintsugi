@@ -2,10 +2,11 @@
 // plugin builds on: the projects the member may read, those projects' documents, the member plugins the
 // member may install, and one write: the record of what a plugin did (ADR-0069).
 
-import { Body, Controller, createParamDecorator, type ExecutionContext, Get, HttpCode, Param, Post, Query, UnauthorizedException } from "@nestjs/common";
+import { Body, Controller, createParamDecorator, type ExecutionContext, Get, Headers, HttpCode, Param, Post, Query, UnauthorizedException } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import {
   activityInputSchema,
+  brainBacklinksQuerySchema,
   brainChangesQuerySchema,
   brainGrepQuerySchema,
   brainLookupQuerySchema,
@@ -13,6 +14,8 @@ import {
   brainTreeQuerySchema,
   documentFileQuerySchema,
   documentTreeQuerySchema,
+  MEMBER_FEATURES_HEADER,
+  parseMemberFeatures,
   pluginBundleQuerySchema,
   pluginListQuerySchema,
   projectQuerySchema,
@@ -21,6 +24,9 @@ import type { z } from "zod";
 import { AllowMemberRead, type Actor, CurrentActor, RequirePermission } from "#common/auth/decorators.js";
 import type { AuthenticatedRequest, MemberPrincipal } from "#modules/core/auth/index.js";
 import { MemberApiService } from "../application/member-api.service.js";
+
+/** What the client asked for in the features header; an unknown, missing or oversized header asks for nothing and is never an error. */
+const Features = Headers(MEMBER_FEATURES_HEADER.toLowerCase());
 
 const CurrentMemberPrincipal = createParamDecorator((_data: unknown, context: ExecutionContext): MemberPrincipal => {
   const principal = context.switchToHttp().getRequest<AuthenticatedRequest>().memberPrincipal;
@@ -61,40 +67,48 @@ export class MemberApiController {
   @RequirePermission("member.read")
   @AllowMemberRead({ projectIdFrom: "query" })
   @ApiOperation({ summary: "One level of an authorized project's Brain (the tree index of its documents), with summaries" })
-  brainTree(@Query({ schema: brainTreeQuerySchema }) query: z.infer<typeof brainTreeQuerySchema>) {
-    return this.member.brainTree(query);
+  brainTree(@Query({ schema: brainTreeQuerySchema }) query: z.infer<typeof brainTreeQuerySchema>, @Features features: string | undefined) {
+    return this.member.brainTree(query, parseMemberFeatures(features));
   }
 
   @Get("brain/read")
   @RequirePermission("member.read")
   @AllowMemberRead({ projectIdFrom: "query" })
   @ApiOperation({ summary: "A Brain node's text at the indexed commit, with its citation, children and links" })
-  brainRead(@CurrentActor() actor: Actor, @Query({ schema: brainReadQuerySchema }) query: z.infer<typeof brainReadQuerySchema>) {
-    return this.member.brainRead(actor.id, query);
+  brainRead(@CurrentActor() actor: Actor, @Query({ schema: brainReadQuerySchema }) query: z.infer<typeof brainReadQuerySchema>, @Features features: string | undefined) {
+    return this.member.brainRead(actor.id, query, parseMemberFeatures(features));
   }
 
   @Get("brain/lookup")
   @RequirePermission("member.read")
   @AllowMemberRead({ projectIdFrom: "query" })
   @ApiOperation({ summary: "The Brain nodes a reference id, node id or repository path names" })
-  brainLookup(@Query({ schema: brainLookupQuerySchema }) query: z.infer<typeof brainLookupQuerySchema>) {
-    return this.member.brainLookup(query);
+  brainLookup(@Query({ schema: brainLookupQuerySchema }) query: z.infer<typeof brainLookupQuerySchema>, @Features features: string | undefined) {
+    return this.member.brainLookup(query, parseMemberFeatures(features));
   }
 
   @Get("brain/grep")
   @RequirePermission("member.read")
   @AllowMemberRead({ projectIdFrom: "query" })
   @ApiOperation({ summary: "The Brain nodes whose text holds a fixed string" })
-  brainGrep(@Query({ schema: brainGrepQuerySchema }) query: z.infer<typeof brainGrepQuerySchema>) {
-    return this.member.brainGrep(query);
+  brainGrep(@Query({ schema: brainGrepQuerySchema }) query: z.infer<typeof brainGrepQuerySchema>, @Features features: string | undefined) {
+    return this.member.brainGrep(query, parseMemberFeatures(features));
+  }
+
+  @Get("brain/backlinks")
+  @RequirePermission("member.read")
+  @AllowMemberRead({ projectIdFrom: "query" })
+  @ApiOperation({ summary: "The pages that link to a page, a heading or a card of an authorized project's Brain, a window of them" })
+  brainBacklinks(@Query({ schema: brainBacklinksQuerySchema }) query: z.infer<typeof brainBacklinksQuerySchema>, @Features features: string | undefined) {
+    return this.member.brainBacklinks(query, parseMemberFeatures(features));
   }
 
   @Get("brain/changes")
   @RequirePermission("member.read")
   @AllowMemberRead({ projectIdFrom: "query" })
   @ApiOperation({ summary: "What changed in the Brain's documents since an earlier commit, by document and by section" })
-  brainChanges(@Query({ schema: brainChangesQuerySchema }) query: z.infer<typeof brainChangesQuerySchema>) {
-    return this.member.brainChanges(query);
+  brainChanges(@Query({ schema: brainChangesQuerySchema }) query: z.infer<typeof brainChangesQuerySchema>, @Features features: string | undefined) {
+    return this.member.brainChanges(query, parseMemberFeatures(features));
   }
 
   @Get("plugins")

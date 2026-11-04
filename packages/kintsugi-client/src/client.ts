@@ -1,6 +1,8 @@
 import {
   activityInputSchema,
   activityReceiptSchema,
+  brainBacklinksQuerySchema,
+  brainBacklinksSchema,
   brainChangesQuerySchema,
   brainChangesSchema,
   brainGrepQuerySchema,
@@ -15,6 +17,8 @@ import {
   documentFileQuerySchema,
   documentTreeQuerySchema,
   documentTreeSchema,
+  MEMBER_FEATURE_PAGE_ATTRIBUTES,
+  MEMBER_FEATURES_HEADER,
   pluginBundleQuerySchema,
   pluginBundleSchema,
   pluginListQuerySchema,
@@ -25,6 +29,8 @@ import {
 import type {
   ActivityInput,
   ActivityReceipt,
+  BrainBacklinks,
+  BrainBacklinksQuery,
   BrainChanges,
   BrainChangesQuery,
   BrainGrep,
@@ -203,7 +209,7 @@ export function createMemberClient(options: MemberClientOptions): MemberPort {
       try {
         response = await fetcher(url, {
           method,
-          headers: { accept: "application/json", authorization: `Bearer ${token}`, ...(method === "POST" ? { "content-type": "application/json" } : {}) },
+          headers: { accept: "application/json", authorization: `Bearer ${token}`, [MEMBER_FEATURES_HEADER]: MEMBER_FEATURE_PAGE_ATTRIBUTES, ...(method === "POST" ? { "content-type": "application/json" } : {}) },
           ...(method === "POST" ? { body: JSON.stringify(payload) } : {}),
           redirect: "manual",
           ...(signal === undefined ? {} : { signal }),
@@ -274,6 +280,7 @@ export function createMemberClient(options: MemberClientOptions): MemberPort {
     brainRead: (query: BrainReadQuery): Promise<BrainRead> => request("brain/read", brainReadQuerySchema.parse(query), brainReadSchema),
     brainLookup: (query: BrainLookupQuery): Promise<BrainLookup> => request("brain/lookup", brainLookupQuerySchema.parse(query), brainLookupSchema),
     brainGrep: (query: BrainGrepQuery): Promise<BrainGrep> => request("brain/grep", brainGrepQuerySchema.parse(query), brainGrepSchema),
+    brainBacklinks: (query: BrainBacklinksQuery): Promise<BrainBacklinks> => request("brain/backlinks", brainBacklinksQuerySchema.parse(query), brainBacklinksSchema),
     brainChanges: (query: BrainChangesQuery): Promise<BrainChanges> => request("brain/changes", brainChangesQuerySchema.parse(query), brainChangesSchema),
   };
 }

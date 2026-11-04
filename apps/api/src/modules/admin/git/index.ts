@@ -2,6 +2,7 @@
 export { GitModule } from "./git.module.js";
 export { GitRegistry, GitRemote } from "./domain/git.ports.js";
 export { GitService } from "./application/git.service.js";
+export { DefaultBranchObservers, type DefaultBranchChange } from "./application/default-branch-observers.js";
 export type {
   GitRepositoryRecord,
   GitServerRecord,

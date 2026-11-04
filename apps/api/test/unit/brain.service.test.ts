@@ -3,7 +3,7 @@
 // search) and what changed since an earlier commit. The stored index and Git have tests of their own.
 
 import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
-import { type BrainLink, type BrainNode, type BrainSource, buildBrainTree, isBrainIndexedPath } from "@kintsugi/domain";
+import { BRAIN_MAX_BROKEN_LINKS, type BrainLink, type BrainNode, type BrainSource, buildBrainTree, isBrainIndexedPath } from "@kintsugi/domain";
 import { describe, expect, it, vi } from "vitest";
 import type { AuditTrail } from "../../src/common/audit/audit-trail.js";
 import { BrainService, termsOf } from "../../src/modules/delivery/brain/application/brain.service.js";
@@ -53,9 +53,29 @@ class MemoryIndex extends BrainIndex {
   async source() {
     return this.row;
   }
-  async configure(projectId: string, input: { branch: string; enabled: boolean }, actor: string) {
-    this.row = source({ ...this.row, projectId, ...input, updatedBy: actor });
+  async configure(projectId: string, input: { branch: string; enabled: boolean; wiki?: boolean | undefined }, actor: string) {
+    const { wiki, ...rest } = input;
+    this.row = source({ ...this.row, projectId, ...rest, ...(wiki === undefined ? {} : { wiki }), updatedBy: actor });
     return this.row;
+  }
+  async setWiki(_projectId: string, wiki: boolean, actor: string) {
+    if (this.row === undefined) return undefined;
+    this.row = { ...this.row, wiki, updatedBy: actor };
+    return this.row;
+  }
+  broken_: Array<{ from: string; target: string }> = [];
+  async broken() {
+    return this.broken_;
+  }
+  async backlinks(_projectId: string, target: { id: string; path: string; kind: string }, offset: number, limit: number) {
+    const rows = this.links_
+      .filter((link) => link.toId === target.id || (target.kind === "document" && link.toId.startsWith(`${target.path}#`)))
+      .filter((link) => this.nodes.find((node) => node.id === link.fromId)?.path !== target.path)
+      .sort((a, b) => a.fromId.localeCompare(b.fromId) || a.toId.localeCompare(b.toId));
+    return { rows: rows.slice(offset, offset + limit).map((link) => ({ fromId: link.fromId, toId: link.toId, kind: link.kind })), total: rows.length };
+  }
+  async nodesByIds(_projectId: string, ids: readonly string[]) {
+    return this.nodes.filter((node) => ids.includes(node.id));
   }
   async request(_projectId: string, actor: string) {
     if (this.row?.enabled !== true) return undefined;
@@ -87,6 +107,9 @@ class MemoryIndex extends BrainIndex {
   }
   async byLabel(_projectId: string, label: string, limit: number) {
     return this.nodes.filter((node) => node.kind === "document" && node.labels.includes(label)).sort(byPath).slice(0, limit);
+  }
+  async wikiProjectsOf() {
+    return this.row?.wiki === true ? [{ projectId: this.row.projectId, branch: this.row.branch }] : [];
   }
   async bySpace(_projectId: string, space: string, limit: number) {
     return this.nodes.filter((node) => node.kind === "document" && node.space === space).sort(byPath).slice(0, limit);
@@ -120,6 +143,7 @@ function source(overrides: Partial<BrainSource>): BrainSource {
     projectId: "shop",
     branch: "main",
     enabled: true,
+    wiki: false,
     state: "ready",
     indexedCommit: COMMIT,
     attemptedCommit: COMMIT,
@@ -207,6 +231,7 @@ describe("BrainService.status", () => {
       reason: "Project shop has no document repository",
       configured: false,
       enabled: false,
+      wiki: false,
       state: "not-built",
       branch: "main",
       defaultBranch: null,
@@ -240,6 +265,7 @@ describe("BrainService.status", () => {
       available: true,
       configured: true,
       enabled: true,
+      wiki: false,
       state: "ready",
       branch: "release",
       defaultBranch: "main",
@@ -311,6 +337,80 @@ describe("BrainService.configure and rebuild", () => {
     const off = setup({ row: { enabled: false } });
     await expect(off.brain.rebuild("shop", actor)).rejects.toThrow(/off: turn it on first/);
     expect(off.queue.enqueue).not.toHaveBeenCalled();
+  });
+});
+
+describe("BrainService.followDefaultBranch", () => {
+  it("moves the Brain of a wiki project to the new branch, builds it and audits the change", async () => {
+    const { brain, queue, audit, index } = setup({ row: { wiki: true, branch: "main" }, tips: ["main", "release"] });
+    await brain.followDefaultBranch("docs", "release", actor);
+    expect(index.row).toMatchObject({ wiki: true, enabled: true, branch: "release" });
+    expect(queue.enqueue).toHaveBeenCalledWith("shop");
+    expect(audit.recordChange).toHaveBeenCalledWith({ actor: "u1", action: "brain.configure", projectId: "shop", detail: { branch: "release", enabled: true, wiki: true, reason: "default-branch", username: "alice" } });
+  });
+
+  it("waits for the sync when the mirror lacks the branch, and leaves projects that are not wikis or already there", async () => {
+    const early = setup({ row: { wiki: true, branch: "main" }, tips: ["main"] });
+    await early.brain.followDefaultBranch("docs", "release", actor);
+    expect(early.index.row).toMatchObject({ branch: "release" });
+    expect(early.queue.enqueue).not.toHaveBeenCalled();
+    const plain = setup({ row: { wiki: false, branch: "main" }, tips: ["main", "release"] });
+    await plain.brain.followDefaultBranch("docs", "release", actor);
+    expect(plain.index.row).toMatchObject({ branch: "main" });
+    const there = setup({ row: { wiki: true, branch: "release" }, tips: ["main", "release"] });
+    await there.brain.followDefaultBranch("docs", "release", actor);
+    expect(there.queue.enqueue).not.toHaveBeenCalled();
+    expect(there.audit.recordChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("BrainService wiki switch", () => {
+  it("turns the Brain on for the default branch, builds it and records the change", async () => {
+    const { brain, queue, audit, index } = setup({ row: { branch: "release", enabled: false }, tips: ["main", "release"] });
+    const status = await brain.setWiki("shop", true, actor);
+    expect(status).toMatchObject({ wiki: true, enabled: true, branch: "main" });
+    expect(index.row).toMatchObject({ wiki: true, enabled: true, branch: "main" });
+    expect(queue.enqueue).toHaveBeenCalledWith("shop");
+    expect(audit.recordChange).toHaveBeenCalledWith({ actor: "u1", action: "wiki.switch", projectId: "shop", detail: { enabled: true, branch: "main", username: "alice" } });
+    const fresh = setup({ noRow: true, tips: ["main"] });
+    await fresh.brain.setWiki("shop", true, actor);
+    expect(fresh.index.row).toMatchObject({ wiki: true, enabled: true, branch: "main" });
+  });
+
+  it("changes and queues nothing when the wiki is already on, and says why the default branch is missing", async () => {
+    const on = setup({ row: { wiki: true, branch: "main" }, tips: ["main"] });
+    await on.brain.setWiki("shop", true, actor);
+    expect(on.queue.enqueue).not.toHaveBeenCalled();
+    expect(on.audit.recordChange).not.toHaveBeenCalled();
+    const off = setup({ row: { wiki: false }, tips: ["main"] });
+    await off.brain.setWiki("shop", false, actor);
+    expect(off.audit.recordChange).not.toHaveBeenCalled();
+    const unsynced = setup({ noRow: true, tips: ["other"] });
+    await expect(unsynced.brain.setWiki("shop", true, actor)).rejects.toThrow(ConflictException);
+    expect(unsynced.index.row).toBeUndefined();
+  });
+
+  it("switches off without touching the Brain, then frees its branch", async () => {
+    const { brain, queue, audit, index } = setup({ row: { wiki: true, branch: "main" }, tips: ["main", "release"] });
+    const status = await brain.setWiki("shop", false, actor);
+    expect(status).toMatchObject({ wiki: false, enabled: true, branch: "main" });
+    expect(queue.enqueue).not.toHaveBeenCalled();
+    expect(audit.recordChange).toHaveBeenCalledWith({ actor: "u1", action: "wiki.switch", projectId: "shop", detail: { enabled: false, branch: "main", username: "alice" } });
+    await brain.configure("shop", { branch: "release", enabled: true }, actor);
+    expect(index.row).toMatchObject({ wiki: false, branch: "release" });
+  });
+
+  it("keeps a wiki project's Brain on the default branch and on", async () => {
+    const { brain, queue, index } = setup({ row: { wiki: true, branch: "main" }, tips: ["main", "release"] });
+    await expect(brain.configure("shop", { branch: "release", enabled: true }, actor)).rejects.toThrow("A wiki project's Brain follows the default branch");
+    await expect(brain.configure("shop", { branch: "release", enabled: true }, actor)).rejects.toThrow(ConflictException);
+    await expect(brain.configure("shop", { enabled: false }, actor)).rejects.toThrow("Turn the wiki off before turning the Brain off");
+    expect(index.row).toMatchObject({ wiki: true, branch: "main", enabled: true });
+    expect(queue.enqueue).not.toHaveBeenCalled();
+    await brain.configure("shop", { branch: "main", enabled: true }, actor);
+    await brain.configure("shop", { enabled: true }, actor);
+    expect(index.row).toMatchObject({ wiki: true, branch: "main" });
+    expect(queue.enqueue).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -473,6 +573,63 @@ describe("BrainService.lookup by label and space", () => {
   });
 });
 
+describe("BrainService.broken", () => {
+  it("serves what the build stored with the indexed commit, and says when the build hit its limit", async () => {
+    const { brain, index } = setup();
+    index.broken_ = [{ from: "a.md", target: "gone.md" }, { from: "b.md", target: "x/missing.md" }];
+    expect(await brain.broken("shop")).toEqual({ projectId: "shop", branch: "main", commit: COMMIT, links: index.broken_, truncated: false });
+    index.broken_ = Array.from({ length: BRAIN_MAX_BROKEN_LINKS }, (_, at) => ({ from: `p${at}.md`, target: "gone.md" }));
+    expect((await brain.broken("shop")).truncated).toBe(true);
+  });
+
+  it("is refused like the other reads while the index is off or not built", async () => {
+    await expect(setup({ noRow: true }).brain.broken("shop")).rejects.toThrow(ConflictException);
+    await expect(setup({ row: { enabled: false } }).brain.broken("shop")).rejects.toThrow(ConflictException);
+    await expect(setup({ row: { indexedCommit: null, state: "queued" } }).brain.broken("shop")).rejects.toThrow(ConflictException);
+  });
+});
+
+describe("BrainService.backlinks", () => {
+  const pages = (count: number) =>
+    [
+      { path: "target.md", text: "# Target\n\n## Setup\n\nSteps.\n" },
+      ...Array.from({ length: count }, (_, at) => ({ path: `from/p${String(at).padStart(2, "0")}.md`, text: `# P${at}\n\nSee [setup](../target.md#setup)${at % 2 === 0 ? " and [the page](../target.md)" : ""}.\n` })),
+      { path: "inner.md", text: "# Inner\n\n## A\n\nSee [b](#b).\n\n## B\n\nText.\n" },
+    ];
+
+  it("counts the links to the page and to its headings, each page once per link, and none from inside the page", async () => {
+    const { brain, index } = setup();
+    index.nodes = buildBrainTree(pages(3), "shop-docs").nodes;
+    index.links_ = buildBrainTree(pages(3), "shop-docs").links;
+    const found = await brain.backlinks("shop", { node: "target.md", offset: 0, limit: 20 });
+    expect(found).toMatchObject({ total: 5, offset: 0, nextOffset: null, commit: COMMIT, node: { id: "target.md" } });
+    expect(found.items.map((item) => [item.node.path, item.target.id])).toEqual([
+      ["from/p00.md", "target.md"],
+      ["from/p00.md", "target.md#setup"],
+      ["from/p01.md", "target.md#setup"],
+      ["from/p02.md", "target.md"],
+      ["from/p02.md", "target.md#setup"],
+    ]);
+    expect((await brain.backlinks("shop", { node: "target.md#setup", offset: 0, limit: 20 })).items.map((item) => item.node.path)).toEqual(["from/p00.md", "from/p01.md", "from/p02.md"]);
+    expect((await brain.backlinks("shop", { node: "inner.md", offset: 0, limit: 20 })).total).toBe(0);
+  });
+
+  it("pages through them and refuses a folder or an unknown node", async () => {
+    const { brain, index } = setup();
+    const tree = buildBrainTree(pages(25), "shop-docs");
+    index.nodes = tree.nodes;
+    index.links_ = tree.links;
+    const first = await brain.backlinks("shop", { node: "target.md#setup", offset: 0, limit: 20 });
+    expect(first).toMatchObject({ total: 25, nextOffset: 20 });
+    expect(first.items).toHaveLength(20);
+    const second = await brain.backlinks("shop", { node: "target.md#setup", offset: 20, limit: 20 });
+    expect(second).toMatchObject({ total: 25, nextOffset: null });
+    expect(second.items).toHaveLength(5);
+    await expect(brain.backlinks("shop", { node: "from/", offset: 0, limit: 20 })).rejects.toThrow(BadRequestException);
+    await expect(brain.backlinks("shop", { node: "nothing.md", offset: 0, limit: 20 })).rejects.toThrow(NotFoundException);
+  });
+});
+
 describe("BrainService.grep", () => {
   const hit = (path: string, line: number, text = "late fee"): GrepLine => ({ path, line, text });
 
@@ -510,6 +667,31 @@ describe("BrainService.grep", () => {
     expect(section.documents.grep).toHaveBeenCalledWith(expect.anything(), COMMIT, ["fee"], { ignoreCase: true, under: SPEC_PATH, limit: 200 });
     expect(found.under).toBe(`${SPEC_PATH}#business-rules`);
     expect(found.matches.map((match) => match.line)).toEqual([5, 9, 10]);
+  });
+
+  it("limits the search to the pages of a space and a label, before the limit applies", async () => {
+    const team = "20-spaces/team/db.md";
+    const { brain, documents, index } = setup({ grep: { matches: [hit(team, 6)], truncated: false } });
+    index.nodes = buildBrainTree(
+      [
+        { path: "20-spaces/team/README.md", text: "---\nkey: TEAM\n---\n\n# Team\n\nThe team's space.\n" },
+        { path: team, text: "---\nlabels: [runbook, sev1]\n---\n\n# Database\n\nlate fee.\n" },
+        { path: "20-spaces/team/cache.md", text: "---\nlabels: [runbook]\n---\n\n# Cache\n\nlate fee.\n" },
+      ],
+      "shop-docs",
+    ).nodes;
+    const onlyOf = (call: number) => ([...(documents.grep.mock.calls[call] as unknown as [unknown, string, string[], { only: ReadonlySet<string> }])[3].only]).sort();
+    const found = await brain.grep("shop", { text: "late", ignoreCase: true, space: "team", label: "sev1" });
+    expect(found).toMatchObject({ space: "TEAM", label: "sev1", truncated: false });
+    expect(onlyOf(0)).toEqual([team]);
+    expect((documents.grep.mock.calls[0] as unknown as unknown[])[3]).toMatchObject({ limit: 2000 });
+    expect(found.matches.map((match) => match.node.path)).toEqual([team]);
+    // A label alone limits to its pages; an unknown one has none, so git is not asked.
+    await brain.grep("shop", { text: "late", ignoreCase: true, label: "runbook" });
+    expect(onlyOf(1)).toEqual(["20-spaces/team/cache.md", team]);
+    const none = await brain.grep("shop", { text: "late", ignoreCase: true, label: "unknown" });
+    expect(none).toMatchObject({ matches: [], truncated: false, space: null, label: "unknown" });
+    expect(documents.grep).toHaveBeenCalledTimes(2);
   });
 
   it("keeps fifty lines and says when there were more", async () => {

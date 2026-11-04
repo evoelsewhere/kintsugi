@@ -5,10 +5,12 @@
 import { access } from "node:fs/promises";
 import { Injectable } from "@nestjs/common";
 import { CheckoutStorage, GitError, dataDirFromEnv, runGit, runGitBytes } from "@kintsugi/git";
-import type { BytesRead, DiffFile, DocumentDiff, DocumentRepo, FileRead, FileVersion, GrepLine, MirrorBranch, TreeEntry } from "../domain/document.js";
+import type { BytesRead, DiffFile, DocumentDiff, DocumentRepo, FileRead, FileVersion, GrepLine, MirrorBranch, RecentCommit, TreeEntry } from "../domain/document.js";
 import { DocumentRepoReader } from "../domain/document.ports.js";
 
 const TIMEOUT_MS = 30_000;
+/** The most commits the recent changes read: the newest ones that changed a Markdown file. */
+const RECENT_SCAN_MAX = 2_000;
 /** The most versions of one file the history reads: the newest ones. */
 const HISTORY_SCAN_MAX = 2_000;
 
@@ -110,7 +112,7 @@ export class GitMirrorDocumentReader extends DocumentRepoReader {
     return this.git(repo, ["-c", "core.quotePath=false", "--literal-pathspecs", "diff", "--unified=3", "--no-color", "--no-ext-diff", "--no-textconv", "--no-renames", from, to, "--", path]);
   }
 
-  async grep(repo: DocumentRepo, commit: string, terms: readonly string[], options: { ignoreCase: boolean; under?: string; limit: number }): Promise<{ matches: GrepLine[]; truncated: boolean }> {
+  async grep(repo: DocumentRepo, commit: string, terms: readonly string[], options: { ignoreCase: boolean; under?: string; only?: ReadonlySet<string>; limit: number }): Promise<{ matches: GrepLine[]; truncated: boolean }> {
     // Fixed strings over the Markdown files only: their blobs are in the mirror, and a pattern cannot backtrack.
     // Several terms must all be on the same line.
     const patterns = terms.flatMap((term, index) => [...(index === 0 ? [] : ["--and"]), "-e", term]);
@@ -126,11 +128,14 @@ export class GitMirrorDocumentReader extends DocumentRepoReader {
       if (record === "") continue;
       const [location, line, ...rest] = record.split("\0");
       if (location === undefined || line === undefined) continue;
+      const path = location.slice(commit.length + 1);
+      // Only the files the caller asked for count toward the limit, so a filter never loses a page to other pages' lines.
+      if (options.only !== undefined && !options.only.has(path)) continue;
       if (matches.length === options.limit) {
         truncated = true;
         break;
       }
-      matches.push({ path: location.slice(commit.length + 1), line: Number(line), text: rest.join("\0") });
+      matches.push({ path, line: Number(line), text: rest.join("\0") });
     }
     return { matches, truncated };
   }
@@ -194,6 +199,46 @@ export class GitMirrorDocumentReader extends DocumentRepoReader {
       linesKnown = false;
     }
     return { from: resolved, files: [...files.values()], linesKnown };
+  }
+
+  async recent(repo: DocumentRepo, commit: string): Promise<RecentCommit[]> {
+    // `-z --name-status -M`: after a commit's fields come NUL-separated entries, a status and one path (two for a rename).
+    const format = ["%H", "%aI", "%an", "%ae", "%s", "%(trailers:only,unfold)"].join("%x1f");
+    const out = await this.git(repo, ["log", "-z", "--name-status", "-M", `-n${RECENT_SCAN_MAX}`, `--format=%x1e${format}%x1f`, commit, "--", markdownPathspec("")]);
+    const commits: RecentCommit[] = [];
+    for (const record of out.split("\x1e")) {
+      if (record.trim() === "") continue;
+      const [header = "", ...tokens] = record.split("\0");
+      const [sha = "", date = "", authorName = "", authorEmail = "", subject = "", trailers = ""] = header.trim().split("\x1f");
+      if (sha === "") continue;
+      const trailer = (key: string): string | undefined => {
+        for (const line of trailers.split("\n")) {
+          const colon = line.indexOf(":");
+          if (colon > 0 && line.slice(0, colon).trim().toLowerCase() === key) return line.slice(colon + 1).trim();
+        }
+        return undefined;
+      };
+      const files: DiffFile[] = [];
+      for (let at = 0; at < tokens.length; ) {
+        const code = (tokens[at] ?? "").trim();
+        if (code === "") {
+          at += 1;
+          continue;
+        }
+        const pair = code.startsWith("R") || code.startsWith("C");
+        const first = tokens[at + 1] ?? "";
+        const second = pair ? (tokens[at + 2] ?? "") : "";
+        at += pair ? 3 : 2;
+        const status: DiffFile["status"] = code.startsWith("R") ? "renamed" : code.startsWith("D") ? "deleted" : code.startsWith("A") || code.startsWith("C") ? "added" : "modified";
+        // A copy is a new file; a rename names the old path first and the new one second.
+        if (code.startsWith("R")) files.push({ path: second, previousPath: first, status, added: 0, removed: 0, hunks: [] });
+        else files.push({ path: pair ? second : first, previousPath: null, status, added: 0, removed: 0, hunks: [] });
+      }
+      if (files.length === 0) continue;
+      const actor = trailer("kintsugi-actor");
+      commits.push({ sha, date: new Date(date).toISOString(), subject, authorName, authorEmail, trailerActor: actor === "" ? undefined : actor, trailerMinor: trailer("kintsugi-minor")?.toLowerCase() === "true", files });
+    }
+    return commits;
   }
 
   async history(repo: DocumentRepo, commit: string, path: string, options: { limit: number; before?: string }): Promise<{ entries: FileVersion[]; more: boolean }> {

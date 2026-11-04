@@ -9,6 +9,7 @@ import { useMemo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { DocumentLink } from "./document-links";
+import { MarkdownImage } from "./markdown-image";
 import { MermaidDiagram } from "./mermaid-diagram";
 import { type HastNode, textOf, wikiMarkdown } from "./markdown-wiki";
 
@@ -85,6 +86,7 @@ export default function Markdown({ text, path }: { text: string; path?: string |
           {children}
         </DocumentLink>
       ),
+      img: ({ src, alt }) => <MarkdownImage src={typeof src === "string" ? src : undefined} alt={alt} basePath={path} />,
     }),
     [path],
   );

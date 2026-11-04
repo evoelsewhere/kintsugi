@@ -54,14 +54,23 @@ The index holds at most 20,000 documents. A document has at most 2,000 headings;
 | A manager builds or turns on the Brain (Brain → Build, `project.brain.manage`) | The branch is checked and a build is queued |
 | A sync moves the default branch | A build is queued for the projects that follow it |
 | Every minute | The worker queues builds whose branch moved, builds lost with a stopped worker, and indexes made by an older builder |
-| Rebuild | A build of the branch's tip, even when it did not move |
+| Rebuild | A build of the branch's tip, even when it did not move; always a whole build |
 | Turn off | Reads are refused and no build runs; the tree is kept |
 
 Builds run on the worker's queue `brain-index`, one per project at a time. A build:
 
 1. resolves the branch in the mirror and fetches the Markdown blobs of its tip;
-2. reads all of them in one batch and builds the tree;
-3. replaces the stored tree in one transaction.
+2. reads the documents and builds the tree, whole or incrementally (below);
+3. writes the tree in one transaction.
+
+A **whole** build reads every indexed document, builds the tree and replaces the stored one; it also writes `knowledge.brain_ref`, the references each document makes (a link or a mention of an id, in the order they were found), and the front matter data the tree reads again (`brain_node.home`: a home page's `key` and `order`, a card's anchor alias). An **incremental** build ([ADR-0097](../decisions/0097-brain-indexes-wiki-pages.md) decision 6) reads only the documents that changed since the stored commit, takes the others from the stored rows and references, assembles the tree with the same code (`assembleBrainTree`), and writes only the rows that differ, in one transaction that checks the index is still at the commit it started from. It stores the same rows as a whole build of the same commit: a property test of the builder and a database test prove it. The last change recorded for a document that did not change is the stored one, so a document whose last change is older than the 10,000 commits a whole build reads may show it until the next whole build.
+
+An incremental build runs only when all of these hold; otherwise, and when it fails, the same job builds whole:
+
+- the stored tree was built by this builder version, from a whole build whose references are stored, and left no document out;
+- the stored commit is an ancestor of the new one, and at most 2,000 indexed files (and at most a fifth of the documents) changed;
+- fewer than 50 incremental builds have followed the last whole build, and that build is less than a day old;
+- the build is not a manager's Rebuild, which always builds whole.
 
 A failed build sets the state `failed` with its error and is not retried on the same commit. The tree of the last good build stays readable. States are `not-built`, `queued`, `indexing`, `ready`, `failed` and `off`.
 
@@ -75,8 +84,12 @@ All reads use the tree of the indexed commit and fail with 409 until a first bui
 | `GET …/brain/tree?node&depth&offset&limit` | `GET /api/member/v1/brain/tree?projectId&node&depth&offset&limit` | `brain_tree` | The node, its breadcrumb and one level of children with summaries (depth 2: the first 20 grandchildren too); 50 per page by default, at most 100 for members and 200 in the portal |
 | `GET …/brain/node?node&scope&fromLine` | `GET /api/member/v1/brain/read?projectId&node&scope&fromLine` | `brain_read` | The node's text, its `citation` (`nodeId`, `path`, `lineStart`, `lineEnd`, `commit`: the range read), children, and up to 20 links each way |
 | `GET …/brain/lookup?q` | `GET /api/member/v1/brain/lookup?projectId&query` | `brain_lookup` | The nodes a reference id, node id or path names, with breadcrumbs |
-| `GET …/brain/grep?text&under&ignoreCase` | `GET /api/member/v1/brain/grep?projectId&text&under&ignoreCase` | `brain_grep` | Up to 50 lines that hold every word of the text, in any order (a quoted text: that exact phrase), case-insensitive by default, each in the deepest node that holds it |
+| `GET …/brain/grep?text&under&ignoreCase&space&label` | `GET /api/member/v1/brain/grep?projectId&text&under&ignoreCase` | `brain_grep` | Up to 50 lines that hold every word of the text, in any order (a quoted text: that exact phrase), case-insensitive by default, each in the deepest node that holds it. The portal route also takes `space` (a space key in any case, 400 when malformed) and `label` (one label, cleaned as the Brain stores it, 400 when nothing is left); both limit the search to the pages of that space or with that label (both: the pages that have both) before the 50 are cut, so no page of the space is lost to other pages' lines. The view returns the `space` (upper case) and `label` it used, and `matches: []` when none exists. The member route does not take them yet |
+| `GET …/brain/broken` | | | The links of the indexed documents to Markdown files the repository does not have: `{ projectId, branch, commit, links: [{ from, target }], truncated }`, `from` a document path and `target` the path as written; at most 5,000 (`truncated` says the build stopped there). Same refusals as the other reads while the Brain is off or not built |
+| `GET …/brain/backlinks?node&offset&limit` | | | The pages that link to a page (the page itself or any heading or card in it) or to one heading or card, as `items: [{ node, target, linkKind }]`: `node` is the section or card of another page that holds the link and `target` what it points at, in the order of the linking node's path and line; one item per link (a node that links to the page and to a heading of it has two). Links from inside the same page are not backlinks. A window of 20 by default (at most 100) with `total`, `offset` and `nextOffset` (null after the last). 400 for a folder. `brain_read`'s `incoming` keeps its meaning: the links to exactly that node, so a page linked only through its headings has none there |
 | `GET …/brain/changes?since&under` | `GET /api/member/v1/brain/changes?projectId&since&under` | `brain_changes` | What changed from an earlier commit (full or abbreviated id, such as the commit of a citation) to the indexed one: up to 100 changed documents with their status (added, modified, deleted, renamed), lines added and removed, and up to 30 sections and cards whose own lines changed. It is computed from Git on each call and never stored. A document moved within the scope is `renamed`; one moved into what the Brain indexes is `added` and one moved out of it is `deleted` under its old path. When the mirror lacks the older text, `linesKnown` is false and documents are listed without their sections. A commit the mirror does not have answers 404 |
+
+`broken` is derived from the references that resolve to nothing (ADR-0097 decision 6) and computed again in full by every build, whole or incremental. Phase 1 stores it as an array in `knowledge.brain_source.broken` (migration 053); when the build keeps its raw references (`knowledge.brain_ref`) the same answer is derived from them and the route and its shape do not change. Targets are shown as text; a link to a Markdown file that exists, and links to anything else, are never listed.
 
 `scope` of a read is `subtree` (the node with everything under it), `node` (its own text; its children are listed) or `auto`. With `auto`, which members get by default, a node with children is read whole up to about 6,000 tokens and as its own text above that. A member's read starts every line of its text with the line number and a tab (`lineNumbers: true`), so the agent cites only the lines that hold the answer rather than the whole range read; the portal's read is the text as written. Text is cut at 24,000 characters for members (200,000 in the portal); `truncated` and `nextLine` say where to continue.
 
@@ -88,6 +101,16 @@ Managing the Brain:
 | POST | `/api/projects/:id/brain/rebuild` | 202 with the state; 409 when the Brain is off |
 
 Both need `project.brain.manage` and are audited (`brain.configure`, `brain.rebuild`).
+
+### The wiki switch
+
+A project's wiki is a flag on its Brain source (`knowledge.brain_source.wiki`, migration 052; `wiki` in the status view). While it is on, the Brain follows the repository's default branch and stays on (ADR-0097 decision 5):
+
+| Method | Route | Contract |
+| --- | --- | --- |
+| PUT | `/api/projects/:id/wiki` | `{ "enabled": true }` turns the Brain on for the default branch and queues a build; `{ "enabled": false }` clears the flag and leaves the Brain as it is, its branch free to choose again. Asking for the state the project is in changes and queues nothing. 409 when the project has no document repository or its default branch is not in the mirror yet |
+
+The switch needs `wiki.manage` on top of Project Access, and is audited (`wiki.switch`, with the branch). It takes no branch, so it needs no `project.brain.manage`. While the wiki is on, `PUT /api/projects/:id/brain` answers 409 when it names another branch ("A wiki project's Brain follows the default branch") or turns the Brain off ("Turn the wiki off before turning the Brain off"); the default branch, or none, still works. When the repository's default branch is changed in Kintsugi (Administration → Git repositories), the Brain of every wiki project that keeps its documents there moves to the new branch in the same request: it is built at once when the mirror already has the branch, and otherwise by the sync that brings it. The change is audited as `brain.configure` (`reason: default-branch`) under the administrator who made it, and a project whose wiki is off keeps the branch it was given. Known limits: a default branch changed at the remote only is not followed until someone sets it in Kintsugi; and the move is made after the repository's branch was saved, so when it fails (the error is logged, never returned to the administrator) the Brain stays on the old branch until the next `PUT …/brain` or `PUT …/wiki`, or until the switch is turned off and on again.
 
 ## How an agent uses it
 
@@ -106,4 +129,4 @@ Text returned by the Brain is project data, not instructions. Each `brain_read` 
 
 ## Storage
 
-`knowledge.brain_source` holds one row per project: branch, state, indexed and attempted commit, counts, error and builder version. `knowledge.brain_node` and `knowledge.brain_link` hold the tree of the indexed commit; `brain_node.outgoing_links` is the total of a node whose links were capped. Deleting a project deletes its Brain.
+`knowledge.brain_source` holds one row per project: branch, state, indexed and attempted commit, counts, error and builder version. `knowledge.brain_node` and `knowledge.brain_link` hold the tree of the indexed commit, `knowledge.brain_ref` the references of its documents, and `brain_source` counts the incremental builds since the last whole one (`incremental_builds`, `whole_built_at`, `last_build`, `refs_complete`); `brain_node.outgoing_links` is the total of a node whose links were capped. Deleting a project deletes its Brain.

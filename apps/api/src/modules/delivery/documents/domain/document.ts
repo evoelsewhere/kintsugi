@@ -132,6 +132,11 @@ export interface FileVersion {
   trailerMinor: boolean;
 }
 
+/** A commit with the Markdown files it changed, as Git records it (the paths are not yet filtered for the reader). */
+export interface RecentCommit extends FileVersion {
+  files: DiffFile[];
+}
+
 /** One version of a file: a commit that changed it (ADR-0096 decision 5). */
 export interface HistoryEntry {
   sha: string;
@@ -146,6 +151,22 @@ export interface HistoryEntry {
   actor: string;
   /** The commit is Kintsugi's own and carries the trailer `Kintsugi-Minor: true`. */
   minor: boolean;
+}
+
+/** A commit of the recent changes: its version fields and the Markdown files it changed that the reader may see. */
+export interface RecentEntry extends HistoryEntry {
+  files: Array<{ path: string; previousPath: string | null; status: DiffFile["status"] }>;
+  /** The commit changed more files than are listed. */
+  moreFiles: boolean;
+}
+
+/** The newest commits of a ref that changed Markdown files the reader may see, newest first (ADR-0096). */
+export interface DocumentRecent {
+  ref: string;
+  commit: string;
+  entries: RecentEntry[];
+  /** The `before` of the following page, `null` when there are no older commits. */
+  next: string | null;
 }
 
 /** The versions of a file, newest first; `next` is the `before` of the following page when there are older ones. */

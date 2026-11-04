@@ -6,7 +6,7 @@ import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BRAIN_BUILDER_VERSION, BRAIN_MAX_FILE_BYTES, BRAIN_MAX_LINKS_PER_NODE, type BrainSource, buildBrainTree } from "@kintsugi/domain";
+import { BRAIN_BUILDER_VERSION, BRAIN_MAX_FILE_BYTES, BRAIN_MAX_LINKS_PER_NODE, type BrainSource, assembleBrainTree, brainPartsOfSources } from "@kintsugi/domain";
 import { CheckoutStorage } from "@kintsugi/git";
 import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -150,7 +150,26 @@ describe.skipIf(!hasDatabase)("brain index (integration)", () => {
     expect((await store.byLabel("shop", "runbook", 10)).map((node) => node.id)).toEqual(["00-project/team/first.md"]);
     expect(await store.byLabel("shop", "nothing", 10)).toEqual([]);
     expect((await store.bySpace("shop", "TEAM", 10)).map((node) => node.id)).toEqual(["00-project/team/README.md", "00-project/team/first.md", "00-project/team/second.md"]);
-    expect(await store.bySpace("shop", "team", 10)).toEqual([]);
+    // The key is compared in one case (P-019), also when the index holds a key written in lower case.
+    expect((await store.bySpace("shop", "team", 10)).map((node) => node.id)).toEqual(["00-project/team/README.md", "00-project/team/first.md", "00-project/team/second.md"]);
+    await db.pool.query("update knowledge.brain_node set space = 'Team' where project_id = 'shop' and space = 'TEAM'");
+    expect((await store.bySpace("shop", "TEAM", 10)).map((node) => node.id)).toEqual(["00-project/team/README.md", "00-project/team/first.md", "00-project/team/second.md"]);
+    expect(await store.bySpace("shop", "OTHER", 10)).toEqual([]);
+  });
+
+  it("stores the links to a page that is not there, in full for each build (P2-023)", async () => {
+    await remote.commit("shop-docs", "00-project/links.md", "# Links\n\nSee [the plan](missing.md) and [the charter](charter.md).\n");
+    await syncRepository({ store: deps.repositories, storage: deps.storage }, "shop-docs");
+    await indexBrain(deps, "shop");
+    const broken = async () => (await db.pool.query<{ broken: unknown }>("select broken from knowledge.brain_source where project_id = 'shop'")).rows[0]?.broken;
+    expect(await broken()).toEqual([{ from: "00-project/links.md", target: "00-project/missing.md" }]);
+    expect(await store.source("shop")).toMatchObject({ state: "ready" });
+
+    // The link is mended: the next build replaces the list, it does not add to it.
+    await remote.commit("shop-docs", "00-project/links.md", "# Links\n\nSee [the plan](charter.md).\n");
+    await syncRepository({ store: deps.repositories, storage: deps.storage }, "shop-docs");
+    await indexBrain(deps, "shop");
+    expect(await broken()).toEqual([]);
   });
 
   it("fails the build of a project without a document repository", async () => {
@@ -190,18 +209,18 @@ describe.skipIf(!hasDatabase)("brain links of a node over the cap (integration, 
     await db?.drop();
   });
 
-  const build = (count: number) =>
-    buildBrainTree(
-      [
-        { path: INDEX, text: `# Index\n\n${Array.from({ length: count }, (_, n) => `- [Page ${n}](p${n}.md)`).join("\n")}` },
-        ...Array.from({ length: count }, (_, n) => ({ path: `00-project/p${n}.md`, text: `# Page ${n}\n\nText.` })),
-      ],
-      "wide @ main",
-    );
+  const build = (count: number) => {
+    const { parts, indexed } = brainPartsOfSources([
+      { path: INDEX, text: `# Index\n\n${Array.from({ length: count }, (_, n) => `- [Page ${n}](p${n}.md)`).join("\n")}` },
+      ...Array.from({ length: count }, (_, n) => ({ path: `00-project/p${n}.md`, text: `# Page ${n}\n\nText.` })),
+    ]);
+    return { parts, tree: assembleBrainTree(parts, "wide @ main", indexed) };
+  };
 
   it("stores the cap and says how many links there are, at the cap and one over it", async () => {
     for (const count of [BRAIN_MAX_LINKS_PER_NODE, BRAIN_MAX_LINKS_PER_NODE + 1]) {
-      await store.replace("wide", "c".repeat(40), BRAIN_BUILDER_VERSION, build(count), { durationMs: 1 });
+      const { parts, tree } = build(count);
+      await store.replace("wide", "c".repeat(40), BRAIN_BUILDER_VERSION, tree, { durationMs: 1 }, parts);
       const stored = await db.pool.query<{ count: string }>("select count(*) from knowledge.brain_link where project_id = 'wide' and from_id = $1", [INDEX]);
       expect(Number(stored.rows[0]?.count), String(count)).toBe(BRAIN_MAX_LINKS_PER_NODE);
       const links = await store.links("wide", INDEX, 20);
@@ -264,6 +283,7 @@ describe("brainBuildDue", () => {
     projectId: "shop",
     branch: "main",
     enabled: true,
+    wiki: false,
     state: "ready",
     indexedCommit: "a".repeat(40),
     attemptedCommit: "a".repeat(40),

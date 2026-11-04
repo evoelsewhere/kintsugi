@@ -1,3 +1,4 @@
+import { brainLabels } from "@kintsugi/domain";
 import { z } from "zod";
 
 /** A node id: `/`, a folder path ending in `/`, a document path, or `path#anchor`. */
@@ -16,6 +17,9 @@ export const brainConfigureSchema = z
   .strict();
 export type BrainConfigureBody = z.infer<typeof brainConfigureSchema>;
 
+export const wikiSwitchSchema = z.object({ enabled: z.boolean() }).strict();
+export type WikiSwitchBody = z.infer<typeof wikiSwitchSchema>;
+
 export const brainTreeQuerySchema = z.object({
   node: brainNodeIdSchema.optional(),
   depth: z.coerce.number().int().min(1).max(2).default(1).transform((value) => value as 1 | 2),
@@ -31,6 +35,13 @@ export const brainReadQuerySchema = z.object({
 });
 export type BrainReadQueryDto = z.infer<typeof brainReadQuerySchema>;
 
+export const brainBacklinksQuerySchema = z.object({
+  node: brainNodeIdSchema,
+  offset: z.coerce.number().int().min(0).default(0),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+export type BrainBacklinksQueryDto = z.infer<typeof brainBacklinksQuerySchema>;
+
 export const brainLookupQuerySchema = z.object({ q: z.string().trim().min(1).max(2000) });
 export type BrainLookupQueryDto = z.infer<typeof brainLookupQuerySchema>;
 
@@ -38,6 +49,17 @@ export const brainGrepQuerySchema = z.object({
   text: z.string().min(2).max(200),
   under: brainNodeIdSchema.optional(),
   ignoreCase: ignoreCaseQuery,
+  /** A space key (ADR-0096), in any case. */
+  space: z.string().trim().regex(/^[A-Za-z][A-Za-z0-9]{1,9}$/, "must be a space key: a letter, then letters or digits, 2 to 10 characters").optional(),
+  /** One label, cleaned as the Brain stores it (lowercase, letters, digits and hyphens). */
+  label: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .transform((value) => brainLabels([value])[0] ?? "")
+    .refine((value) => value !== "", "a label holds letters, digits and hyphens")
+    .optional(),
 });
 export type BrainGrepQueryDto = z.infer<typeof brainGrepQuerySchema>;
 

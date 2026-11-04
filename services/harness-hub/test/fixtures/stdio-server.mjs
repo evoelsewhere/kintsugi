@@ -65,6 +65,16 @@ const member = {
   async brainGrep(query) {
     return { schemaVersion: "1", projectId: query.projectId, branch: "main", commit: sha("a"), text: query.text, under: null, matches: [], truncated: false };
   },
+  async brainBacklinks(query) {
+    const node = (id) => ({
+      id, kind: "document", title: id, summary: "", summarySource: "none", path: id.split("#")[0], anchor: null,
+      lineStart: 3, lineEnd: 5, subtreeEnd: 5, tokens: 3, subtreeTokens: 3, children: 0, ids: [], changed: null,
+    });
+    return {
+      schemaVersion: "1", projectId: query.projectId, branch: "main", commit: sha("a"), node: node(query.node),
+      items: [{ node: node("a.md"), target: node(query.node), linkKind: "link" }], total: 1, offset: 0, nextOffset: null,
+    };
+  },
   async brainChanges(query) {
     return { schemaVersion: "1", projectId: query.projectId, branch: "main", commit: sha("a"), since: sha("b"), files: [], linesKnown: true, truncated: false };
   },

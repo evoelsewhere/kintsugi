@@ -3,17 +3,19 @@
 
 import { Body, Controller, Get, HttpCode, Param, Post, Put, Query, UseGuards } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
-import type { BrainChangesView, BrainGrepView, BrainLookupView, BrainReadView, BrainStatusView, BrainTreeView } from "@kintsugi/domain";
+import type { BrainBacklinksView, BrainBrokenView, BrainChangesView, BrainGrepView, BrainLookupView, BrainReadView, BrainStatusView, BrainTreeView } from "@kintsugi/domain";
 import { type Actor, CurrentActor, RequirePermission } from "#common/auth/decorators.js";
 import { ProjectAccessGuard } from "#modules/admin/project-access/index.js";
 import { BrainService } from "../application/brain.service.js";
 import {
+  type BrainBacklinksQueryDto,
   type BrainChangesQueryDto,
   type BrainConfigureBody,
   type BrainGrepQueryDto,
   type BrainLookupQueryDto,
   type BrainReadQueryDto,
   type BrainTreeQueryDto,
+  brainBacklinksQuerySchema,
   brainChangesQuerySchema,
   brainConfigureSchema,
   brainGrepQuerySchema,
@@ -64,6 +66,12 @@ export class BrainController {
     return this.brain.read(id, { ...query, maxChars: PORTAL_READ_CHARS });
   }
 
+  @Get("backlinks")
+  @ApiOperation({ summary: "The pages that link to a page, a heading or a card, a window of them in path order" })
+  backlinks(@Param("id") id: string, @Query({ schema: brainBacklinksQuerySchema }) query: BrainBacklinksQueryDto): Promise<BrainBacklinksView> {
+    return this.brain.backlinks(id, query);
+  }
+
   @Get("lookup")
   @ApiOperation({ summary: "The nodes a reference id, node id or repository path names" })
   lookup(@Param("id") id: string, @Query({ schema: brainLookupQuerySchema }) query: BrainLookupQueryDto): Promise<BrainLookupView> {
@@ -74,6 +82,12 @@ export class BrainController {
   @ApiOperation({ summary: "The nodes whose text holds a fixed string" })
   grep(@Param("id") id: string, @Query({ schema: brainGrepQuerySchema }) query: BrainGrepQueryDto): Promise<BrainGrepView> {
     return this.brain.grep(id, query);
+  }
+
+  @Get("broken")
+  @ApiOperation({ summary: "The links of the indexed documents to Markdown files the repository does not have" })
+  broken(@Param("id") id: string): Promise<BrainBrokenView> {
+    return this.brain.broken(id);
   }
 
   @Get("changes")
