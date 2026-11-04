@@ -187,7 +187,7 @@ function setup(options: Setup = {}) {
     diff: vi.fn(async () => ("diff" in options ? options.diff : { from: "f".repeat(40), files: [], linesKnown: true })),
   };
   const audit = { recordChange: vi.fn(async () => undefined) };
-  const brain = new BrainService(index, queue, documents as unknown as DocumentsService, audit as unknown as AuditTrail);
+  const brain = new BrainService(index, queue, documents as unknown as DocumentsService, audit as unknown as AuditTrail, { search: async () => ({ hits: [], leftOut: { archived: 0, templates: 0 } }) });
   return { brain, index, queue, documents, audit };
 }
 

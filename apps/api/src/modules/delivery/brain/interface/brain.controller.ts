@@ -7,6 +7,7 @@ import type { BrainBacklinksView, BrainBrokenView, BrainChangesView, BrainGrepVi
 import { type Actor, CurrentActor, RequirePermission } from "#common/auth/decorators.js";
 import { ProjectAccessGuard } from "#modules/admin/project-access/index.js";
 import { BrainService } from "../application/brain.service.js";
+import type { BrainSearchView } from "../domain/brain.search.js";
 import {
   type BrainBacklinksQueryDto,
   type BrainChangesQueryDto,
@@ -14,6 +15,7 @@ import {
   type BrainGrepQueryDto,
   type BrainLookupQueryDto,
   type BrainReadQueryDto,
+  type BrainSearchQueryDto,
   type BrainTreeQueryDto,
   brainBacklinksQuerySchema,
   brainChangesQuerySchema,
@@ -21,6 +23,7 @@ import {
   brainGrepQuerySchema,
   brainLookupQuerySchema,
   brainReadQuerySchema,
+  brainSearchQuerySchema,
   brainTreeQuerySchema,
 } from "./brain.dto.js";
 
@@ -82,6 +85,16 @@ export class BrainController {
   @ApiOperation({ summary: "The nodes whose text holds a fixed string" })
   grep(@Param("id") id: string, @Query({ schema: brainGrepQuerySchema }) query: BrainGrepQueryDto): Promise<BrainGrepView> {
     return this.brain.grep(id, query);
+  }
+
+  @Get("search")
+  @ApiOperation({
+    summary: "Ranked search of the indexed pages: the nodes that best answer the words, each with its breadcrumb, summary, matching line and citation",
+    description:
+      "The words are searched in titles, headings, labels and text (the simple configuration: no stemming, no stop words); websearch syntax (quotes, -, or) is understood and odd syntax never fails. Best first, ties by path. Archived pages and templates are left out and counted in leftOut unless archived=true. limit is at most 20. For people in the portal only: the member API and the MCP bridge do not offer it.",
+  })
+  search(@Param("id") id: string, @Query({ schema: brainSearchQuerySchema }) query: BrainSearchQueryDto): Promise<BrainSearchView> {
+    return this.brain.search(id, query);
   }
 
   @Get("broken")

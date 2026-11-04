@@ -31,7 +31,8 @@ import {
 import type { Actor } from "#common/auth/decorators.js";
 import { AUDIT_ACTIONS, AuditTrail, auditRecord } from "#common/audit/audit-trail.js";
 import { type DocumentContext, DocumentsService, diffFileWithin } from "#modules/delivery/documents/index.js";
-import { BrainBuildQueue, BrainIndex } from "../domain/brain.ports.js";
+import { BrainBuildQueue, BrainIndex, BrainSearchIndex } from "../domain/brain.ports.js";
+import { type BrainSearchHit, type BrainSearchView, matchingLine, searchQueryOf, searchWords } from "../domain/brain.search.js";
 
 /** A node at most this large is read whole with what is under it when the reader does not say. */
 export const BRAIN_AUTO_SUBTREE_TOKENS = 6000;
@@ -64,6 +65,15 @@ export interface BrainReadQuery {
   maxChars: number;
   /** Start every line with its number and a tab, so an agent can cite exactly the lines it used. */
   lineNumbers?: boolean;
+}
+
+/** What the ranked search takes: the words, a space or a label to narrow to, and whether archived pages and templates count. */
+export interface BrainSearchQuery {
+  text: string;
+  space?: string | undefined;
+  label?: string | undefined;
+  archived: boolean;
+  limit: number;
 }
 
 export interface BrainGrepQuery {
@@ -119,6 +129,7 @@ export class BrainService {
     private readonly queue: BrainBuildQueue,
     private readonly documents: DocumentsService,
     private readonly audit: AuditTrail,
+    private readonly searchIndex: BrainSearchIndex,
   ) {}
 
   // -------------------------------------------------------------------------
@@ -283,6 +294,40 @@ export class BrainService {
       total: page.total,
       offset: query.offset,
     };
+  }
+
+  /**
+   * The nodes that best answer the words of a search (ADR-0097 decision 7), from the full-text index, best first: each with its
+   * place in the tree, its summary, the first line of its own text that holds a word (read from Git at the indexed commit: the
+   * index keeps no text) and a citation. Archived pages and templates are left out and counted.
+   */
+  async search(projectId: string, query: BrainSearchQuery): Promise<BrainSearchView> {
+    const { source } = await this.ready(projectId);
+    const found = await this.searchIndex.search(projectId, { query: searchQueryOf(query.text), space: query.space?.toUpperCase(), label: query.label, includeHidden: query.archived, limit: query.limit });
+    const words = searchWords(query.text);
+    const context = found.hits.length === 0 ? undefined : await this.documents.context(projectId);
+    // The text of each page once: at most `limit` hits, so at most that many reads.
+    const lines = new Map<string, string[] | undefined>();
+    for (const { node } of found.hits) {
+      if (lines.has(node.path) || context === undefined) continue;
+      const text = await this.documents.readText(context, source.indexedCommit, node.path);
+      lines.set(node.path, text === undefined ? undefined : text.split("\n"));
+    }
+    const hits: BrainSearchHit[] = [];
+    for (const { node, rank } of found.hits) {
+      const own = lines.get(node.path);
+      const start = node.lineStart ?? 1;
+      const end = node.lineEnd ?? start;
+      hits.push({
+        node,
+        breadcrumb: await this.breadcrumb(projectId, node),
+        summary: node.summary,
+        line: own === undefined ? null : matchingLine(own, start, end, words),
+        citation: `${node.path}:${start}-${end}@${source.indexedCommit}`,
+        rank,
+      });
+    }
+    return { commit: source.indexedCommit, hits, leftOut: found.leftOut };
   }
 
   /** A node's text at the indexed commit (with what is under it when small enough), its children and its links. */
