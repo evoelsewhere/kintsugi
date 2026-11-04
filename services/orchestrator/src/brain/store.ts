@@ -218,9 +218,10 @@ export class PgBrainStore {
         `update knowledge.brain_source
             set state = 'ready', indexed_commit = $2, attempted_commit = $2, indexed_at = now(), builder_version = $3,
                 documents = $4, nodes = $5, identifiers = $6, links = $7, tokens = $8, skipped = $9, duration_ms = $10,
-                error = null, updated_at = now()
+                broken = $11::jsonb, error = null, updated_at = now()
           where project_id = $1`,
-        [projectId, commit, builderVersion, tree.documents, tree.nodes.length, tree.identifiers, tree.links.length, tokens, tree.skipped, stats.durationMs],
+        // The links to a page that is not there, in full for this build: a build replaces the list, it never adds to it.
+        [projectId, commit, builderVersion, tree.documents, tree.nodes.length, tree.identifiers, tree.links.length, tokens, tree.skipped, stats.durationMs, JSON.stringify(tree.broken)],
       );
     });
   }
