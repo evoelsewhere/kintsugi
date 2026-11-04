@@ -1,6 +1,6 @@
 // Ports of the Brain (ADR-0091): the stored tree index of a project, and the queue that asks the worker for a build.
 
-import type { BrainBrokenLink, BrainLinks, BrainNode, BrainNodePage, BrainSource } from "@kintsugi/domain";
+import type { BrainBacklinkRows, BrainBrokenLink, BrainLinks, BrainNode, BrainNodeKind, BrainNodePage, BrainSource } from "@kintsugi/domain";
 
 export abstract class BrainIndex {
   abstract source(projectId: string): Promise<BrainSource | undefined>;
@@ -21,6 +21,9 @@ export abstract class BrainIndex {
   abstract links(projectId: string, id: string, limit: number): Promise<BrainLinks>;
   /** The broken links the last build stored, in the order it found them. */
   abstract broken(projectId: string): Promise<BrainBrokenLink[]>;
+  /** The links to a document or section or card from other documents, a window of them in path order, with the total. */
+  abstract backlinks(projectId: string, target: { id: string; path: string; kind: BrainNodeKind }, offset: number, limit: number): Promise<BrainBacklinkRows>;
+  abstract nodesByIds(projectId: string, ids: readonly string[]): Promise<BrainNode[]>;
   abstract nodesAtLines(projectId: string, hits: ReadonlyArray<{ path: string; line: number }>): Promise<Array<BrainNode | undefined>>;
   /** The nodes of a document whose own text overlaps the line ranges, in document order. */
   abstract nodesInRanges(projectId: string, path: string, ranges: ReadonlyArray<{ start: number; end: number }>, limit: number): Promise<BrainNode[]>;

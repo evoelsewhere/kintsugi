@@ -6,7 +6,7 @@ import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { BrainBrokenView, BrainChangesView, BrainGrepView, BrainLookupView, BrainReadView, BrainStatusView, BrainTreeView } from "@kintsugi/domain";
+import type { BrainBacklinksView, BrainBrokenView, BrainChangesView, BrainGrepView, BrainLookupView, BrainReadView, BrainStatusView, BrainTreeView } from "@kintsugi/domain";
 import { CheckoutStorage, cloneMirror } from "@kintsugi/git";
 import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
 import { RepositoryStore } from "@kintsugi/orchestrator";
@@ -240,6 +240,50 @@ describe.skipIf(!hasDatabase)("brain (integration)", () => {
     const { client: outsider } = await memberClient(app, admin, "broken-outsider", ["admin"], []);
     expect((await outsider.get("/projects/shop/brain/broken")).status).toBe(403);
     await app.db.query("update knowledge.brain_source set broken = '[]'::jsonb where project_id = 'shop'");
+  });
+
+  it("lists the pages that link to a page, a heading or a card, in windows, for readers with Project Access only", async () => {
+    const dataObjects = "10-applications/web/01-legacy/billing/tax/data-objects.md";
+    const spec = "10-applications/web/01-legacy/billing/tax/spec.md";
+    const backlinks = async (query: string) => (await admin.get<BrainBacklinksView>(`/projects/shop/brain/backlinks?${query}`)).body.data!;
+    // The spec links to a heading of data-objects.md: the page's backlinks have it, `incoming` of the page does not.
+    const page = await backlinks(`node=${encodeURIComponent(dataObjects)}`);
+    expect(page).toMatchObject({ total: 1, offset: 0, nextOffset: null, node: { id: dataObjects } });
+    expect(page.items.map((item) => [item.node.path, item.target.id, item.linkKind])).toEqual([[spec, `${dataObjects}#invoice-line`, "link"]]);
+    const read = (await admin.get<BrainReadView>(`/projects/shop/brain/node?node=${encodeURIComponent(dataObjects)}&scope=node`)).body.data!;
+    expect(read.incomingTotal).toBe(0);
+    // The heading has the same backlink; a page nobody links to has none; links inside a page are not backlinks.
+    expect((await backlinks(`node=${encodeURIComponent(`${dataObjects}#invoice-line`)}`)).items.map((item) => item.node.path)).toEqual([spec]);
+    expect((await backlinks(`node=${encodeURIComponent(spec)}`)).total).toBe(0);
+
+    // Twenty-five more linking pages: windows of 20, then the rest, totals matching.
+    await app.db.query(
+      `insert into knowledge.brain_node
+         select (jsonb_populate_record(null::knowledge.brain_node, to_jsonb(n) || jsonb_build_object('id', 'extra/p' || lpad(g::text, 2, '0') || '.md', 'path', 'extra/p' || lpad(g::text, 2, '0') || '.md', 'parent_id', null))).*
+           from knowledge.brain_node n, generate_series(1, 25) g where n.project_id = 'shop' and n.id = $1`,
+      [spec],
+    );
+    await app.db.query("insert into knowledge.brain_link (project_id, from_id, to_id, kind) select 'shop', 'extra/p' || lpad(g::text, 2, '0') || '.md', $1, 'link' from generate_series(1, 25) g", [dataObjects]);
+    try {
+      const first = await backlinks(`node=${encodeURIComponent(dataObjects)}&limit=20`);
+      expect(first).toMatchObject({ total: 26, offset: 0, nextOffset: 20 });
+      expect(first.items).toHaveLength(20);
+      const second = await backlinks(`node=${encodeURIComponent(dataObjects)}&limit=20&offset=20`);
+      expect(second).toMatchObject({ total: 26, offset: 20, nextOffset: null });
+      expect(second.items).toHaveLength(6);
+      const paths = [...first.items, ...second.items].map((item) => item.node.path);
+      expect(new Set(paths).size).toBe(26);
+      expect(paths).toEqual([...paths].sort());
+      expect((await admin.get(`/projects/shop/brain/backlinks?node=${encodeURIComponent(dataObjects)}&limit=101`)).status).toBe(400);
+    } finally {
+      await app.db.query("delete from knowledge.brain_link where project_id = 'shop' and from_id like 'extra/%'");
+      await app.db.query("delete from knowledge.brain_node where project_id = 'shop' and path like 'extra/%'");
+    }
+
+    expect((await admin.get("/projects/shop/brain/backlinks?node=10-applications%2F")).status).toBe(400);
+    expect((await admin.get("/projects/shop/brain/backlinks?node=nothing.md")).status).toBe(404);
+    const { client: outsider } = await memberClient(app, admin, "backlinks-outsider", ["admin"], []);
+    expect((await outsider.get(`/projects/shop/brain/backlinks?node=${encodeURIComponent(dataObjects)}`)).status).toBe(403);
   });
 
   it("follows another branch and turns off", async () => {

@@ -9,6 +9,7 @@ import {
   BRAIN_MAX_BROKEN_LINKS,
   BRAIN_ROOT_ID,
   type BrainBrokenView,
+  type BrainBacklinksView,
   type BrainCrumb,
   type BrainGrepMatch,
   type BrainChangedFile,
@@ -72,6 +73,12 @@ export interface BrainGrepQuery {
   /** Only the pages of this space (a key, any case) and, with `label`, that carry this label (already cleaned, lowercase). */
   space?: string | undefined;
   label?: string | undefined;
+}
+
+export interface BrainBacklinksQuery {
+  node: string;
+  offset: number;
+  limit: number;
 }
 
 export interface BrainChangesQuery {
@@ -376,6 +383,26 @@ export class BrainService {
     const { source } = await this.ready(projectId);
     const links = await this.index.broken(projectId);
     return { projectId, branch: source.branch, commit: source.indexedCommit, links, truncated: links.length >= BRAIN_MAX_BROKEN_LINKS };
+  }
+
+  /**
+   * The pages that link to a page (the page itself or any of its headings and cards), or to one heading or card, from
+   * other pages: a window of them, ordered by the linking node's path and line. Links inside the same page are not
+   * backlinks. `brain_read`'s `incoming` keeps its meaning: the links to exactly that node.
+   */
+  async backlinks(projectId: string, query: BrainBacklinksQuery): Promise<BrainBacklinksView> {
+    const { source } = await this.ready(projectId);
+    const node = await this.nodeOf(projectId, query.node);
+    if (node.kind !== "document" && node.kind !== "section" && node.kind !== "card") throw new BadRequestException("Backlinks are read for a page, a heading or a card.");
+    const found = await this.index.backlinks(projectId, { id: node.id, path: node.path, kind: node.kind }, query.offset, query.limit);
+    const nodes = new Map((await this.index.nodesByIds(projectId, found.rows.flatMap((row) => [row.fromId, row.toId]))).map((each) => [each.id, each] as const));
+    const items = found.rows.flatMap((row) => {
+      const from = nodes.get(row.fromId);
+      const target = nodes.get(row.toId);
+      return from === undefined || target === undefined ? [] : [{ node: from, target, linkKind: row.kind }];
+    });
+    const end = query.offset + found.rows.length;
+    return { projectId, branch: source.branch, commit: source.indexedCommit, node, items, total: found.total, offset: query.offset, nextOffset: end < found.total && found.rows.length > 0 ? end : null };
   }
 
   /**

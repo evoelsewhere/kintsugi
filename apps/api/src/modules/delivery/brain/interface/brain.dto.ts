@@ -32,6 +32,13 @@ export const brainReadQuerySchema = z.object({
 });
 export type BrainReadQueryDto = z.infer<typeof brainReadQuerySchema>;
 
+export const brainBacklinksQuerySchema = z.object({
+  node: brainNodeIdSchema,
+  offset: z.coerce.number().int().min(0).default(0),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+export type BrainBacklinksQueryDto = z.infer<typeof brainBacklinksQuerySchema>;
+
 export const brainLookupQuerySchema = z.object({ q: z.string().trim().min(1).max(2000) });
 export type BrainLookupQueryDto = z.infer<typeof brainLookupQuerySchema>;
 

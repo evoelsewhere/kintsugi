@@ -5,6 +5,7 @@
 import type { Pool, PoolClient } from "pg";
 import {
   BRAIN_ROOT_ID,
+  type BrainBacklinkRows,
   type BrainIndexState,
   type BrainLink,
   type BrainBrokenLink,
@@ -374,6 +375,39 @@ export class PgBrainStore {
       outgoingTotal: Number(outgoingTotal.rows[0]?.count ?? 0),
       incomingTotal: Number(incomingTotal.rows[0]?.count ?? 0),
     };
+  }
+
+  /**
+   * The links to a document (to the page itself or to any heading or card in it) or to one section or card, from the
+   * nodes of other documents, ordered by the linking node's path and line; a window of them, with the total.
+   */
+  async backlinks(projectId: string, target: { id: string; path: string; kind: BrainNodeKind }, offset: number, limit: number): Promise<BrainBacklinkRows> {
+    // The page's own headings are `path#anchor`; `starts_with` takes the path literally, with no LIKE wildcards.
+    const where = `l.project_id = $1 and (l.to_id = $2 or ($3::boolean and starts_with(l.to_id, $4))) and n.path <> $5`;
+    const params = [projectId, target.id, target.kind === "document", `${target.path}#`, target.path];
+    const [page, count] = await Promise.all([
+      this.db.query<{ from_id: string; to_id: string; kind: BrainLink["kind"] }>(
+        `select l.from_id, l.to_id, l.kind
+           from knowledge.brain_link l
+           join knowledge.brain_node n on n.project_id = l.project_id and n.id = l.from_id
+          where ${where}
+          order by n.path collate "C", n.line_start nulls first, l.from_id collate "C", l.to_id collate "C"
+          limit $6 offset $7`,
+        [...params, limit, offset],
+      ),
+      this.db.query<{ count: string }>(
+        `select count(*) from knowledge.brain_link l join knowledge.brain_node n on n.project_id = l.project_id and n.id = l.from_id where ${where}`,
+        params,
+      ),
+    ]);
+    return { rows: page.rows.map((row) => ({ fromId: row.from_id, toId: row.to_id, kind: row.kind })), total: Number(count.rows[0]?.count ?? 0) };
+  }
+
+  /** The nodes with these ids, in no particular order. */
+  async nodesByIds(projectId: string, ids: readonly string[]): Promise<BrainNode[]> {
+    if (ids.length === 0) return [];
+    const result = await this.db.query<NodeRow>(`select ${NODE_COLUMNS} from knowledge.brain_node where project_id = $1 and id = any($2::text[])`, [projectId, [...ids]]);
+    return result.rows.map(toNode);
   }
 
   /**
