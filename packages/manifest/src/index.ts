@@ -22,6 +22,8 @@ export function parseKintsugiYaml(text: string): ManifestResult {
 /** Renders a manifest as kintsugi.yaml, with an optional header comment. */
 export function renderKintsugiYaml(manifest: KintsugiManifest, options: { header?: string } = {}): string {
   const document = new Document(manifest);
+  // The default (no path is published directly) is not written out, so a manifest that never used the key reads as before.
+  if (manifest.directPublishPaths.length === 0) document.delete("directPublishPaths");
   if (options.header !== undefined) document.commentBefore = options.header.split("\n").map((line) => (line === "" ? "" : ` ${line}`)).join("\n");
 
   // Short lists and repository entries read best on one line, as in the reference.

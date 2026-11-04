@@ -2,7 +2,7 @@
 // default branch, other paths on kintsugi/* branches with a pull request (mocked API),
 // kintsugi.yaml's autoCommitPaths, output rules, plain-git servers and the queue end to end.
 
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -235,6 +235,145 @@ describe.skipIf(!hasDatabase)("document writer (integration)", () => {
     expect(await writeDocument(deps, edit)).toMatchObject({ status: "pr-opened" });
     const fresh = request("docs", { kind: "job-output", files: [{ path: "20-spaces/eng/fresh.md", content: "---\nid: PAGE-ENG-0002\n---\n\n# Fresh\n" }] });
     expect(await writeDocument(deps, fresh)).toMatchObject({ status: "pr-opened" });
+  });
+
+  describe("page writes (P2-028)", () => {
+    const sha = (text: string): string => createHash("sha256").update(text).digest("hex");
+    const manifest = (extra: string[]): string =>
+      ["schemaVersion: 1", "project: {id: page-docs, name: Pages}", "document: {server: gitlab, path: page-docs}", "unitKinds: [screen]", "applications: []", ...extra, ""].join("\n");
+    const page = (id: string, body = "Body.\n"): string => `---\nid: ${id}\ntitle: A page\n---\n\n# A page\n\n${body}`;
+    const pageWrite = (overrides: Partial<DocumentWriteRequest>): DocumentWriteRequest => request("page-docs", { kind: "page", ...overrides });
+
+    beforeAll(async () => {
+      await project("page-docs", "page-server", "gitlab", remote.baseUrl);
+      await remote.commitFiles("page-docs", [
+        { path: "kintsugi.yaml", content: manifest(["autoCommitPaths: [20-spaces/**]", "directPublishPaths: [20-spaces/eng/**]"]) },
+        { path: "20-spaces/eng/old.md", content: page("PAGE-ENG-0001") },
+        { path: "20-spaces/eng/gone.md", content: page("PAGE-ENG-0002") },
+        { path: "20-spaces/hr/policy.md", content: page("PAGE-HR-0001") },
+      ]);
+    });
+
+    it("publishes straight to the default branch when every path is in directPublishPaths: delete, move and base64 files in one commit with the page trailers", async () => {
+      const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 255]);
+      const write = pageWrite({
+        message: "Reorganise the engineering pages",
+        directPublish: true,
+        page: { id: "PAGE-ENG-0001", path: "20-spaces/eng/new.md", minor: true },
+        files: [
+          { path: "20-spaces/eng/new.md", renameFrom: "20-spaces/eng/old.md", content: page("PAGE-ENG-0001", "Body, edited.\n"), expectedHash: sha(page("PAGE-ENG-0001")) },
+          { path: "20-spaces/eng/gone.md", delete: true, content: "", expectedHash: sha(page("PAGE-ENG-0002")) },
+          { path: "20-spaces/eng/_attachments/a.png", content: png.toString("base64"), encoding: "base64" },
+        ],
+      });
+      expect(await writeDocument(deps, write)).toMatchObject({ status: "committed" });
+      expect(remote.git("page-docs", "show", "main:20-spaces/eng/new.md")).toContain("Body, edited.");
+      expect(() => remote.git("page-docs", "show", "main:20-spaces/eng/old.md")).toThrow();
+      expect(() => remote.git("page-docs", "show", "main:20-spaces/eng/gone.md")).toThrow();
+      expect(remote.git("page-docs", "cat-file", "-s", "main:20-spaces/eng/_attachments/a.png").trim()).toBe(String(png.length));
+      expect(remote.git("page-docs", "log", "-1", "--format=%an%n%(trailers:only,unfold)", "main").trim().split("\n")).toEqual([BOT_NAME, "Kintsugi-Actor: alice", "Kintsugi-Page: PAGE-ENG-0001", "Kintsugi-Minor: true"]);
+      // One commit, and history follows the move.
+      const changes = remote.git("page-docs", "show", "--name-status", "-M", "--format=", "main").trim().split("\n").map((line) => line.replace(/^R\d+/, "R"));
+      expect(changes.sort()).toEqual(["A\t20-spaces/eng/_attachments/a.png", "D\t20-spaces/eng/gone.md", "R\t20-spaces/eng/old.md\t20-spaces/eng/new.md"]);
+    });
+
+    it("never uses autoCommitPaths: a page write that does not ask for direct publish goes to a pull request", async () => {
+      const before = remote.git("page-docs", "rev-parse", "main").trim();
+      const write = pageWrite({ message: "Edit a page", page: { id: "PAGE-HR-0001", path: "20-spaces/hr/policy.md", minor: false }, files: [{ path: "20-spaces/hr/policy.md", content: page("PAGE-HR-0001", "Changed.\n"), expectedHash: sha(page("PAGE-HR-0001")) }] });
+      expect(await writeDocument(deps, write)).toMatchObject({ status: "pr-opened", branch: `kintsugi/alice/${write.writeId}` });
+      expect(remote.git("page-docs", "rev-parse", "main").trim()).toBe(before);
+      // Not a minor edit, and no direct publish: the trailers say only what is true.
+      expect(remote.git("page-docs", "log", "-1", "--format=%(trailers:only,unfold)", `kintsugi/alice/${write.writeId}`).trim().split("\n")).toEqual(["Kintsugi-Actor: alice", "Kintsugi-Page: PAGE-HR-0001"]);
+    });
+
+    it("sends the whole write to a pull request when one path is outside directPublishPaths", async () => {
+      const before = remote.git("page-docs", "rev-parse", "main").trim();
+      const write = pageWrite({
+        message: "Two spaces at once",
+        directPublish: true,
+        files: [
+          { path: "20-spaces/eng/inside.md", content: page("PAGE-ENG-0010") },
+          { path: "20-spaces/hr/outside.md", content: page("PAGE-HR-0010") },
+        ],
+      });
+      expect(await writeDocument(deps, write)).toMatchObject({ status: "pr-opened" });
+      expect(remote.git("page-docs", "rev-parse", "main").trim()).toBe(before);
+      expect(remote.git("page-docs", "show", `kintsugi/alice/${write.writeId}:20-spaces/eng/inside.md`)).toContain("PAGE-ENG-0010");
+    });
+
+    it("refuses a path the wiki may not write, a delete or move without its hash, and a write of another kind that deletes", async () => {
+      const failed = async (write: DocumentWriteRequest, message: RegExp): Promise<void> => {
+        expect(await writeDocument(deps, write)).toMatchObject({ status: "failed" });
+        expect((await row(write.writeId))?.error).toMatch(message);
+      };
+      await failed(pageWrite({ files: [{ path: "kintsugi.yaml", content: "x\n" }] }), /not a path the wiki may write/);
+      await failed(pageWrite({ files: [{ path: "plugins/p/README.md", content: "x\n" }] }), /not a path the wiki may write/);
+      await failed(pageWrite({ files: [{ path: "20-spaces/eng/a/_attachments/s.svg", content: "<svg/>" }] }), /not a path the wiki may write/);
+      await failed(pageWrite({ files: [{ path: "20-spaces/eng/b.md", renameFrom: "restricted/a.md", content: "x\n", expectedHash: sha("x\n") }] }), /not a path the wiki may write/);
+      await failed(pageWrite({ files: [{ path: "20-spaces/eng/inside.md", delete: true, content: "" }] }), /needs the hash/);
+      await failed(request("page-docs", { kind: "job-output", files: [{ path: "20-spaces/eng/inside.md", delete: true, content: "", expectedHash: sha("x") }] }), /cannot delete or move/);
+      await failed(request("page-docs", { kind: "job-output", directPublish: true, files: [{ path: "20-spaces/eng/x.md", content: "x\n" }] }), /cannot delete or move/);
+    });
+
+    it("fails a delete or a move whose file changed since it was read, and commits nothing", async () => {
+      const before = remote.git("page-docs", "rev-parse", "main").trim();
+      const write = pageWrite({ directPublish: true, files: [{ path: "20-spaces/eng/gone2.md", renameFrom: "20-spaces/eng/new.md", content: "x\n", expectedHash: sha("an older text") }] });
+      expect(await writeDocument(deps, write)).toMatchObject({ status: "failed" });
+      expect((await row(write.writeId))?.status).toBe("failed");
+      expect((await row(write.writeId))?.error).toMatch(/changed since it was read/);
+      expect(remote.git("page-docs", "rev-parse", "main").trim()).toBe(before);
+    });
+
+    it("continues an open kintsugi/* branch: the pull request is updated and no new branch is made", async () => {
+      const first = pageWrite({ message: "Draft of the runbook", files: [{ path: "20-spaces/hr/runbook.md", content: page("PAGE-HR-0020", "One.\n") }] });
+      const opened = await writeDocument(deps, first);
+      const branch = `kintsugi/alice/${first.writeId}`;
+      expect(opened).toMatchObject({ status: "pr-opened", branch });
+      const prUrl = (await row(first.writeId))?.pr_url;
+      const prs = requests.length;
+
+      const second = pageWrite({ message: "Second thoughts", continues: branch, files: [{ path: "20-spaces/hr/runbook.md", content: page("PAGE-HR-0020", "One, then two.\n") }] });
+      expect(await writeDocument(deps, second)).toMatchObject({ status: "pr-opened", branch, prUrl });
+      expect(requests.length).toBe(prs);
+      expect(remote.git("page-docs", "show", `${branch}:20-spaces/hr/runbook.md`)).toContain("One, then two.");
+      expect(remote.git("page-docs", "rev-list", "--count", `main..${branch}`).trim()).toBe("2");
+      expect(remote.git("page-docs", "branch", "--list", `kintsugi/alice/${second.writeId}`).trim()).toBe("");
+      expect((await row(second.writeId))?.branch).toBe(branch);
+    });
+
+    it("refuses to continue a branch that is not an open kintsugi/* branch of the project", async () => {
+      for (const continues of ["main", "kintsugi/alice/never-made", "release/1", "kintsugi/../main"]) {
+        const write = pageWrite({ continues, files: [{ path: "20-spaces/hr/x.md", content: page("PAGE-HR-0030") }] });
+        expect(await writeDocument(deps, write), continues).toMatchObject({ status: "failed" });
+        expect((await row(write.writeId))?.error, continues).toMatch(/not an open kintsugi\/\* branch/);
+      }
+    });
+
+    it("records the merge commit when the review watch sees the branch merged, and a fast-forward is its own tip", async () => {
+      const merge = pageWrite({ message: "To be merged", files: [{ path: "20-spaces/hr/merged.md", content: page("PAGE-HR-0040") }] });
+      await writeDocument(deps, merge);
+      const tip = String((await row(merge.writeId))?.branch_commit_sha);
+      // A person merges the branch with a merge commit, and another change lands after it.
+      const git = (...args: string[]): string => remote.git("page-docs", ...args);
+      const main = git("rev-parse", "main").trim();
+      const tree = git("rev-parse", `${tip}^{tree}`).trim();
+      const mergeCommit = git("commit-tree", tree, "-p", main, "-p", tip, "-m", "Merge pull request").trim();
+      git("update-ref", "refs/heads/main", mergeCommit);
+      await remote.commit("page-docs", "20-spaces/hr/later.md", "later\n");
+
+      expect((await watchPullRequests(deps)).merged).toContain(merge.writeId);
+      const recorded = await db.pool.query<{ merge_commit: string | null }>("select merge_commit from workflow.document_write where id = $1", [merge.writeId]);
+      expect(recorded.rows[0]?.merge_commit).toBe(mergeCommit);
+
+      // A branch the default branch fast-forwarded to: the commit that brought it in is its tip.
+      const ff = pageWrite({ message: "Fast-forwarded", files: [{ path: "20-spaces/hr/ff.md", content: page("PAGE-HR-0041") }] });
+      await writeDocument(deps, ff);
+      const ffTip = String((await row(ff.writeId))?.branch_commit_sha);
+      git("update-ref", "refs/heads/main", ffTip, git("rev-parse", "main").trim());
+      await remote.commit("page-docs", "20-spaces/hr/after-ff.md", "after\n");
+      expect((await watchPullRequests(deps)).merged).toContain(ff.writeId);
+      expect((await db.pool.query<{ merge_commit: string | null }>("select merge_commit from workflow.document_write where id = $1", [ff.writeId])).rows[0]?.merge_commit).toBe(ffTip);
+    });
   });
 
   it("reports identical files as unchanged", async () => {

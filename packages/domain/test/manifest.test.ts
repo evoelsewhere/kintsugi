@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CORE_ITEM_KINDS, DEFAULT_AUTO_COMMIT_PATHS, isAutoCommitPath, manifestFromProject, matchesPathGlob, repositoryPath, validateManifest } from "../src/index.js";
+import { CORE_ITEM_KINDS, DEFAULT_AUTO_COMMIT_PATHS, isAutoCommitPath, isDirectPublishable, manifestFromProject, matchesPathGlob, repositoryPath, validateManifest } from "../src/index.js";
 
 const minimal = {
   schemaVersion: 1,
@@ -25,6 +25,7 @@ describe("kintsugi.yaml validation", () => {
     if (!result.ok) return;
     expect(result.manifest.pipelines).toEqual([]);
     expect(result.manifest.autoCommitPaths).toEqual(DEFAULT_AUTO_COMMIT_PATHS);
+    expect(result.manifest.directPublishPaths).toEqual([]);
     expect(result.manifest.policy.requireCommitTrailer).toBe(true);
   });
 
@@ -135,5 +136,33 @@ describe("autoCommitPaths globs", () => {
     expect(isAutoCommitPath("10-applications/team/web/_generated/a.json", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
     expect(isAutoCommitPath("kintsugi.yaml", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
     expect(isAutoCommitPath("01-standards/review-rules.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
+  });
+});
+
+describe("directPublishPaths", () => {
+  it("is a list of globs, empty by default, kept as written", () => {
+    const result = validateManifest({ ...minimal, directPublishPaths: ["20-spaces/eng/**", "20-spaces/ops/*.md"] });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.manifest.directPublishPaths).toEqual(["20-spaces/eng/**", "20-spaces/ops/*.md"]);
+    expect(manifestFromProject({ project: { id: "p", name: "P" }, document: { server: "s", path: "a/b" }, applications: [] }).directPublishPaths).toEqual([]);
+    expect(manifestFromProject({ project: { id: "p", name: "P" }, document: { server: "s", path: "a/b" }, applications: [], directPublishPaths: ["x/**"] }).directPublishPaths).toEqual(["x/**"]);
+  });
+
+  it("makes the manifest invalid, with the path of the problem, for a value that is not a list of relative globs", () => {
+    for (const value of ["20-spaces/**", 5, [5], [""], ["/abs/**"], ["../out/**"], ["a/../b"], ["a\\b"]]) {
+      const result = validateManifest({ ...minimal, directPublishPaths: value });
+      expect(result.ok, JSON.stringify(value)).toBe(false);
+      if (!result.ok) expect(result.problems.some((problem) => problem.path.startsWith("directPublishPaths")), JSON.stringify(value)).toBe(true);
+    }
+  });
+
+  it("matches by the same globs as autoCommitPaths, and neither list stands for the other", () => {
+    expect(isDirectPublishable("20-spaces/eng/a.md", ["20-spaces/eng/**"])).toBe(true);
+    expect(isDirectPublishable("20-spaces/hr/a.md", ["20-spaces/eng/**"])).toBe(false);
+    expect(isDirectPublishable("20-spaces/eng/a.md", [])).toBe(false);
+    const unitCard = "10-applications/web/02-modern/payroll/run-period/README.md";
+    expect(isAutoCommitPath(unitCard, DEFAULT_AUTO_COMMIT_PATHS)).toBe(true);
+    expect(isDirectPublishable(unitCard, [])).toBe(false);
+    expect(isAutoCommitPath("20-spaces/eng/a.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
   });
 });

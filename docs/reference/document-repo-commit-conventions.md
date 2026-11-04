@@ -10,6 +10,7 @@ Every commit by Kintsugi has the **commit identity** as author and committer and
 | Kintsugi worker (auto-commit) | default branch | `kintsugi-bot` | same as above |
 | State change on behalf of a user | default branch (unit cards, `02-modern/<module>/<unit>/README.md`) | `kintsugi-bot` | `Kintsugi-Actor: <user>`, `Kintsugi-Unit: <unit-id>` |
 | Change published by a user from the portal (e.g. `kintsugi.yaml`) | `kintsugi/<user>/<write-id>` (PR) | `kintsugi-bot` | `Kintsugi-Actor: <user>` |
+| A wiki page published, moved or deleted from the portal ([ADR-0098](../decisions/0098-wiki-page-editing-and-publishing.md)) | `kintsugi/<user>/<write-id>` (PR), or the default branch for a path in `directPublishPaths` | `kintsugi-bot` | `Kintsugi-Actor: <user>`, `Kintsugi-Page: <page id>`, and `Kintsugi-Minor: true` for a minor edit |
 | Members | own branches | the member | `Assisted-by: <harness>` when AI-assisted |
 | Standards and plugins changes | own branches, PR reviewed by the architect | the member | — |
 

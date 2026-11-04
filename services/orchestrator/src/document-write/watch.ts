@@ -5,7 +5,7 @@
 // request (plain-git, SSH-only servers) can only be seen through ancestry.
 
 import { repositoryPath } from "@kintsugi/domain";
-import { CheckoutStorage, isAncestor, type PullRequestServerKind, pullRequestProvider } from "@kintsugi/git";
+import { CheckoutStorage, isAncestor, type PullRequestServerKind, pullRequestProvider, runGit } from "@kintsugi/git";
 import type { RepositoryStore } from "../git-sync/repositories.js";
 import { syncRepository } from "../git-sync/sync.js";
 import type { AwaitingReview, DocumentWriteStore } from "./store.js";
@@ -31,6 +31,22 @@ const BATCH = 100;
 
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
+/**
+ * The commit that brought `branchCommit` into the default branch, so the history of a file reaches the write that made it:
+ * the branch's own tip when the default branch fast-forwarded to it, else the oldest commit of the default branch's first
+ * parents that has it as an ancestor (the merge commit). Undefined when the branch was squashed or rebased in, which leaves
+ * no ancestry to read.
+ */
+export async function mergeCommitOf(mirror: string, branchCommit: string, defaultBranch: string): Promise<string | undefined> {
+  const ref = `refs/heads/${defaultBranch}`;
+  if (!(await isAncestor(mirror, branchCommit, ref).catch(() => false))) return undefined;
+  const firstParents = (await runGit(["--git-dir", mirror, "rev-list", "--first-parent", ref]).then((result) => result.stdout, () => "")).split("\n");
+  if (firstParents.includes(branchCommit)) return branchCommit;
+  const path = (await runGit(["--git-dir", mirror, "rev-list", "--first-parent", "--ancestry-path", `${branchCommit}..${ref}`]).then((result) => result.stdout, () => "")).trim().split("\n");
+  const oldest = path[path.length - 1];
+  return oldest === undefined || oldest === "" ? undefined : oldest;
+}
+
 /** One pass over the writes that still wait for a review outcome. Never throws for one project's failure. */
 export async function watchPullRequests(deps: WatchDeps): Promise<WatchResult> {
   const log = deps.log ?? (() => undefined);
@@ -53,8 +69,10 @@ export async function watchPullRequests(deps: WatchDeps): Promise<WatchResult> {
       for (const write of writes) {
         result.checked += 1;
         let outcome: "merged" | "closed" | undefined;
+        let mergeCommit: string | undefined;
         if (write.branchCommit !== undefined && (await isAncestor(mirror, write.branchCommit, `refs/heads/${defaultBranch}`).catch(() => false))) {
           outcome = "merged";
+          mergeCommit = await mergeCommitOf(mirror, write.branchCommit, defaultBranch);
         } else if (write.prUrl !== undefined && provider !== undefined && target.apiToken !== undefined) {
           try {
             const state = await provider.state({ baseUrl: target.serverBaseUrl, path: repositoryPath(repository.url, target.serverBaseUrl), token: target.apiToken, url: write.prUrl });
@@ -65,7 +83,7 @@ export async function watchPullRequests(deps: WatchDeps): Promise<WatchResult> {
           }
         }
         if (outcome === undefined) continue;
-        if (await deps.writes.markReviewOutcome(write.id, outcome)) {
+        if (await deps.writes.markReviewOutcome(write.id, outcome, mergeCommit)) {
           result[outcome].push(write.id);
           log(`write ${write.id} (${projectId}): review ${outcome}`);
         }

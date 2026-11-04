@@ -72,5 +72,21 @@ describe("kintsugi.yaml", () => {
     expect(text.startsWith("# Rendered by Kintsugi.\n")).toBe(true);
     expect(text).toContain("- {server: github, path: org/web-legacy, role: legacy}");
     expect(parseKintsugiYaml(text)).toEqual({ ok: true, manifest });
+    // The default (nothing is published directly) is not written out.
+    expect(text).not.toContain("directPublishPaths");
+  });
+
+  it("reads and renders directPublishPaths, and rejects a value that is not a list of relative globs", () => {
+    const base = ["schemaVersion: 1", "project: {id: billing, name: Billing}", "document: {server: github, path: org/docs}", "unitKinds: [screen]", "applications: []"];
+    const result = parseKintsugiYaml([...base, "directPublishPaths:", "  - 20-spaces/eng/**", "  - 20-spaces/ops/*.md"].join("\n"));
+    expect(result).toMatchObject({ ok: true });
+    if (!result.ok) return;
+    expect(result.manifest.directPublishPaths).toEqual(["20-spaces/eng/**", "20-spaces/ops/*.md"]);
+    expect(renderKintsugiYaml(result.manifest)).toContain("directPublishPaths:\n  - 20-spaces/eng/**");
+    expect(parseKintsugiYaml(renderKintsugiYaml(result.manifest))).toEqual(result);
+    const bad = parseKintsugiYaml([...base, "directPublishPaths: 20-spaces/**"].join("\n"));
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) expect(bad.problems.map((problem) => problem.path)).toContain("directPublishPaths");
+    expect(parseKintsugiYaml([...base, "directPublishPaths: [\"/etc/**\"]"].join("\n")).ok).toBe(false);
   });
 });
