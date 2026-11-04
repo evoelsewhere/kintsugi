@@ -1,4 +1,4 @@
-import { BRAIN_MAX_LABELS } from "@kintsugi/domain";
+import { BRAIN_MAX_LABELS, brainLabels } from "@kintsugi/domain";
 // What the wiki editor says about a page being written: the shapes the API gives and takes (threads/design-wiki-draft-publish),
 // the rules of the autosave, and the text itself. Kept apart from the views so it can be tested without a browser.
 // The text is exactly what was typed: nothing here changes a line ending, a final newline or the order of the front matter
@@ -197,7 +197,8 @@ export class DraftSaver {
     this.savedText = this.text;
     this.revision = options.draft?.revision ?? null;
     this.others = options.draft?.others ?? [];
-    this.baseCommit = options.startCommit;
+    // A draft opened as it was left has no starting text of its own: its own base is the one to send if it has to be made again.
+    this.baseCommit = options.startCommit ?? options.draft?.baseCommit ?? null;
     if (options.replaceWith !== undefined && options.replaceWith !== this.text) {
       this.text = options.replaceWith;
       this.dirtySince = this.now();
@@ -352,6 +353,14 @@ export class DraftSaver {
     } catch (error) {
       this.inFlight = false;
       const failure = (this.options.toFailure ?? defaultFailure)(error);
+      if (failure.status === 409 && failure.details?.["code"] === "draft-revision" && failure.details["revision"] === 0) {
+        // The draft no longer exists on the server (published and merged, or discarded in another tab): make it again from the text typed here.
+        this.revision = null;
+        this.status = "unsaved";
+        this.emit();
+        await this.save();
+        return;
+      }
       if (failure.status === 409 && failure.details?.["code"] === "draft-revision") {
         this.status = "unsaved";
         this.emit();
@@ -767,7 +776,8 @@ export const LABEL_MAX_LENGTH = 100;
  */
 export function labelCheck(input: string, existing: readonly string[]): { cleaned: string; problem: string | undefined } {
   const typed = input.trim();
-  const cleaned = typed.toLowerCase().replace(/[^a-z0-9-]/g, "");
+  // The Brain's own rules (`brainLabels`), so that what is accepted here is what it stores.
+  const cleaned = brainLabels([typed])[0] ?? "";
   if (typed === "") return { cleaned: "", problem: undefined };
   if (cleaned === "") return { cleaned, problem: "A label holds letters, digits and hyphens." };
   if (typed.length > LABEL_MAX_LENGTH) return { cleaned, problem: `A label has at most ${LABEL_MAX_LENGTH} characters.` };

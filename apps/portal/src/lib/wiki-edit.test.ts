@@ -320,6 +320,28 @@ describe("saving a draft as it is typed", () => {
     expect(saver.current).toEqual({ text: "my text", revision: 8 });
   });
 
+  it("makes the draft again when the server says it is gone (revision 0), keeping the base it had", async () => {
+    let first = true;
+    const { saver, calls, advance, last } = harness({
+      draft: draft({ revision: 4, baseCommit: "b".repeat(40) }),
+      startCommit: null,
+      answer: async (body, call) => {
+        if (first) {
+          first = false;
+          throw Object.assign(new Error("The draft is gone"), { status: 409, body: { details: { code: "draft-revision", revision: 0 } } });
+        }
+        return draft({ text: body.text, revision: call });
+      },
+    });
+    saver.change("typed after the draft was discarded elsewhere");
+    await advance(AUTOSAVE_QUIET_MS);
+    expect(calls.map((call) => [call.baseRevision, call.baseCommit])).toEqual([
+      [4, undefined],
+      [null, "b".repeat(40)],
+    ]);
+    expect(last()?.status).toBe("saved");
+  });
+
   it("refuses to save a text over 5 MiB and says why", async () => {
     const { saver, calls, advance, last } = harness();
     saver.change("x".repeat(MAX_DRAFT_BYTES + 1));
