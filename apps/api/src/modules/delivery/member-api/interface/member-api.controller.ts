@@ -6,6 +6,7 @@ import { Body, Controller, createParamDecorator, type ExecutionContext, Get, Hea
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import {
   activityInputSchema,
+  brainBacklinksQuerySchema,
   brainChangesQuerySchema,
   brainGrepQuerySchema,
   brainLookupQuerySchema,
@@ -92,6 +93,14 @@ export class MemberApiController {
   @ApiOperation({ summary: "The Brain nodes whose text holds a fixed string" })
   brainGrep(@Query({ schema: brainGrepQuerySchema }) query: z.infer<typeof brainGrepQuerySchema>, @Features features: string | undefined) {
     return this.member.brainGrep(query, parseMemberFeatures(features));
+  }
+
+  @Get("brain/backlinks")
+  @RequirePermission("member.read")
+  @AllowMemberRead({ projectIdFrom: "query" })
+  @ApiOperation({ summary: "The pages that link to a page, a heading or a card of an authorized project's Brain, a window of them" })
+  brainBacklinks(@Query({ schema: brainBacklinksQuerySchema }) query: z.infer<typeof brainBacklinksQuerySchema>, @Features features: string | undefined) {
+    return this.member.brainBacklinks(query, parseMemberFeatures(features));
   }
 
   @Get("brain/changes")

@@ -11,6 +11,8 @@ import {
   assertSafeHooks,
   type ActivityInput,
   type ActivityReceipt,
+  type BrainBacklinks,
+  type BrainBacklinksQuery,
   type BrainChanges,
   type BrainChangesQuery,
   type BrainGrep,
@@ -154,6 +156,17 @@ export class MemberApiService {
   async brainGrep(query: BrainGrepQuery, features: MemberFeatures = NO_FEATURES): Promise<BrainGrep> {
     const view = await this.brain.grep(query.projectId, { text: query.text, under: query.under, ignoreCase: query.ignoreCase ?? true });
     return { schemaVersion: MEMBER_SCHEMA_VERSION, ...view, matches: view.matches.map((match) => ({ ...match, node: memberNode(match.node, features) satisfies MemberBrainNode })) };
+  }
+
+  /** The pages that link to a page, a heading or a card, a window of them (the Brain's own read, with every node as the contract shows it). */
+  async brainBacklinks(query: BrainBacklinksQuery, features: MemberFeatures = NO_FEATURES): Promise<BrainBacklinks> {
+    const view = await this.brain.backlinks(query.projectId, { node: query.node, offset: query.offset ?? 0, limit: query.limit ?? 20 });
+    return {
+      schemaVersion: MEMBER_SCHEMA_VERSION,
+      ...view,
+      node: memberNode(view.node, features),
+      items: view.items.map((item) => ({ node: memberNode(item.node, features), target: memberNode(item.target, features), linkKind: item.linkKind })),
+    };
   }
 
   /** What changed in the Brain's documents since an earlier commit. */

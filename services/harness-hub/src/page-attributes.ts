@@ -56,3 +56,32 @@ export function pageAttributeLines(result: unknown): string[] {
   visit(result, 0);
   return lines;
 }
+
+/** The page attributes of a brain result as one text part, or none when no node has any. */
+export function pageAttributesPart(result: unknown): string[] {
+  const lines = pageAttributeLines(result);
+  return lines.length === 0 ? [] : [`Page attributes:\n${lines.join("\n")}`];
+}
+
+const TITLE_MAX = 80;
+
+/**
+ * The entries of a backlinks result as one text part, one line each and plain text: the citation of the node that holds
+ * the link (`path:first-last@commit`, as `brain_read` cites), its title, what it points at and the kind of link, then
+ * where the window is. Nothing of it reaches a tool description.
+ */
+export function backlinksPart(result: unknown): string[] {
+  const view = result as { commit?: unknown; items?: unknown; total?: unknown; offset?: unknown; nextOffset?: unknown };
+  if (typeof view.commit !== "string" || !Array.isArray(view.items)) return [];
+  const lines = view.items.slice(0, MAX_LINES).flatMap((item: { node?: Attributed & { path?: unknown; lineStart?: unknown; lineEnd?: unknown; title?: unknown }; target?: { id?: unknown }; linkKind?: unknown }) => {
+    const node = item.node;
+    if (node === undefined || typeof node.path !== "string") return [];
+    const lines = typeof node.lineStart === "number" && typeof node.lineEnd === "number" ? `:${node.lineStart}-${node.lineEnd}` : "";
+    const target = typeof item.target?.id === "string" ? plain(item.target.id, ID_MAX) : "?";
+    return [`${plain(node.path, ID_MAX)}${lines}@${plain(view.commit as string, 40)} — ${plain(typeof node.title === "string" ? node.title : "", TITLE_MAX)} → ${target} (${item.linkKind === "id" ? "id" : "link"})`];
+  });
+  const total = typeof view.total === "number" ? view.total : lines.length;
+  const offset = typeof view.offset === "number" ? view.offset : 0;
+  const next = typeof view.nextOffset === "number" ? `; more with offset ${view.nextOffset}` : "";
+  return [`Backlinks ${lines.length === 0 ? 0 : offset + 1}-${offset + lines.length} of ${total}${next}:${lines.length === 0 ? "" : `\n${lines.join("\n")}`}`];
+}

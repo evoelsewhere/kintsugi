@@ -269,6 +269,23 @@ export const brainGrepSchema = z.object({
   truncated: z.boolean(),
 }).strict();
 
+export const brainBacklinksQuerySchema = z.object({
+  schemaVersion: versionSchema,
+  projectId: projectIdSchema,
+  node: brainNodeIdSchema,
+  offset: z.coerce.number().int().min(0).default(0),
+  limit: z.coerce.number().int().min(1).max(MAX_LIST_LIMIT).default(20),
+}).strict();
+
+export const brainBacklinksSchema = z.object({
+  ...brainIndexSchema,
+  node: brainNodeSchema,
+  items: z.array(z.object({ node: brainNodeSchema, target: brainNodeSchema, linkKind: z.enum(["link", "id"]) }).strict()),
+  total: z.number().int().min(0),
+  offset: z.number().int().min(0),
+  nextOffset: z.number().int().min(0).nullable(),
+}).strict();
+
 export const brainChangesQuerySchema = z.object({
   schemaVersion: versionSchema,
   projectId: projectIdSchema,
