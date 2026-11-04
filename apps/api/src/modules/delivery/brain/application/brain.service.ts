@@ -214,6 +214,21 @@ export class BrainService {
     return this.status(projectId);
   }
 
+  /**
+   * The default branch of a document repository changed (ADR-0097 decision 5): the Brain of every wiki project that
+   * keeps its documents there follows it, and is built when the mirror already has the branch (otherwise the sync that
+   * brings it queues the build). The change is audited like a Brain configuration, under the actor who made it.
+   */
+  async followDefaultBranch(repositoryId: string, branch: string, actor: Actor): Promise<void> {
+    for (const project of await this.index.wikiProjectsOf(repositoryId)) {
+      if (project.branch === branch) continue;
+      await this.index.configure(project.projectId, { branch, enabled: true, wiki: true }, actor.username ?? actor.id);
+      const { tips } = await this.documents.branchTips(await this.documents.context(project.projectId));
+      if (tips.has(branch)) await this.queue.enqueue(project.projectId);
+      await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.brainConfigure, { projectId: project.projectId, detail: { branch, enabled: true, wiki: true, reason: "default-branch" } }));
+    }
+  }
+
   /** Builds the index again from the tip of its branch. */
   async rebuild(projectId: string, actor: Actor): Promise<BrainStatusView> {
     const requested = await this.index.request(projectId, actor.username ?? actor.id);

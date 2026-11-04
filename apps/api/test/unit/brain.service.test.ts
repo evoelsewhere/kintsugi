@@ -108,6 +108,9 @@ class MemoryIndex extends BrainIndex {
   async byLabel(_projectId: string, label: string, limit: number) {
     return this.nodes.filter((node) => node.kind === "document" && node.labels.includes(label)).sort(byPath).slice(0, limit);
   }
+  async wikiProjectsOf() {
+    return this.row?.wiki === true ? [{ projectId: this.row.projectId, branch: this.row.branch }] : [];
+  }
   async bySpace(_projectId: string, space: string, limit: number) {
     return this.nodes.filter((node) => node.kind === "document" && node.space === space).sort(byPath).slice(0, limit);
   }
@@ -334,6 +337,30 @@ describe("BrainService.configure and rebuild", () => {
     const off = setup({ row: { enabled: false } });
     await expect(off.brain.rebuild("shop", actor)).rejects.toThrow(/off: turn it on first/);
     expect(off.queue.enqueue).not.toHaveBeenCalled();
+  });
+});
+
+describe("BrainService.followDefaultBranch", () => {
+  it("moves the Brain of a wiki project to the new branch, builds it and audits the change", async () => {
+    const { brain, queue, audit, index } = setup({ row: { wiki: true, branch: "main" }, tips: ["main", "release"] });
+    await brain.followDefaultBranch("docs", "release", actor);
+    expect(index.row).toMatchObject({ wiki: true, enabled: true, branch: "release" });
+    expect(queue.enqueue).toHaveBeenCalledWith("shop");
+    expect(audit.recordChange).toHaveBeenCalledWith({ actor: "u1", action: "brain.configure", projectId: "shop", detail: { branch: "release", enabled: true, wiki: true, reason: "default-branch", username: "alice" } });
+  });
+
+  it("waits for the sync when the mirror lacks the branch, and leaves projects that are not wikis or already there", async () => {
+    const early = setup({ row: { wiki: true, branch: "main" }, tips: ["main"] });
+    await early.brain.followDefaultBranch("docs", "release", actor);
+    expect(early.index.row).toMatchObject({ branch: "release" });
+    expect(early.queue.enqueue).not.toHaveBeenCalled();
+    const plain = setup({ row: { wiki: false, branch: "main" }, tips: ["main", "release"] });
+    await plain.brain.followDefaultBranch("docs", "release", actor);
+    expect(plain.index.row).toMatchObject({ branch: "main" });
+    const there = setup({ row: { wiki: true, branch: "release" }, tips: ["main", "release"] });
+    await there.brain.followDefaultBranch("docs", "release", actor);
+    expect(there.queue.enqueue).not.toHaveBeenCalled();
+    expect(there.audit.recordChange).not.toHaveBeenCalled();
   });
 });
 

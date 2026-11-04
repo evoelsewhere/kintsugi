@@ -2,6 +2,7 @@
 // bound to the domain ports.
 
 import { Module } from "@nestjs/common";
+import { DefaultBranchObservers } from "./application/default-branch-observers.js";
 import { GitService } from "./application/git.service.js";
 import { GitRegistry, GitRemote } from "./domain/git.ports.js";
 import { CliGitRemote } from "./infrastructure/cli-git.remote.js";
@@ -11,7 +12,7 @@ import { GitRepositoriesController, GitServersController } from "./interface/git
 /** admin · Git servers and repositories — docs/architecture/05-building-block-view.md (A3). */
 @Module({
   controllers: [GitServersController, GitRepositoriesController],
-  providers: [GitService, { provide: GitRegistry, useClass: PgGitRegistry }, { provide: GitRemote, useClass: CliGitRemote }],
-  exports: [GitService, GitRegistry],
+  providers: [GitService, DefaultBranchObservers, { provide: GitRegistry, useClass: PgGitRegistry }, { provide: GitRemote, useClass: CliGitRemote }],
+  exports: [GitService, GitRegistry, DefaultBranchObservers],
 })
 export class GitModule {}

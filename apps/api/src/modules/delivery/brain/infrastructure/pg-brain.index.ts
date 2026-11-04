@@ -24,6 +24,18 @@ export class PgBrainIndex extends BrainIndex {
     return this.store.setWiki(projectId, wiki, actor);
   }
 
+  async wikiProjectsOf(repositoryId: string): Promise<Array<{ projectId: string; branch: string }>> {
+    const result = await getPool().query<{ project_id: string; branch: string }>(
+      `select s.project_id, s.branch
+         from knowledge.brain_source s
+         join admin.project_repository pr on pr.project_id = s.project_id and pr.role = 'document'
+        where pr.repository_id = $1 and s.wiki
+        order by s.project_id`,
+      [repositoryId],
+    );
+    return result.rows.map((row) => ({ projectId: row.project_id, branch: row.branch }));
+  }
+
   request(projectId: string, actor: string): Promise<BrainSource | undefined> {
     return this.store.request(projectId, actor);
   }

@@ -338,4 +338,33 @@ describe.skipIf(!hasDatabase)("brain (integration)", () => {
     expect((await admin.get<BrainStatusView>("/projects/shop/brain")).body.data).toMatchObject({ wiki: false, branch: "release" });
     expect((await admin.request("PUT", "/projects/shop/brain", { body: { enabled: false } })).status).toBe(200);
   });
+
+  it("moves a wiki project's Brain when the repository's default branch changes, and leaves the others", async () => {
+    const setDefault = (branch: string) => admin.request("PATCH", "/admin/git-repositories/docs", { body: { defaultBranch: branch } });
+    const brain = async () => (await admin.get<BrainStatusView>("/projects/shop/brain")).body.data!;
+    // Wiki off: the Brain keeps the branch it was given, whatever the repository's default branch does.
+    expect((await admin.request("PUT", "/projects/shop/brain", { body: { enabled: true, branch: "main" } })).status).toBe(200);
+    expect((await setDefault("release")).status).toBe(200);
+    expect(await brain()).toMatchObject({ wiki: false, branch: "main", defaultBranch: "release" });
+    expect((await setDefault("main")).status).toBe(200);
+
+    // Wiki on: the Brain follows, is queued at once (the mirror has the branch), and the change is audited.
+    expect((await admin.request("PUT", "/projects/shop/wiki", { body: { enabled: true } })).status).toBe(200);
+    expect(await build()).toMatchObject({ status: "built" });
+    expect(await brain()).toMatchObject({ wiki: true, branch: "main", state: "ready" });
+    expect((await setDefault("release")).status).toBe(200);
+    expect(await brain()).toMatchObject({ wiki: true, enabled: true, branch: "release", defaultBranch: "release", state: "queued" });
+    expect((await app.db.query("select state, requested_at > now() - interval '1 minute' as fresh from knowledge.brain_source where project_id = 'shop'")).rows[0]).toMatchObject({ state: "queued", fresh: true });
+    const audit = await app.db.query<{ detail: Record<string, unknown> }>("select detail from governance.audit_event where action = 'brain.configure' and detail->>'reason' = 'default-branch'");
+    expect(audit.rows.map((row) => row.detail)).toEqual([expect.objectContaining({ branch: "release", enabled: true, wiki: true })]);
+    expect(await build()).toMatchObject({ status: "built" });
+    expect((await admin.get<BrainTreeView>("/projects/shop/brain/tree?node=01-standards%2F")).body.data?.children[0]).toMatchObject({ title: "Standards (next)" });
+
+    // Setting the branch it already has changes nothing; wiki off again, the Brain stays where it is.
+    expect((await setDefault("release")).status).toBe(200);
+    expect(await brain()).toMatchObject({ branch: "release", state: "ready" });
+    expect((await admin.request("PUT", "/projects/shop/wiki", { body: { enabled: false } })).status).toBe(200);
+    expect((await setDefault("main")).status).toBe(200);
+    expect(await brain()).toMatchObject({ wiki: false, branch: "release", defaultBranch: "main" });
+  });
 });
