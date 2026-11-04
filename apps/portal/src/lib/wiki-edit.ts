@@ -861,6 +861,31 @@ export const ATTACHMENT_TYPES: Readonly<Record<string, string>> = {
   pdf: "application/pdf",
 };
 
+/** A change to the text: `insert` replaces the characters from `from` to `to`. */
+export interface TextChange {
+  from: number;
+  to: number;
+  insert: string;
+}
+
+/**
+ * Where the Markdown of a new attachment goes in a text (line endings as LF: offsets are those of the editor's document):
+ * on a line of its own, at the cursor, but never inside the front matter or in front of it. A cursor in the front matter,
+ * or a text nobody has clicked in (the cursor is at the very start), puts it right after the front matter's closing `---`.
+ */
+export function attachmentInsertion(text: string, cursor: number, markdown: string): TextChange {
+  const lines = linesOf(text);
+  const end = frontMatterEnd(lines);
+  let after = 0;
+  if (end >= 0) for (let index = 0; index <= end; index += 1) after += (lines[index] as string).length;
+  // The closing line may have no line ending (a page that is only front matter): then a line is added first.
+  const at = Math.min(Math.max(cursor, end >= 0 ? after : 0), text.length);
+  const lead = at > 0 && text[at - 1] !== "\n" ? "\n" : "";
+  // Mid-line, at the start of a line or on an empty line the rest of the text moves to the line after; at the end of a line the line ending is already there.
+  const trail = at >= text.length || text[at] !== "\n" || lead === "" ? "\n" : "";
+  return { from: at, to: at, insert: `${lead}${markdown}${trail}` };
+}
+
 /** The most a file, and all the files of a draft, may weigh (the API refuses more). */
 export const ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
 export const ATTACHMENTS_MAX_BYTES = 20 * 1024 * 1024;

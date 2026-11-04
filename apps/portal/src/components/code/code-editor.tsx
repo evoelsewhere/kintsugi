@@ -58,8 +58,11 @@ export default function CodeEditor({
   onChange?: ((text: string) => void) | undefined;
   /** Joins and splits the lines with exactly this (the wiki editor keeps a page's own line endings). */
   lineSeparator?: string | undefined;
-  /** Gives the caller a function that puts text at the cursor (replacing the selection). */
-  registerInsert?: ((insert: (text: string) => void) => void) | undefined;
+  /**
+   * Gives the caller a function that changes the text where it says: it is given the text (lines joined with LF, so offsets are
+   * those of the document) and the cursor, and answers the change to make.
+   */
+  registerInsert?: ((apply: (plan: (text: string, cursor: number) => { from: number; to: number; insert: string }) => void) => void) | undefined;
   /** Files pasted or dropped into the editor: they are not inserted as text, the caller takes them. */
   onFiles?: ((files: File[]) => void) | undefined;
 }): React.JSX.Element {
@@ -112,8 +115,10 @@ export default function CodeEditor({
         ],
       }),
     });
-    registerInsert?.((text) => {
-      view.dispatch(view.state.replaceSelection(text));
+    registerInsert?.((plan) => {
+      const change = plan(view.state.doc.toString(), view.state.selection.main.head);
+      // The insert is written with LF; the document's own line break (CRLF for a CRLF page) is what goes in.
+      view.dispatch({ changes: { from: change.from, to: change.to, insert: view.state.toText(change.insert.replace(/\n/g, view.state.lineBreak)) } });
       view.focus();
     });
     return () => view.destroy();

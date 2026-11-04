@@ -27,6 +27,7 @@ import {
   draftImageUrl,
   draftStateLabel,
   type DraftSummary,
+  attachmentInsertion,
   messageProblem,
   setStatus,
   statusChangeMessage,
@@ -840,5 +841,57 @@ describe("archiving a page: its status line", () => {
     expect(statusChangeMessage("unarchive", "Old plan")).toBe("Unarchive Old plan");
     expect(statusOf("archive")).toBe("archived");
     expect(statusOf("unarchive")).toBeNull();
+  });
+});
+
+describe("where an attachment's Markdown goes", () => {
+  const md = "![pixel.png](_attachments/pixel.png)";
+  const apply = (text: string, cursor: number): string => {
+    const change = attachmentInsertion(text, cursor, md);
+    return text.slice(0, change.from) + change.insert + text.slice(change.to);
+  };
+  const page = "---\ntitle: Cache flush\nid: PAGE-ENG-0012\nlabels: [runbook]\n---\n\n# Cache flush\n\nSteps.\n";
+
+  it("puts it after the front matter, on its own line, when the text was never clicked (cursor at the start)", () => {
+    const text = apply(page, 0);
+    expect(text).toBe(`---\ntitle: Cache flush\nid: PAGE-ENG-0012\nlabels: [runbook]\n---\n${md}\n\n# Cache flush\n\nSteps.\n`);
+    expect(labelsOf(text)).toEqual(["runbook"]);
+    expect(text.startsWith("---\ntitle: Cache flush")).toBe(true);
+  });
+
+  it("puts it after the front matter too when the cursor is inside it, never in the middle of a line of it", () => {
+    for (const cursor of [4, 10, page.indexOf("id:") + 3, page.indexOf("labels") + 2, page.indexOf("---\n\n") + 2]) {
+      const text = apply(page, cursor);
+      expect(text.startsWith("---\ntitle: Cache flush\nid: PAGE-ENG-0012\nlabels: [runbook]\n---\n")).toBe(true);
+      expect(labelsOf(text)).toEqual(["runbook"]);
+      expect(text.includes(`---\n${md}\n`)).toBe(true);
+    }
+  });
+
+  it("puts it at the cursor in the body, on a line of its own", () => {
+    const at = page.indexOf("Steps.");
+    expect(apply(page, at)).toBe(page.replace("Steps.", `${md}\nSteps.`));
+    const middle = page.indexOf("Steps.") + 3;
+    expect(apply(page, middle)).toBe(page.replace("Steps.", `Ste\n${md}\nps.`));
+    expect(apply(page, page.length)).toBe(`${page}${md}\n`);
+  });
+
+  it("handles a page without front matter, an empty page, a page without a final newline and one that is only front matter", () => {
+    expect(apply("Just text\n", 0)).toBe(`${md}\nJust text\n`);
+    expect(apply("Just text\n", 4)).toBe(`Just\n${md}\n text\n`);
+    expect(apply("", 0)).toBe(`${md}\n`);
+    expect(apply("no newline", 10)).toBe(`no newline\n${md}\n`);
+    expect(apply("---\ntitle: x\n---", 0)).toBe(`---\ntitle: x\n---\n${md}\n`);
+    expect(apply("---\ntitle: x\n---\n", 2)).toBe(`---\ntitle: x\n---\n${md}\n`);
+  });
+
+  it("does not take a `---` in the body for a front matter, and an unclosed front matter is plain text", () => {
+    const body = "intro\n\n---\n\nrule above\n";
+    expect(apply(body, 0)).toBe(`${md}\nintro\n\n---\n\nrule above\n`);
+    expect(apply("---\ntitle: x\nno closing line\n", 0)).toBe(`${md}\n---\ntitle: x\nno closing line\n`);
+  });
+
+  it("keeps a cursor past the end of the text inside it", () => {
+    expect(apply("abc\n", 99)).toBe(`abc\n${md}\n`);
   });
 });

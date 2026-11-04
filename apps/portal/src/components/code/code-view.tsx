@@ -18,7 +18,7 @@ export function CodeView({
   path: string;
   onChange?: ((text: string) => void) | undefined;
   lineSeparator?: string | undefined;
-  registerInsert?: ((insert: (text: string) => void) => void) | undefined;
+  registerInsert?: ((apply: (plan: (text: string, cursor: number) => { from: number; to: number; insert: string }) => void) => void) | undefined;
   onFiles?: ((files: File[]) => void) | undefined;
 }): React.JSX.Element {
   return (
