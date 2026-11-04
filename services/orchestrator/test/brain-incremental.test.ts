@@ -58,6 +58,8 @@ describe.skipIf(!hasDatabase)("incremental Brain builds (integration)", () => {
       nodes: await rows("select id, parent_id, kind, path, anchor, title, summary, summary_source, ordinal, depth, line_start, line_end, subtree_end, tokens, subtree_tokens, children, ids, labels, status, owner, template, space, changed_commit, changed_at, changed_subject, outgoing_links, home from knowledge.brain_node where project_id = 'wiki' order by id collate \"C\""),
       links: await rows("select from_id, to_id, kind from knowledge.brain_link where project_id = 'wiki' order by from_id collate \"C\", to_id collate \"C\""),
       refs: await rows("select path, ordinal, from_id, kind, target_path, target_anchor, target_id from knowledge.brain_ref where project_id = 'wiki' order by path collate \"C\", ordinal"),
+      // The text index of every node (builder 7): identical for a whole and an incremental build of one commit.
+      text: await rows("select node_id, tsv::text as tsv from knowledge.brain_text where project_id = 'wiki' order by node_id collate \"C\""),
       source: await rows("select indexed_commit, builder_version, documents, nodes, identifiers, links, tokens, skipped, broken, refs_complete from knowledge.brain_source where project_id = 'wiki'"),
     };
   }
