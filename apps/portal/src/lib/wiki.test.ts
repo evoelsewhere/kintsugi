@@ -1,7 +1,7 @@
 import type { BrainNode } from "@kintsugi/domain";
 import { describe, expect, it } from "vitest";
 import { resolveDocumentLink } from "./document-links";
-import { attachmentUrl, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiIsOff, wikiLink, wikiRead } from "./wiki";
+import { attachmentUrl, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiIsOff, wikiLink, wikiRead } from "./wiki";
 
 const node = (over: Partial<BrainNode> & Pick<BrainNode, "id" | "kind" | "path">): BrainNode => ({
   parentId: null,
@@ -188,5 +188,53 @@ describe("following a link inside a page", () => {
     expect(headingIdOfHash("#d%C3%A9ploiement")).toBe("déploiement");
     expect(headingIdOfHash("")).toBe("");
     expect(headingIdOfHash("#100%")).toBe("100%");
+  });
+});
+
+describe("the versions of a page", () => {
+  const a = "a".repeat(40);
+  const b = "b".repeat(40);
+  const c = "c".repeat(40);
+
+  it("reads what an address asks of a page, and takes anything that is not a commit id for the current page", () => {
+    expect(readPageMode(new URLSearchParams("project=p"))).toEqual({ mode: "page" });
+    expect(readPageMode(new URLSearchParams("view=history"))).toEqual({ mode: "history" });
+    expect(readPageMode(new URLSearchParams(`version=${a.toUpperCase()}`))).toEqual({ mode: "version", sha: a });
+    expect(readPageMode(new URLSearchParams(`view=compare&from=${a}&to=${b}`))).toEqual({ mode: "compare", from: a, to: b });
+    expect(readPageMode(new URLSearchParams("version=main"))).toEqual({ mode: "page" });
+    expect(readPageMode(new URLSearchParams(`view=compare&from=${a}`))).toEqual({ mode: "page" });
+    expect(readPageMode(new URLSearchParams(`view=compare&from=x&to=${b}`))).toEqual({ mode: "page" });
+  });
+
+  it("writes the address of each mode so that it reads back the same", () => {
+    for (const mode of [{ mode: "page" }, { mode: "history" }, { mode: "version", sha: a }, { mode: "compare", from: a, to: b }] as const) {
+      const link = wikiPageLink("p q", "guide/my page.md", mode);
+      expect(link.startsWith("/wiki/guide/my%20page.md?project=p+q")).toBe(true);
+      expect(readPageMode(new URLSearchParams(link.split("?")[1]))).toEqual(mode);
+    }
+  });
+
+  it("puts the older version first, whichever was picked first, in a list that is newest first", () => {
+    const list = [a, b, c]; // a is the newest
+    expect(comparePair(list, a, c)).toEqual({ from: c, to: a });
+    expect(comparePair(list, c, a)).toEqual({ from: c, to: a });
+    expect(comparePair(list, b, a)).toEqual({ from: b, to: a });
+    // A version of an older page that is not loaded yet is older than all those that are.
+    expect(comparePair([a, b], "d".repeat(40), a)).toEqual({ from: "d".repeat(40), to: a });
+  });
+
+  it("keeps at most two versions picked, dropping the one picked longest ago, and unpicks on a second click", () => {
+    expect(togglePicked([], a)).toEqual([a]);
+    expect(togglePicked([a], b)).toEqual([a, b]);
+    expect(togglePicked([a, b], c)).toEqual([b, c]);
+    expect(togglePicked([a, b], a)).toEqual([b]);
+  });
+
+  it("says what a comparison changed, and says plainly when nothing did", () => {
+    expect(compareSummary({ status: "unchanged", added: 0, removed: 0 })).toMatch(/No difference/);
+    expect(compareSummary({ status: "modified", added: 3, removed: 1 })).toBe("3 lines added, 1 removed");
+    expect(compareSummary({ status: "modified", added: 1, removed: 2 })).toBe("1 line added, 2 removed");
+    expect(compareSummary({ status: "added", added: 5, removed: 0 })).toBe("The page was added: 5 lines");
+    expect(compareSummary({ status: "deleted", added: 0, removed: 1 })).toBe("The page was deleted: 1 line");
   });
 });

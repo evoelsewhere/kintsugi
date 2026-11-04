@@ -161,3 +161,66 @@ export function attachmentUrl(projectId: string, path: string, ref: string): str
 export function headingIdOfHash(hash: string): string {
   return decode(hash.startsWith("#") ? hash.slice(1) : hash);
 }
+
+// ---- Versions ---------------------------------------------------------------------------------------------------
+// A page has its history (the commits that changed it, renames followed), can be read as it was at one of them and can
+// be compared at two of them. Which of these a page shows is in the address too: `?view=history`, `?version=<sha>`
+// and `?view=compare&from=<sha>&to=<sha>`; no parameter is the current page.
+
+export type PageMode = { mode: "page" } | { mode: "history" } | { mode: "version"; sha: string } | { mode: "compare"; from: string; to: string };
+
+const COMMIT_ID = /^([0-9a-f]{40}|[0-9a-f]{64})$/;
+
+/** What an address asks of a page; anything that is not a commit id (the API would refuse it) is read as the current page. */
+export function readPageMode(params: URLSearchParams): PageMode {
+  const version = (params.get("version") ?? "").toLowerCase();
+  if (COMMIT_ID.test(version)) return { mode: "version", sha: version };
+  const view = params.get("view");
+  if (view === "history") return { mode: "history" };
+  const from = (params.get("from") ?? "").toLowerCase();
+  const to = (params.get("to") ?? "").toLowerCase();
+  if (view === "compare" && COMMIT_ID.test(from) && COMMIT_ID.test(to)) return { mode: "compare", from, to };
+  return { mode: "page" };
+}
+
+/** The address of a page in one of its modes (the current page without one). */
+export function wikiPageLink(projectId: string, path: string, mode: PageMode = { mode: "page" }): string {
+  const params = new URLSearchParams({ project: projectId });
+  if (mode.mode === "history") params.set("view", "history");
+  if (mode.mode === "version") params.set("version", mode.sha);
+  if (mode.mode === "compare") {
+    params.set("view", "compare");
+    params.set("from", mode.from);
+    params.set("to", mode.to);
+  }
+  const route = path === "" ? WIKI_BASE : `${WIKI_BASE}/${path.split("/").map(encodeURIComponent).join("/")}`;
+  return `${route}?${params.toString()}`;
+}
+
+/**
+ * The two versions to compare, older first, whichever order they were picked in: the history lists the newest first,
+ * so the one further down is the older. A version the list does not hold (an older page not loaded yet) is older than
+ * every one it does hold.
+ */
+export function comparePair(shas: readonly string[], a: string, b: string): { from: string; to: string } {
+  const place = (sha: string): number => {
+    const index = shas.indexOf(sha);
+    return index < 0 ? shas.length : index;
+  };
+  return place(a) >= place(b) ? { from: a, to: b } : { from: b, to: a };
+}
+
+/** The versions picked for a comparison after a click on one: two at most, the one picked longest ago is let go. */
+export function togglePicked(picked: readonly string[], sha: string): string[] {
+  if (picked.includes(sha)) return picked.filter((entry) => entry !== sha);
+  return [...picked, sha].slice(-2);
+}
+
+/** What a comparison changed, in a few words. */
+export function compareSummary(result: { status: "unchanged" | "added" | "deleted" | "modified"; added: number; removed: number }): string {
+  const lines = (count: number): string => `${count} ${count === 1 ? "line" : "lines"}`;
+  if (result.status === "unchanged") return "No difference: the two versions hold the same text";
+  if (result.status === "added") return `The page was added: ${lines(result.added)}`;
+  if (result.status === "deleted") return `The page was deleted: ${lines(result.removed)}`;
+  return `${lines(result.added)} added, ${result.removed} removed`;
+}

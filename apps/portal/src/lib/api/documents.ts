@@ -385,6 +385,53 @@ export interface DocumentFile {
   content: string;
 }
 
+/** One version of a file: a commit that changed it, newest first in a history. */
+export interface HistoryEntry {
+  sha: string;
+  date: string;
+  /** The version comment: the first line of the commit message. */
+  subject: string;
+  actor: string;
+  minor: boolean;
+}
+
+export interface DocumentHistory {
+  ref: string;
+  commit: string;
+  path: string;
+  /** Renames of the file are followed: versions under its old paths are listed. */
+  followsRenames: true;
+  entries: HistoryEntry[];
+  /** The `before` of the next, older page; null when there is none. */
+  next: string | null;
+}
+
+export interface CompareLine {
+  type: "context" | "add" | "del";
+  oldLine: number | null;
+  newLine: number | null;
+  text: string;
+}
+
+export interface CompareHunk {
+  oldStart: number;
+  oldLines: number;
+  newStart: number;
+  newLines: number;
+  lines: CompareLine[];
+}
+
+/** One file at two commits: its unified diff with old and new line numbers. */
+export interface DocumentCompare {
+  path: string;
+  from: string;
+  to: string;
+  status: "unchanged" | "added" | "deleted" | "modified";
+  added: number;
+  removed: number;
+  hunks: CompareHunk[];
+}
+
 export interface StageHeadline {
   stage: ResultStage;
   headline: string[];
@@ -400,6 +447,17 @@ export const documentsApi = {
     if (ref !== undefined) query.set("ref", ref);
     return apiGet(`${project(projectId)}/documents/file?${query.toString()}`);
   },
+  /** The versions of a file, newest first (renames followed); pass the previous answer's `next` as `before` for older ones. */
+  history: (projectId: string, path: string, options: { ref?: string | undefined; before?: string | undefined; limit?: number } = {}): Promise<DocumentHistory> => {
+    const query = new URLSearchParams({ path });
+    if (options.ref !== undefined) query.set("ref", options.ref);
+    if (options.before !== undefined) query.set("before", options.before);
+    if (options.limit !== undefined) query.set("limit", String(options.limit));
+    return apiGet(`${project(projectId)}/documents/history?${query.toString()}`);
+  },
+  /** One file at two commits (the shas of two of its versions): the lines that changed. */
+  compare: (projectId: string, path: string, from: string, to: string): Promise<DocumentCompare> =>
+    apiGet(`${project(projectId)}/documents/compare?${new URLSearchParams({ path, from, to }).toString()}`),
   results: (projectId: string, applicationId: string, stage: ResultStage, options: { ref?: string | undefined; compare?: boolean } = {}): Promise<StageResults> => {
     const query = new URLSearchParams();
     if (options.ref !== undefined) query.set("ref", options.ref);

@@ -4,16 +4,19 @@
 
 import type { BrainNode } from "@kintsugi/domain";
 import { GitCommitHorizontal, Tag } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Loaded } from "@/components/loaded";
 import { Markdown } from "@/components/results/lazy-markdown";
+import { Tabs } from "@/components/ui/tabs";
 import { brainApi } from "@/lib/api/brain";
 import { documentsApi } from "@/lib/api/documents";
 import { formatRelative, shortSha } from "@/lib/format";
 import { splitFrontMatter } from "@/lib/front-matter";
 import { useLoader } from "@/lib/use-loader";
-import { pathTrail, wikiLink, wikiRead } from "@/lib/wiki";
+import { type PageMode, pathTrail, readPageMode, wikiLink, wikiPageLink, wikiRead } from "@/lib/wiki";
 import { useScrollToHeading, useWikiLinks } from "./use-wiki-links";
+import { WikiCompare } from "./wiki-compare";
+import { WikiHistory } from "./wiki-history";
 
 export interface WikiPageViewProps {
   projectId: string;
@@ -24,20 +27,75 @@ export interface WikiPageViewProps {
 }
 
 export function WikiPageView({ projectId, commit, path }: WikiPageViewProps): React.JSX.Element {
-  const file = useLoader(`wiki/${projectId}/${commit}/file/${path}`, () => wikiRead(() => documentsApi.file(projectId, path, commit)));
+  const [params] = useSearchParams();
+  const mode = readPageMode(params);
   const meta = useLoader(`wiki/${projectId}/${commit}/meta/${path}`, () => wikiRead(() => brainApi.lookup(projectId, path)));
   const node = meta.data?.matches.find((match) => match.kind === "document" && match.path === path);
   useWikiLinks(projectId, commit);
-  useScrollToHeading(file.data !== undefined);
 
   return (
     <article className="flex flex-col gap-3" aria-label={node?.title ?? path}>
       <PageTrail projectId={projectId} path={path} />
       {node === undefined ? null : <PageFacts node={node} commit={commit} />}
+      <PageTabs projectId={projectId} path={path} mode={mode} />
+      {mode.mode === "page" ? (
+        <PageText projectId={projectId} commit={commit} path={path} />
+      ) : mode.mode === "version" ? (
+        <VersionText projectId={projectId} path={path} sha={mode.sha} />
+      ) : mode.mode === "history" ? (
+        <WikiHistory projectId={projectId} commit={commit} path={path} />
+      ) : (
+        <WikiCompare projectId={projectId} path={path} from={mode.from} to={mode.to} />
+      )}
+    </article>
+  );
+}
+
+/** The page and its history: the two things a reader does with a page; an old version and a comparison belong to them. */
+function PageTabs({ projectId, path, mode }: { projectId: string; path: string; mode: PageMode }): React.JSX.Element {
+  const navigate = useNavigate();
+  const tab = mode.mode === "history" || mode.mode === "compare" ? "history" : "page";
+  return (
+    <Tabs
+      label="Page and history"
+      value={tab}
+      tabs={[
+        { id: "page", label: "Page" },
+        { id: "history", label: "History" },
+      ]}
+      onChange={(id) => void navigate(wikiPageLink(projectId, path, id === "history" ? { mode: "history" } : { mode: "page" }))}
+    />
+  );
+}
+
+/** The page as the Brain indexed it. */
+function PageText({ projectId, commit, path }: WikiPageViewProps): React.JSX.Element {
+  const file = useLoader(`wiki/${projectId}/${commit}/file/${path}`, () => wikiRead(() => documentsApi.file(projectId, path, commit)));
+  useScrollToHeading(file.data !== undefined);
+  return <Loaded loader={file}>{(loaded) => <Markdown text={splitFrontMatter(loaded.content).body} path={path} />}</Loaded>;
+}
+
+/** The page as it was at one of its commits, with the way back to the current one. */
+function VersionText({ projectId, path, sha }: { projectId: string; path: string; sha: string }): React.JSX.Element {
+  const file = useLoader(`wiki/${projectId}/version/${sha}/${path}`, () => wikiRead(() => documentsApi.file(projectId, path, sha)));
+  useScrollToHeading(file.data !== undefined);
+  return (
+    <>
+      <p role="status" className="flex flex-wrap items-center gap-x-2 rounded-lg bg-recessed px-3 py-2 text-[12px] text-text-secondary">
+        <span>
+          Old version <span className="font-mono">{shortSha(sha)}</span>
+        </span>
+        <Link to={wikiPageLink(projectId, path)} className="text-accent hover:underline">
+          Go to the current version
+        </Link>
+        <Link to={wikiPageLink(projectId, path, { mode: "history" })} className="text-accent hover:underline">
+          History
+        </Link>
+      </p>
       <Loaded loader={file} rows={8}>
         {(loaded) => <Markdown text={splitFrontMatter(loaded.content).body} path={path} />}
       </Loaded>
-    </article>
+    </>
   );
 }
 
