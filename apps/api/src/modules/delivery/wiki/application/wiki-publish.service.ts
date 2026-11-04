@@ -8,11 +8,12 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { mergeText, pageIdOf } from "@kintsugi/domain";
 import { AUDIT_ACTIONS, AuditTrail, auditRecord } from "#common/audit/audit-trail.js";
 import type { Actor } from "#common/auth/decorators.js";
-import { DocumentWritesService } from "#modules/admin/document-writes/index.js";
+import { type DocumentWriteFile, DocumentWritesService } from "#modules/admin/document-writes/index.js";
 import { DocumentsService } from "#modules/delivery/documents/index.js";
 import type { WikiDraft, WikiHead, WikiPublishResult } from "../domain/wiki.js";
 import { WikiDrafts, WikiPageLocks } from "../domain/wiki.ports.js";
 import { WikiAccessService } from "./wiki-access.service.js";
+import { WikiAttachmentService } from "./wiki-attachment.service.js";
 import { DRAFT_TEXT_MAX_BYTES } from "./wiki-draft.service.js";
 import { mergeConflict, openWriteConflict, revisionConflict } from "./wiki-errors.js";
 
@@ -37,6 +38,7 @@ export class WikiPublishService {
     private readonly documents: DocumentsService,
     private readonly writes: DocumentWritesService,
     private readonly access: WikiAccessService,
+    private readonly attachments: WikiAttachmentService,
     private readonly locks: WikiPageLocks,
     private readonly audit: AuditTrail,
   ) {}
@@ -62,13 +64,18 @@ export class WikiPublishService {
     if (defaultTip === undefined) throw new BadRequestException("The document repo has no default branch to publish to yet");
     const headPage = await this.documents.readPage(context, defaultTip.commit, input.path, DRAFT_TEXT_MAX_BYTES);
     const head: WikiHead = { commit: defaultTip.commit, hash: headPage?.hash ?? null };
-    const publish = (text: string): Promise<WikiPublishResult> => this.#publishText(projectId, actor, input, draft, head.hash, text, direct);
+    // The files the draft carries beside the page go in the same write, as new files under the page's `_attachments/` folder.
+    const attachments = await this.attachments.asWrites(draft);
+    const publish = (text: string): Promise<WikiPublishResult> =>
+      this.#record(projectId, actor, input, draft, [{ path: input.path, content: text, ...(head.hash === null ? { createOnly: true } : { expectedHash: head.hash }) }, ...attachments], text, direct);
+    // The page says what the draft says already: only the attachments, if there are any, are left to publish.
+    const unchanged = (): Promise<WikiPublishResult> => (attachments.length === 0 ? Promise.resolve({ outcome: "unchanged" }) : this.#record(projectId, actor, input, draft, attachments, headPage?.text ?? draft.text, direct));
 
     // The person resolved a conflict against the page as it still is: publish what they made of it, and let the writer
     // refuse if the page changes in the meantime.
     if (input.resolvedText !== undefined && input.mergedFrom?.hash === head.hash) return publish(input.resolvedText);
 
-    if (sha256(draft.text) === head.hash) return { outcome: "unchanged" };
+    if (sha256(draft.text) === head.hash) return unchanged();
     // Nobody touched the page since the draft started.
     if (head.hash === draft.baseHash) return publish(draft.text);
 
@@ -78,14 +85,14 @@ export class WikiPublishService {
     const theirs = headPage?.text ?? "";
     const merged = mergeText(base, draft.text, theirs);
     if (!merged.clean) throw mergeConflict({ base, ours: draft.text, theirs }, head, merged.regions);
-    if (merged.merged === theirs && headPage !== undefined) return { outcome: "unchanged" };
+    if (merged.merged === theirs && headPage !== undefined) return unchanged();
     // A clean merge is shown first; the person confirms it by sending the page it was made against.
     if (input.mergedFrom?.hash === head.hash && input.resolvedText === undefined) return publish(merged.merged);
     return { outcome: "merge-preview", merged: merged.merged, head, base: { commit: draft.baseCommit, hash: draft.baseHash } };
   }
 
-  /** Records the write (one open write per page), gives its id to the draft and audits the publish. */
-  async #publishText(projectId: string, actor: Actor, input: PublishInput, draft: WikiDraft, expectedHash: string | null, text: string, direct: boolean): Promise<WikiPublishResult> {
+  /** Records the write of `files` (one open write per page), gives its id to the draft and audits the publish; `text` is the page, for its id. */
+  async #record(projectId: string, actor: Actor, input: PublishInput, draft: WikiDraft, files: DocumentWriteFile[], text: string, direct: boolean): Promise<WikiPublishResult> {
     const author = actor.username ?? actor.id;
     const open = await this.writes.openPageWrite(projectId, input.path);
     // The person's own earlier write of the page, once it has a review branch, is continued; anyone else's, or one not yet
@@ -96,7 +103,7 @@ export class WikiPublishService {
       projectId,
       {
         message: input.message,
-        files: [{ path: input.path, content: text, ...(expectedHash === null ? { createOnly: true } : { expectedHash }) }],
+        files,
         page: { id: pageId, path: input.path, minor: input.minor === true },
         ...(direct ? { directPublish: true } : {}),
         ...(open?.branch === undefined ? {} : { continues: open.branch }),

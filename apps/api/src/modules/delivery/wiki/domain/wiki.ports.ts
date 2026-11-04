@@ -29,6 +29,8 @@ export abstract class WikiAttachments {
   /** Adds the file to the draft, replacing one of the same name. */
   abstract put(draftId: string, file: { name: string; contentType: string; bytes: Buffer }): Promise<WikiAttachment>;
   abstract list(draftId: string): Promise<WikiAttachment[]>;
+  /** Every file of the draft with its bytes, by name. */
+  abstract readAll(draftId: string): Promise<Array<{ name: string; contentType: string; bytes: Buffer }>>;
   abstract read(draftId: string, name: string): Promise<{ contentType: string; bytes: Buffer } | undefined>;
   abstract remove(draftId: string, name: string): Promise<boolean>;
 }
