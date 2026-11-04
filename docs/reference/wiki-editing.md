@@ -67,7 +67,8 @@ The wiki writes Markdown pages and, in a page's `_attachments/` folder, files of
 | --- | --- |
 | `wiki-page.publish` | A page was published (path, mode, write, page id) |
 | `wiki-page.move` | A page was moved (from, to, mode, write, number of pages and links rewritten) |
-| `wiki-page.refused` | A save, a publish or a move was refused for a missing permission or a restriction, with the path, the reason and what was being done; a path that is not editable is a 400 and is not audited |
+| `wiki-page.delete` | A page was deleted (path, mode, write, page id, number of links that now break) |
+| `wiki-page.refused` | A save, a publish, a move or a delete was refused for a missing permission or a restriction, with the path, the reason and what was being done; a path that is not editable is a 400 and is not audited |
 | `wiki-restriction.set`, `wiki-restriction.clear` | A restriction was set or cleared |
 | `wiki.switch` | The wiki was switched on or off ([Brain](brain.md#the-wiki-switch)) |
 
