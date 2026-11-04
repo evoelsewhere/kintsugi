@@ -283,3 +283,4 @@ export { EMPTY_REPOSITORY_MESSAGE, describeSyncError } from "./repository-sync.j
 export { explainFailure, isKnownFailure, stopReasonLabel } from "./failures.js";
 export * from "./text-merge.js";
 export * from "./page-move.js";
+export * from "./page-template.js";

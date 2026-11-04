@@ -9,6 +9,7 @@ import { DocumentsModule } from "#modules/delivery/documents/index.js";
 import { WikiAccessService } from "./application/wiki-access.service.js";
 import { WikiDraftService } from "./application/wiki-draft.service.js";
 import { WikiMoveService } from "./application/wiki-move.service.js";
+import { WikiPageService } from "./application/wiki-page.service.js";
 import { WikiPublishService } from "./application/wiki-publish.service.js";
 import { WikiRestrictionService } from "./application/wiki-restriction.service.js";
 import { WikiAttachments, WikiDirectPublish, WikiDrafts, WikiIdCounters, WikiPageLocks, WikiRestrictions, WikiSubjects } from "./domain/wiki.ports.js";
@@ -21,16 +22,18 @@ import { PgWikiSubjects } from "./infrastructure/pg-wiki.subjects.js";
 import { WikiAccessController } from "./interface/wiki-access.controller.js";
 import { WikiDraftController } from "./interface/wiki-draft.controller.js";
 import { WikiMoveController } from "./interface/wiki-move.controller.js";
+import { WikiPageController } from "./interface/wiki-page.controller.js";
 import { WikiPublishController } from "./interface/wiki-publish.controller.js";
 import { WikiRestrictionController } from "./interface/wiki-restriction.controller.js";
 
 @Module({
   imports: [ProjectAccessModule, DocumentsModule, DocumentWritesModule, BrainModule],
-  controllers: [WikiAccessController, WikiDraftController, WikiMoveController, WikiPublishController, WikiRestrictionController],
+  controllers: [WikiAccessController, WikiDraftController, WikiMoveController, WikiPageController, WikiPublishController, WikiRestrictionController],
   providers: [
     WikiAccessService,
     WikiDraftService,
     WikiMoveService,
+    WikiPageService,
     WikiRestrictionService,
     WikiPublishService,
     { provide: WikiDrafts, useClass: PgWikiDrafts },
