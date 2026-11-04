@@ -3,13 +3,15 @@
 // from the documents route, the page's attributes from the Brain's lookup; a failed lookup only leaves them out.
 
 import type { BrainNode } from "@kintsugi/domain";
-import { GitCommitHorizontal, Tag } from "lucide-react";
+import { GitCommitHorizontal, PencilLine, Tag } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Loaded } from "@/components/loaded";
 import { Markdown } from "@/components/results/lazy-markdown";
+import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
 import { brainApi } from "@/lib/api/brain";
 import { documentsApi } from "@/lib/api/documents";
+import { wikiEditApi } from "@/lib/api/wiki-edit";
 import { formatRelative, shortSha } from "@/lib/format";
 import { splitFrontMatter } from "@/lib/front-matter";
 import { useLoader } from "@/lib/use-loader";
@@ -19,6 +21,7 @@ import { ExportMarkdownButton } from "./export-markdown-button";
 import { WikiBacklinks } from "./wiki-backlinks";
 import { WikiCompare } from "./wiki-compare";
 import { WikiToc } from "./wiki-toc";
+import { WikiEditor } from "./wiki-editor";
 import { WikiHistory } from "./wiki-history";
 
 export interface WikiPageViewProps {
@@ -40,17 +43,63 @@ export function WikiPageView({ projectId, commit, path }: WikiPageViewProps): Re
     <article className="flex flex-col gap-3" aria-label={node?.title ?? path}>
       <PageTrail projectId={projectId} path={path} />
       {node === undefined ? null : <PageFacts projectId={projectId} node={node} commit={commit} />}
-      <PageTabs projectId={projectId} path={path} mode={mode} />
-      {mode.mode === "page" ? (
+      {mode.mode === "edit" ? null : <PageTabs projectId={projectId} path={path} mode={mode} />}
+      {mode.mode === "page" ? <EditEntry projectId={projectId} path={path} /> : null}
+      {mode.mode === "edit" ? (
+        <WikiEditor projectId={projectId} commit={commit} path={path} />
+      ) : mode.mode === "page" ? (
         <PageText projectId={projectId} commit={commit} path={path} />
       ) : mode.mode === "version" ? (
         <VersionText projectId={projectId} path={path} sha={mode.sha} />
       ) : mode.mode === "history" ? (
         <WikiHistory projectId={projectId} commit={commit} path={path} />
-      ) : (
+      ) : mode.mode === "compare" ? (
         <WikiCompare projectId={projectId} path={path} from={mode.from} to={mode.to} />
-      )}
+      ) : null}
     </article>
+  );
+}
+
+/**
+ * The way into the editor, and what stands in its way: the Edit button when the person may write the page, the reason
+ * in the API's words when they may not, and a banner when a write of the page is waiting for review. A person without the
+ * rights, or an API without the route, sees the page as before.
+ */
+function EditEntry({ projectId, path }: { projectId: string; path: string }): React.JSX.Element | null {
+  const navigate = useNavigate();
+  const access = useLoader(`wiki/${projectId}/access/${path}`, () => wikiRead(() => wikiEditApi.access(projectId, path)));
+  const view = access.data;
+  if (view === undefined || !view.editable) return null;
+  return (
+    <div className="flex flex-col gap-1.5">
+      {view.pending === null ? null : (
+        <p role="status" className="rounded-lg bg-recessed px-3 py-2 text-[12px] text-text-secondary">
+          Pending review: {view.pending.author} changed this page
+          {view.pending.prUrl === null ? "." : (
+            <>
+              {" "}
+              <a href={view.pending.prUrl} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+                Open the pull request
+              </a>
+            </>
+          )}
+        </p>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        {view.canWrite ? (
+          <Button size="small" variant="solid" onClick={() => void navigate(wikiPageLink(projectId, path, { mode: "edit" }))}>
+            <PencilLine />
+            Edit
+          </Button>
+        ) : (
+          <Button size="small" disabled title={view.refusal?.message}>
+            <PencilLine />
+            Edit
+          </Button>
+        )}
+        {view.canWrite || view.refusal === null ? null : <span className="text-[12px] text-text-muted">{view.refusal.message}</span>}
+      </div>
+    </div>
   );
 }
 

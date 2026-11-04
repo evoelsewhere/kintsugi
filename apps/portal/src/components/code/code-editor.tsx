@@ -45,7 +45,18 @@ const theme = EditorView.theme({
   ".cm-panels": { backgroundColor: "var(--ds-background-200)", color: "var(--ds-text-primary)" },
 });
 
-export default function CodeEditor({ text, path, onChange }: { text: string; path: string; onChange?: ((text: string) => void) | undefined }): React.JSX.Element {
+export default function CodeEditor({
+  text,
+  path,
+  onChange,
+  lineSeparator,
+}: {
+  text: string;
+  path: string;
+  onChange?: ((text: string) => void) | undefined;
+  /** Joins and splits the lines with exactly this (the wiki editor keeps a page's own line endings). */
+  lineSeparator?: string | undefined;
+}): React.JSX.Element {
   const host = useRef<HTMLDivElement>(null);
   const changed = useRef(onChange);
   const editable = onChange !== undefined;
@@ -65,17 +76,18 @@ export default function CodeEditor({ text, path, onChange }: { text: string; pat
           languageOf(path),
           syntaxHighlighting(highlight),
           theme,
+          ...(lineSeparator === undefined ? [] : [EditorState.lineSeparator.of(lineSeparator)]),
           EditorState.readOnly.of(!editable),
           EditorView.editable.of(editable),
           EditorView.lineWrapping,
           EditorView.updateListener.of((update) => {
-            if (update.docChanged) changed.current?.(update.state.doc.toString());
+            if (update.docChanged) changed.current?.(update.state.sliceDoc());
           }),
         ],
       }),
     });
     return () => view.destroy();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rebuildOn, path, editable]);
+  }, [rebuildOn, path, editable, lineSeparator]);
   return <div ref={host} className="h-full min-h-0" role="region" aria-label={`Contents of ${path}`} />;
 }
