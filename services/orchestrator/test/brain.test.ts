@@ -157,6 +157,21 @@ describe.skipIf(!hasDatabase)("brain index (integration)", () => {
     expect(await store.bySpace("shop", "OTHER", 10)).toEqual([]);
   });
 
+  it("stores the links to a page that is not there, in full for each build (P2-023)", async () => {
+    await remote.commit("shop-docs", "00-project/links.md", "# Links\n\nSee [the plan](missing.md) and [the charter](charter.md).\n");
+    await syncRepository({ store: deps.repositories, storage: deps.storage }, "shop-docs");
+    await indexBrain(deps, "shop");
+    const broken = async () => (await db.pool.query<{ broken: unknown }>("select broken from knowledge.brain_source where project_id = 'shop'")).rows[0]?.broken;
+    expect(await broken()).toEqual([{ from: "00-project/links.md", target: "00-project/missing.md" }]);
+    expect(await store.source("shop")).toMatchObject({ state: "ready" });
+
+    // The link is mended: the next build replaces the list, it does not add to it.
+    await remote.commit("shop-docs", "00-project/links.md", "# Links\n\nSee [the plan](charter.md).\n");
+    await syncRepository({ store: deps.repositories, storage: deps.storage }, "shop-docs");
+    await indexBrain(deps, "shop");
+    expect(await broken()).toEqual([]);
+  });
+
   it("fails the build of a project without a document repository", async () => {
     await db.pool.query("insert into admin.project (id, name) values ('bare', 'Bare')");
     await store.configure("bare", { branch: "main", enabled: true }, "alice");
