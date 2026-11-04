@@ -328,6 +328,10 @@ export interface SearchHit {
   space: string | null;
   labels: string[];
   lines: SearchLine[];
+  /** The one-sentence summary the Brain holds for the page, shown under its title by the ranked search. */
+  summary?: string;
+  /** Set when the page is archived or a template and the person chose to include those. */
+  hidden?: "archived" | "template";
 }
 
 /** Groups the matches of a search by page, in the order the first match of each came; archived pages and templates are left out. */
@@ -367,15 +371,17 @@ export const hitPaths = (hits: readonly Pick<SearchHit, "path">[]): string[] => 
 
 /**
  * The hits with what only a page's document node knows: its title, space and labels (a grep match is the section or card
- * a line is in, which holds none of them). A page whose document is archived or a template is dropped. A hit without
- * its document (not looked up, or the lookup failed) is kept as it is.
+ * a line is in, which holds none of them). A page whose document is archived or a template is dropped, unless the person
+ * chose to include those (then it says what it is). A hit without its document (not looked up, or the lookup failed) is
+ * kept as it is.
  */
-export function withDocuments(hits: readonly SearchHit[], documents: ReadonlyMap<string, BrainNode>): SearchHit[] {
+export function withDocuments(hits: readonly SearchHit[], documents: ReadonlyMap<string, BrainNode>, options: { includeHidden?: boolean } = {}): SearchHit[] {
   return hits.flatMap((hit) => {
     const document = documents.get(hit.path);
     if (document === undefined) return [hit];
-    if (isHiddenPage(document)) return [];
-    return [{ ...hit, title: document.title, space: document.space, labels: document.labels }];
+    const hidden = isHiddenPage(document);
+    if (hidden && options.includeHidden !== true) return [];
+    return [{ ...hit, title: document.title, space: document.space, labels: document.labels, ...(hidden ? { hidden: document.template ? ("template" as const) : ("archived" as const) } : {}) }];
   });
 }
 
@@ -394,6 +400,9 @@ export const readableExcerpt = (excerpt: string): string => excerpt.replace(/!?\
 
 /** How the result list counts its pages: "1 page contains …", "3 pages contain …". */
 export const hitCount = (pages: number, text: string): string => `${pages} ${pages === 1 ? "page contains" : "pages contain"} “${text}”`;
+
+/** How the ranked result list counts its pages: "1 page matches …", "3 pages match …", best first. */
+export const rankedCount = (pages: number, text: string): string => `${pages} ${pages === 1 ? "page matches" : "pages match"} “${text}”, best match first`;
 
 /** The address of one line of a hit: the page, scrolled to the heading the line is under. */
 export const searchLineLink = (projectId: string, hit: Pick<SearchHit, "path">, line: Pick<SearchLine, "anchor">): string => wikiLink(projectId, hit.path, line.anchor ?? undefined);

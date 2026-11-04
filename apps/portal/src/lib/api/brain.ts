@@ -1,4 +1,5 @@
 import type { BrainBacklinksView, BrainChangesView, BrainGrepView, BrainLookupView, BrainReadView, BrainStatusView, BrainTreeView } from "@kintsugi/domain";
+import type { BrainSearchView } from "../brain-search";
 import { apiGet, apiSend } from "../api";
 
 const path = (projectId: string): string => `/api/projects/${encodeURIComponent(projectId)}/brain`;
@@ -26,5 +27,8 @@ export const brainApi = {
   /** `space` and `label` narrow the search to the pages of that space or with that label (the wiki's search box). */
   grep: (projectId: string, text: string, under?: string, filter: { space?: string; label?: string } = {}) =>
     apiGet<BrainGrepView>(`${path(projectId)}/grep${query({ text, under, space: nonEmpty(filter.space), label: nonEmpty(filter.label) })}`),
+  /** The ranked search (ADR-0097 decision 7); a 404 (an older API) or 409 (Brain not built) is `runSearch`'s cue to ask `grep`. */
+  search: (projectId: string, text: string, filter: { space?: string; label?: string; archived?: boolean; limit?: number } = {}) =>
+    apiGet<BrainSearchView>(`${path(projectId)}/search${query({ text, space: nonEmpty(filter.space), label: nonEmpty(filter.label), archived: filter.archived === true ? true : undefined, limit: filter.limit })}`),
   changes: (projectId: string, since: string, under?: string) => apiGet<BrainChangesView>(`${path(projectId)}/changes${query({ since, under })}`),
 };
