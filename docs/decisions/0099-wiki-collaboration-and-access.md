@@ -46,3 +46,11 @@ Two facts shape access. Everyone who can read the document repository on the Git
 - **A separate document repository per audience.** Rejected: [ADR-0028](0028-remove-rulebook-single-document-repo.md) keeps one document repository per project, and the Brain, the writer and the layout assume it.
 - **Project roles or new groups as grant subjects.** Rejected: project roles never grant ([ADR-0024](0024-access-roles-vs-project-roles.md)); access roles already group people, and a second grouping concept would duplicate them.
 - **Mail notifications now.** Rejected for now: Kintsugi has no mail dependency ([ADR-0008](0008-authentication.md)); an outbound channel stores a credential and needs its own decision.
+
+## Amendment: refused edits are audited (2026-11-05)
+
+Decision 7 lists the audit actions of publishing, deleting and restricting. The Phase 2 exit of the wiki roadmap adds a case: a member without the right to edit a page is refused when they save a draft and when they publish, and the refusal is audited. The action is `wiki-page.refused`, recorded in `governance.audit_event` like the others and, like them, an audit action and not a permission code.
+
+- **What is recorded.** The actor, the project, the page path as the subject, and in the detail the `path`, the `code` of the refusal (`permission` when the person lacks `wiki.write`, `restriction` when an edit restriction of decision 5 covers the page and does not list them), the `operation` (`draft` or `publish`) and, for a restriction, its `pathPrefix`. Never the text of the page.
+- **What is not.** A request refused as malformed (400, for example a path that is not a page) or as a conflict (409, a stale draft revision or an open write) is not a refusal of a right and is not audited; neither is the answer of the access route, which only tells the portal what to enable.
+- **Where.** One place decides and records: the wiki module's access service, which the draft and publish routes both call, so the two routes cannot differ.
