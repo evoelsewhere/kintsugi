@@ -28,6 +28,7 @@ export const AUDIT_ACTIONS = {
   wikiSwitch: "wiki.switch",
   wikiPagePublish: "wiki-page.publish",
   wikiPageRefused: "wiki-page.refused",
+  wikiPageMove: "wiki-page.move",
   wikiPageDelete: "wiki-page.delete",
   wikiRestrictionSet: "wiki-restriction.set",
   wikiRestrictionClear: "wiki-restriction.clear",
