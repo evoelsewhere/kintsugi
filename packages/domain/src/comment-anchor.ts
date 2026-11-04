@@ -38,7 +38,8 @@ const HEADING = /^[ \t]{0,3}#{1,6}[ \t]+/;
 const TABLE_ROW = /^[ \t]*\|.*\|[ \t]*$/;
 const TABLE_SEPARATOR = /^[ \t]*\|?[ \t]*:?-{1,}:?[ \t]*(?:\|[ \t]*:?-{1,}:?[ \t]*)*\|?[ \t]*$/;
 const RULE = /^[ \t]{0,3}(?:-[ \t]*){3,}$|^[ \t]{0,3}(?:\*[ \t]*){3,}$|^[ \t]{0,3}(?:_[ \t]*){3,}$/;
-const QUOTE = /^[ \t]{0,3}>[ \t]?/;
+/** Every quote mark at the start of a line, in one match (a loop that cut one at a time is the square of the line). */
+const QUOTES = /^(?:[ \t]{0,3}>[ \t]?)+/;
 
 /** The pieces of a line of Markdown: the code spans (`code: true`, written without their back ticks) and the rest. */
 function splitCode(text: string): Array<{ text: string; code: boolean }> {
@@ -78,48 +79,96 @@ function splitCode(text: string): Array<{ text: string; code: boolean }> {
 const ESCAPED_BASE = 0xe100;
 const ESCAPED = new RegExp("[" + String.fromCharCode(ESCAPED_BASE) + "-" + String.fromCharCode(ESCAPED_BASE + 0x7f) + "]", "g");
 
-/** The text of one line of inline Markdown as a reader sees it: links and images by their text, no emphasis marks, code as written. */
-function plainInline(text: string): string {
-  const out = splitCode(text).map((piece) => {
-    if (piece.code) return piece.text;
-    return piece.text
-      .replace(/\\([\\`*_{}[\]()#+.!|<>~-])/g, (_match, char: string) => String.fromCharCode(ESCAPED_BASE + char.charCodeAt(0)))
-      .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
-      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-      .replace(/\[([^\]]+)\]\[[^\]]*\]/g, "$1")
-      .replace(/<((?:https?|mailto):[^>\s]+)>/g, "$1")
-      .replace(/\*\*(?=\S)(.+?)(?<=\S)\*\*/g, "$1")
-      .replace(/(?<![\w])__(?=\S)(.+?)(?<=\S)__(?![\w])/g, "$1")
-      .replace(/\*(?=\S)(.+?)(?<=\S)\*/g, "$1")
-      .replace(/(?<![\w])_(?=\S)(.+?)(?<=\S)_(?![\w])/g, "$1")
-      .replace(/~~(?=\S)(.+?)(?<=\S)~~/g, "$1")
-      .replace(ESCAPED, (char) => String.fromCharCode(char.charCodeAt(0) - ESCAPED_BASE));
-  });
-  return out.join("").replace(/\s+/g, " ").trim();
+/**
+ * How much of a page's inline marks are read. The patterns that match a link or a pair of marks look ahead for their end, so
+ * a text of many opening marks without closing ones costs the square of its length; a page may be 5 MiB, anyone with
+ * `wiki.write` writes it, and the server reads it for every reader of a comment. So marks are read in pieces of at most
+ * `INLINE_CHUNK` characters (a mark that spans two pieces stays as written), and a page has `INLINE_WORK` steps to spend on
+ * them, a piece costing its length times its opening marks: a page of prose and ordinary markup, however long, stays far
+ * inside it, text made of opening marks is read for the first part of it and kept as written after that.
+ */
+const INLINE_CHUNK = 2000;
+const INLINE_WORK = 15_000_000;
+const OPENING_MARKS = /[[!*_~<`\\]/g;
+
+/** A run of white space that is not one space (the only ones that need a change: a text of single spaces is not copied). */
+const ODD_SPACE = /\s{2,}|[^\S ]/g;
+
+/** What is left of the work to read marks, shared by the blocks of one page. */
+interface InlineBudget {
+  left: number;
+}
+
+/** The text of a piece of inline Markdown as a reader sees it: links and images by their text, no emphasis marks, code as written. */
+function plainChunk(text: string): string {
+  return splitCode(text)
+    .map((piece) => {
+      if (piece.code) return piece.text;
+      return piece.text
+        .replace(/\\([\\`*_{}[\]()#+.!|<>~-])/g, (_match, char: string) => String.fromCharCode(ESCAPED_BASE + char.charCodeAt(0)))
+        .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+        .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+        .replace(/\[([^\]]+)\]\[[^\]]*\]/g, "$1")
+        .replace(/<((?:https?|mailto):[^>\s]+)>/g, "$1")
+        .replace(/\*\*(?=\S)(.+?)(?<=\S)\*\*/g, "$1")
+        .replace(/(?<![\w])__(?=\S)(.+?)(?<=\S)__(?![\w])/g, "$1")
+        .replace(/\*(?=\S)(.+?)(?<=\S)\*/g, "$1")
+        .replace(/(?<![\w])_(?=\S)(.+?)(?<=\S)_(?![\w])/g, "$1")
+        .replace(/~~(?=\S)(.+?)(?<=\S)~~/g, "$1")
+        .replace(ESCAPED, (char) => String.fromCharCode(char.charCodeAt(0) - ESCAPED_BASE));
+    })
+    .join("");
+}
+
+/** The text of a line (or lines) of inline Markdown as a reader sees it, the marks read within the limits above. */
+function plainInline(text: string, budget: InlineBudget): string {
+  const spaced = text.replace(ODD_SPACE, " ");
+  if (budget.left <= 0) return spaced.trim();
+  let out = "";
+  for (let at = 0; at < spaced.length; ) {
+    let chunk = spaced.slice(at, at + INLINE_CHUNK);
+    if (at + chunk.length < spaced.length) {
+      // Cut at a space when there is one in the piece (the search stays inside it: it never runs back over the whole text).
+      const space = chunk.lastIndexOf(" ");
+      if (space > 0) chunk = chunk.slice(0, space + 1);
+    }
+    const end = at + chunk.length;
+    const marks = chunk.match(OPENING_MARKS)?.length ?? 0;
+    if (marks > 0 && budget.left > 0) {
+      budget.left -= chunk.length * (1 + marks);
+      out += plainChunk(chunk);
+    } else out += chunk;
+    at = end;
+  }
+  return out.replace(ODD_SPACE, " ").trim();
 }
 
 /** The cells of a table row, as the reader shows them: each trimmed, empty ones left out, one space between. */
-function tableRowText(line: string): string {
+function tableRowText(line: string, budget: InlineBudget): string {
+  // With no work left the cells are read as written: the same text, without a call for each of a million cells.
+  if (budget.left <= 0) return line.trim().replace(/^\|/, "").replace(/\|$/, "").replace(/\|/g, " ").replace(/\s+/g, " ").trim();
   return plainInline(
     line
       .trim()
       .replace(/^\|/, "")
       .replace(/\|$/, "")
       .split("|")
-      .map((cell) => plainInline(cell))
+      .map((cell) => plainInline(cell, budget))
       .filter((cell) => cell !== "")
       .join(" "),
+    budget,
   );
 }
 
 /** The blocks of a page's text a reader sees, with the line each starts on. Front matter is not part of the page. */
 function plainBlocks(lines: readonly string[]): PlainBlock[] {
   const blocks: PlainBlock[] = [];
+  const budget: InlineBudget = { left: INLINE_WORK };
   let paragraph: { text: string[]; line: number } | undefined;
   let fence: string | undefined;
   const flush = (): void => {
     if (paragraph !== undefined) {
-      const text = plainInline(paragraph.text.join(" "));
+      const text = plainInline(paragraph.text.join(" "), budget);
       if (text !== "") blocks.push({ text, line: paragraph.line });
     }
     paragraph = undefined;
@@ -158,17 +207,15 @@ function plainBlocks(lines: readonly string[]): PlainBlock[] {
     if (TABLE_ROW.test(raw) || (raw.includes("|") && TABLE_SEPARATOR.test(raw) && /-/.test(raw))) {
       flush();
       if (TABLE_SEPARATOR.test(raw) && !/[^\s|:-]/.test(raw)) continue;
-      const text = tableRowText(raw);
+      const text = tableRowText(raw, budget);
       if (text !== "") blocks.push({ text, line });
       continue;
     }
     let text = raw;
-    while (QUOTE.test(text)) {
-      text = text.replace(QUOTE, "");
-    }
+    text = text.replace(QUOTES, "");
     if (HEADING.test(text)) {
       flush();
-      const heading = plainInline(text.replace(HEADING, "").replace(/[ \t]+#+[ \t]*$/, ""));
+      const heading = plainInline(text.replace(HEADING, "").replace(/[ \t]+#+[ \t]*$/, ""), budget);
       if (heading !== "") blocks.push({ text: heading, line });
       continue;
     }
@@ -238,11 +285,14 @@ export type Reanchored =
 /** Runs of white space as the quote was made: single spaces within a block, a newline between blocks. */
 const normalised = (text: string): string => text.replace(/[ \t\r\f\v]+/g, " ").replace(/ ?\n ?/g, "\n").trim();
 
-/** Every place `needle` is in `text`, as the offset of its first character. */
+/** The most places of a quote that are weighed: a quote of one letter in a page of millions is not told apart from the first thousands. */
+const PLACES_MAX = 2000;
+
+/** The first `PLACES_MAX` places `needle` is in `text`, as the offset of its first character. */
 function occurrences(text: string, needle: string): number[] {
   const found: number[] = [];
   if (needle === "") return found;
-  for (let at = text.indexOf(needle); at >= 0; at = text.indexOf(needle, at + 1)) found.push(at);
+  for (let at = text.indexOf(needle); at >= 0 && found.length < PLACES_MAX; at = text.indexOf(needle, at + 1)) found.push(at);
   return found;
 }
 
@@ -291,7 +341,7 @@ export function reanchor(pageText: string | readonly string[], anchor: CommentAn
         const end = start + exact.length;
         return { start, end, score: contextScore(whole.slice(Math.max(0, start - ANCHOR_CONTEXT_MAX), start), whole.slice(end, end + ANCHOR_CONTEXT_MAX), anchor) };
       });
-      const best = Math.max(...scored.map((place) => place.score));
+      const best = scored.reduce((most, place) => Math.max(most, place.score), 0);
       const candidates = scored.filter((place) => place.score === best);
       const near = options.near;
       const chosen = near === undefined ? candidates[0] : candidates.reduce((closest, place) => (Math.abs(place.start - near) < Math.abs(closest.start - near) ? place : closest));

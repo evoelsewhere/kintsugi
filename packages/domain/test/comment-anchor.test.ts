@@ -178,3 +178,64 @@ describe("reanchor", () => {
     }
   });
 });
+
+describe("pages written to be slow", () => {
+  // A page is up to 5 MiB and written by anyone with wiki.write; the server reads it for every reader of a comment (review of
+  // P3-001): each pattern of opening marks without closing ones must be read in well under a second at 2 MB, in one paragraph
+  // and in many.
+  const SIZE = 2_000_000;
+  const patterns: Record<string, string> = {
+    "bold": "**a ",
+    "italic": "*a ",
+    "underscore bold": "__a ",
+    "underscore": "_a ",
+    "strike": "~~a ",
+    "link": "[x](",
+    "image": "![",
+    "reference link": "[x][",
+    "open brackets": "[",
+    "angle link": "<https://x ",
+    "back ticks of every length": "` `` ``` ```` ````` ",
+    "quote marks": ">",
+    "table cells": "|a",
+    "escapes": "\\*",
+  };
+  const cases = Object.entries(patterns).flatMap(([name, unit]) => [
+    [`${name}, in one paragraph`, [unit.repeat(Math.ceil(SIZE / unit.length))]] as const,
+    [`${name}, in many paragraphs`, Array.from({ length: Math.ceil(SIZE / 500) }, () => `${unit.repeat(Math.ceil(500 / unit.length))}\n`)] as const,
+  ]);
+
+  it.each(cases)("reads %s in under 300 ms a call", (_name, source) => {
+    const page = source.flatMap((text) => text.split("\n"));
+    const took = (work: () => unknown): number => {
+      const started = performance.now();
+      work();
+      return performance.now() - started;
+    };
+    const plain = plainTextOf(page);
+    const middle = Math.floor(plain.length / 2);
+    const anchor = createAnchor(page, { start: middle, end: middle + 20 }, "");
+    expect(took(() => plainTextOf(page))).toBeLessThan(300);
+    expect(took(() => createAnchor(page, { start: middle, end: middle + 20 }, ""))).toBeLessThan(300);
+    expect(took(() => reanchor(page, anchor, []))).toBeLessThan(300);
+  });
+
+  it("reads the marks of a long page of prose to its end, in a long paragraph and after many lines", () => {
+    expect(plainTextOf([`${"word ".repeat(150_000)}**bold** and [a link](x.md)`])).toMatch(/word bold and a link$/);
+    const lines = Array.from({ length: 1500 }, (_, n) => `- Line ${n} with *emphasis* and a [link](a.md).`);
+    expect(plainTextOf([...lines, "", "The **end**"]).split("\n").slice(-2)).toEqual(["Line 1499 with emphasis and a link.", "The end"]);
+  });
+
+  it("keeps the marks as written once a page has used its work on text made of opening marks, and keeps the text", () => {
+    const page = ["[x](".repeat(500_000), "", "The **end** of it"];
+    const plain = plainTextOf(page);
+    expect(plain.endsWith("The **end** of it")).toBe(true);
+    expect(plain.length).toBeGreaterThan(1_000_000);
+  });
+
+  it("finds a quote of one letter in a page of a million of them without failing", () => {
+    const page = ["a".repeat(1_000_000)];
+    const anchor = createAnchor(page, { start: 10, end: 11 }, "section");
+    expect(reanchor(page, anchor, [])).toMatchObject({ status: "moved" });
+  });
+});
