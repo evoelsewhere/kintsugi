@@ -2,5 +2,6 @@
 
 export { WikiModule } from "./wiki.module.js";
 export { WikiAccessService } from "./application/wiki-access.service.js";
+export { WikiDraftService } from "./application/wiki-draft.service.js";
 export { WikiAttachments, WikiDrafts, WikiIdCounters, WikiRestrictions } from "./domain/wiki.ports.js";
-export type { NewWikiDraft, WikiAttachment, WikiDraft, WikiRestriction, WikiRestrictionKind, WikiSubjectKind } from "./domain/wiki.js";
+export type { NewWikiDraft, WikiAttachment, WikiDraft, WikiDraftSummary, WikiDraftView, WikiPresence, WikiRestriction, WikiRestrictionKind, WikiSubjectKind } from "./domain/wiki.js";

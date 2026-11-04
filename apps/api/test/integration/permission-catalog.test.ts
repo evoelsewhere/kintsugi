@@ -15,10 +15,10 @@ const sourceFiles = (dir: string): string[] =>
   });
 
 // Codes added by migration ahead of the module that checks them: the wiki codes of ADR-0099 decision 5 (migration 050)
-// are checked from Phase 2 of the wiki roadmap on, except `wiki.manage`, which the wiki switch checks since Phase 1.
+// are checked from Phase 2 of the wiki roadmap on, except `wiki.manage` (the wiki switch, Phase 1) and `wiki.write` (drafts).
 // Remove a code from this list when its module lands.
-const PLANNED = ["wiki.comment", "wiki.write", "wiki.publish"];
-const WIKI_CODES = [...PLANNED, "wiki.manage"];
+const PLANNED = ["wiki.comment", "wiki.publish"];
+const WIKI_CODES = [...PLANNED, "wiki.write", "wiki.manage"];
 
 const REMOVED = ["subroles.manage", "resource-policy.manage", "agents.publish", "skills.publish", "mcp.publish", "monitoring.team.view", "catalog.consume", "secrets.create", "usage.report"];
 

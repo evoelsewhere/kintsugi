@@ -19,6 +19,35 @@ export interface WikiDraft {
   touchedAt: string;
 }
 
+/** Another person working on the same page: who and when, never their text. */
+export interface WikiPresence {
+  userId: string;
+  /** Their display name, or their sign-in name when they have none. */
+  name: string;
+  touchedAt: string;
+}
+
+/** A draft as the editor sees it: the caller's own, with who else has touched the page lately. */
+export interface WikiDraftView {
+  path: string;
+  pageId: string | null;
+  text: string;
+  revision: number;
+  baseCommit: string | null;
+  baseHash: string | null;
+  touchedAt: string;
+  writeId: string | null;
+  others: WikiPresence[];
+}
+
+/** One line of the list of a person's drafts. */
+export interface WikiDraftSummary {
+  path: string;
+  touchedAt: string;
+  revision: number;
+  writeId: string | null;
+}
+
 /** What a draft is created with; the rest of it is the store's (id, revision 1, time). */
 export interface NewWikiDraft {
   projectId: string;

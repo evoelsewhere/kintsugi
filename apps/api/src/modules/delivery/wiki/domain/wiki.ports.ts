@@ -1,6 +1,6 @@
 // Ports of the wiki's working state (ADR-0098, ADR-0099); the Pg adapters implement them.
 
-import type { NewWikiDraft, WikiAttachment, WikiDraft, WikiRestriction, WikiRestrictionKind, WikiSubjectKind } from "./wiki.js";
+import type { NewWikiDraft, WikiAttachment, WikiDraft, WikiPresence, WikiRestriction, WikiRestrictionKind, WikiSubjectKind } from "./wiki.js";
 
 export abstract class WikiDrafts {
   /** The draft of `userId` for the page, or undefined. */
@@ -9,7 +9,8 @@ export abstract class WikiDrafts {
   abstract create(draft: NewWikiDraft): Promise<WikiDraft>;
   /**
    * Replaces the text if the stored revision is `baseRevision`, raising the revision by one and touching it; undefined
-   * when the draft is gone or its revision has moved on.
+   * when the draft is gone or its revision has moved on. A change of the text means the draft is no longer what the
+   * write it was published with carried, so `writeId` is cleared; the same text keeps it.
    */
   abstract update(id: string, baseRevision: number, text: string): Promise<WikiDraft | undefined>;
   /** Sets or clears the write that published the draft. */
@@ -17,8 +18,11 @@ export abstract class WikiDrafts {
   abstract remove(id: string): Promise<boolean>;
   /** The drafts of a person in a project, newest touched first. */
   abstract listOf(projectId: string, userId: string): Promise<WikiDraft[]>;
-  /** The drafts of other people for the page touched since `since` (an ISO time), newest first. */
-  abstract othersOn(projectId: string, path: string, exceptUserId: string, since: string): Promise<WikiDraft[]>;
+  /**
+   * The other people who have a draft of the page touched since `since` (an ISO time), newest first, and who still hold
+   * Project Access; their text stays where it is.
+   */
+  abstract othersOn(projectId: string, path: string, exceptUserId: string, since: string): Promise<WikiPresence[]>;
 }
 
 export abstract class WikiAttachments {

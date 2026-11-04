@@ -72,7 +72,7 @@ describe.skipIf(!hasDatabase)("wiki editing state (integration)", () => {
     const { id: otherId } = await memberClient(app, admin, "wiki-schema-other", ["user"], ["shop"]);
     await drafts.create({ projectId: "shop", userId: otherId, path: "01-standards/naming.md", pageId: null, text: "theirs", baseCommit: null, baseHash: null });
     expect((await drafts.listOf("shop", userId)).map((draft) => draft.path)).toEqual(["01-standards/naming.md"]);
-    expect((await drafts.othersOn("shop", "01-standards/naming.md", userId, new Date(Date.now() - 120_000).toISOString())).map((draft) => draft.userId)).toEqual([otherId]);
+    expect(await drafts.othersOn("shop", "01-standards/naming.md", userId, new Date(Date.now() - 120_000).toISOString())).toEqual([{ userId: otherId, name: "wiki-schema-other", touchedAt: expect.any(String) }]);
     expect(await drafts.othersOn("shop", "01-standards/naming.md", userId, new Date(Date.now() + 60_000).toISOString())).toEqual([]);
 
     expect(await drafts.remove(created.id)).toBe(true);

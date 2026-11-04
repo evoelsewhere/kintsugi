@@ -2,7 +2,7 @@
 
 import { Injectable } from "@nestjs/common";
 import { getPool } from "#common/db/pool.js";
-import type { NewWikiDraft, WikiAttachment, WikiDraft } from "../domain/wiki.js";
+import type { NewWikiDraft, WikiAttachment, WikiDraft, WikiPresence } from "../domain/wiki.js";
 import { WikiAttachments, WikiDrafts } from "../domain/wiki.ports.js";
 
 interface DraftRow {
@@ -53,7 +53,8 @@ export class PgWikiDrafts extends WikiDrafts {
 
   async update(id: string, baseRevision: number, text: string): Promise<WikiDraft | undefined> {
     const result = await getPool().query<DraftRow>(
-      `update knowledge.wiki_draft set text = $3, revision = revision + 1, touched_at = now() where id = $1 and revision = $2 returning ${COLUMNS}`,
+      `update knowledge.wiki_draft set write_id = case when knowledge.wiki_draft.text = $3 then knowledge.wiki_draft.write_id else null end, text = $3, revision = revision + 1, touched_at = now()
+        where id = $1 and revision = $2 returning ${COLUMNS}`,
       [id, baseRevision, text],
     );
     return result.rows[0] === undefined ? undefined : toDraft(result.rows[0]);
@@ -72,12 +73,17 @@ export class PgWikiDrafts extends WikiDrafts {
     return result.rows.map(toDraft);
   }
 
-  async othersOn(projectId: string, path: string, exceptUserId: string, since: string): Promise<WikiDraft[]> {
-    const result = await getPool().query<DraftRow>(
-      `select ${COLUMNS} from knowledge.wiki_draft where project_id = $1 and page_path = $2 and user_id <> $3 and touched_at >= $4 order by touched_at desc`,
+  async othersOn(projectId: string, path: string, exceptUserId: string, since: string): Promise<WikiPresence[]> {
+    const result = await getPool().query<{ user_id: string; name: string; touched_at: Date }>(
+      `select d.user_id, coalesce(nullif(u.display_name, ''), u.username) as name, d.touched_at
+         from knowledge.wiki_draft d
+         join core.app_user u on u.id = d.user_id
+         join admin.project_access a on a.project_id = d.project_id and a.user_id = d.user_id
+        where d.project_id = $1 and d.page_path = $2 and d.user_id <> $3 and d.touched_at >= $4
+        order by d.touched_at desc, d.user_id`,
       [projectId, path, exceptUserId, since],
     );
-    return result.rows.map(toDraft);
+    return result.rows.map((row) => ({ userId: row.user_id, name: row.name, touchedAt: row.touched_at.toISOString() }));
   }
 }
 
