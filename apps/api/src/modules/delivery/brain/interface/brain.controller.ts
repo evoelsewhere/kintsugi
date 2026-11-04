@@ -3,17 +3,19 @@
 
 import { Body, Controller, Get, HttpCode, Param, Post, Put, Query, UseGuards } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
-import type { BrainBrokenView, BrainChangesView, BrainGrepView, BrainLookupView, BrainReadView, BrainStatusView, BrainTreeView } from "@kintsugi/domain";
+import type { BrainBacklinksView, BrainBrokenView, BrainChangesView, BrainGrepView, BrainLookupView, BrainReadView, BrainStatusView, BrainTreeView } from "@kintsugi/domain";
 import { type Actor, CurrentActor, RequirePermission } from "#common/auth/decorators.js";
 import { ProjectAccessGuard } from "#modules/admin/project-access/index.js";
 import { BrainService } from "../application/brain.service.js";
 import {
+  type BrainBacklinksQueryDto,
   type BrainChangesQueryDto,
   type BrainConfigureBody,
   type BrainGrepQueryDto,
   type BrainLookupQueryDto,
   type BrainReadQueryDto,
   type BrainTreeQueryDto,
+  brainBacklinksQuerySchema,
   brainChangesQuerySchema,
   brainConfigureSchema,
   brainGrepQuerySchema,
@@ -62,6 +64,12 @@ export class BrainController {
   @ApiOperation({ summary: "A node's text at the indexed commit, its citation, children and links" })
   node(@Param("id") id: string, @Query({ schema: brainReadQuerySchema }) query: BrainReadQueryDto): Promise<BrainReadView> {
     return this.brain.read(id, { ...query, maxChars: PORTAL_READ_CHARS });
+  }
+
+  @Get("backlinks")
+  @ApiOperation({ summary: "The pages that link to a page, a heading or a card, a window of them in path order" })
+  backlinks(@Param("id") id: string, @Query({ schema: brainBacklinksQuerySchema }) query: BrainBacklinksQueryDto): Promise<BrainBacklinksView> {
+    return this.brain.backlinks(id, query);
   }
 
   @Get("lookup")

@@ -1,7 +1,7 @@
 // The Brain's tree in Postgres, through the worker's own store so both sides read and write it the same way.
 
 import { Injectable } from "@nestjs/common";
-import type { BrainBrokenLink, BrainLinks, BrainNode, BrainNodePage, BrainSource } from "@kintsugi/domain";
+import type { BrainBacklinkRows, BrainBrokenLink, BrainLinks, BrainNode, BrainNodeKind, BrainNodePage, BrainSource } from "@kintsugi/domain";
 import { PgBrainStore } from "@kintsugi/orchestrator/brain";
 import { getPool } from "#common/db/pool.js";
 import { BrainIndex } from "../domain/brain.ports.js";
@@ -62,6 +62,14 @@ export class PgBrainIndex extends BrainIndex {
 
   broken(projectId: string): Promise<BrainBrokenLink[]> {
     return this.store.broken(projectId);
+  }
+
+  backlinks(projectId: string, target: { id: string; path: string; kind: BrainNodeKind }, offset: number, limit: number): Promise<BrainBacklinkRows> {
+    return this.store.backlinks(projectId, target, offset, limit);
+  }
+
+  nodesByIds(projectId: string, ids: readonly string[]): Promise<BrainNode[]> {
+    return this.store.nodesByIds(projectId, ids);
   }
 
   nodesInRanges(projectId: string, path: string, ranges: ReadonlyArray<{ start: number; end: number }>, limit: number): Promise<BrainNode[]> {

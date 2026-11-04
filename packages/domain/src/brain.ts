@@ -1177,6 +1177,28 @@ export interface BrainLinkedNode extends BrainNode {
   linkKind: BrainLink["kind"];
 }
 
+/** One link to a page: the node that holds the link, the node of the page it points at, and what kind of link it is. */
+export interface BrainBacklink {
+  /** The deepest node (section or card) of another document whose text holds the link. */
+  node: BrainNode;
+  /** What it points at: the page itself, or one of its headings or cards. */
+  target: BrainNode;
+  linkKind: BrainLink["kind"];
+}
+
+/** The pages that link to a node, a window of them in path order (ADR-0097 decision 8). */
+export interface BrainBacklinksView {
+  projectId: string;
+  branch: string;
+  commit: string;
+  node: BrainNode;
+  items: BrainBacklink[];
+  total: number;
+  offset: number;
+  /** The offset of the next window, or null after the last. */
+  nextOffset: number | null;
+}
+
 export interface BrainReadView {
   projectId: string;
   branch: string;
@@ -1303,6 +1325,12 @@ export interface BrainSource {
 
 export interface BrainNodePage {
   items: BrainNode[];
+  total: number;
+}
+
+/** Raw rows of the links to a node, before the nodes behind them are read. */
+export interface BrainBacklinkRows {
+  rows: Array<{ fromId: string; toId: string; kind: BrainLink["kind"] }>;
   total: number;
 }
 

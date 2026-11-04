@@ -61,6 +61,16 @@ class MemoryIndex extends BrainIndex {
   async broken() {
     return this.broken_;
   }
+  async backlinks(_projectId: string, target: { id: string; path: string; kind: string }, offset: number, limit: number) {
+    const rows = this.links_
+      .filter((link) => link.toId === target.id || (target.kind === "document" && link.toId.startsWith(`${target.path}#`)))
+      .filter((link) => this.nodes.find((node) => node.id === link.fromId)?.path !== target.path)
+      .sort((a, b) => a.fromId.localeCompare(b.fromId) || a.toId.localeCompare(b.toId));
+    return { rows: rows.slice(offset, offset + limit).map((link) => ({ fromId: link.fromId, toId: link.toId, kind: link.kind })), total: rows.length };
+  }
+  async nodesByIds(_projectId: string, ids: readonly string[]) {
+    return this.nodes.filter((node) => ids.includes(node.id));
+  }
   async request(_projectId: string, actor: string) {
     if (this.row?.enabled !== true) return undefined;
     this.row = { ...this.row, updatedBy: actor };
@@ -490,6 +500,47 @@ describe("BrainService.broken", () => {
     await expect(setup({ noRow: true }).brain.broken("shop")).rejects.toThrow(ConflictException);
     await expect(setup({ row: { enabled: false } }).brain.broken("shop")).rejects.toThrow(ConflictException);
     await expect(setup({ row: { indexedCommit: null, state: "queued" } }).brain.broken("shop")).rejects.toThrow(ConflictException);
+  });
+});
+
+describe("BrainService.backlinks", () => {
+  const pages = (count: number) =>
+    [
+      { path: "target.md", text: "# Target\n\n## Setup\n\nSteps.\n" },
+      ...Array.from({ length: count }, (_, at) => ({ path: `from/p${String(at).padStart(2, "0")}.md`, text: `# P${at}\n\nSee [setup](../target.md#setup)${at % 2 === 0 ? " and [the page](../target.md)" : ""}.\n` })),
+      { path: "inner.md", text: "# Inner\n\n## A\n\nSee [b](#b).\n\n## B\n\nText.\n" },
+    ];
+
+  it("counts the links to the page and to its headings, each page once per link, and none from inside the page", async () => {
+    const { brain, index } = setup();
+    index.nodes = buildBrainTree(pages(3), "shop-docs").nodes;
+    index.links_ = buildBrainTree(pages(3), "shop-docs").links;
+    const found = await brain.backlinks("shop", { node: "target.md", offset: 0, limit: 20 });
+    expect(found).toMatchObject({ total: 5, offset: 0, nextOffset: null, commit: COMMIT, node: { id: "target.md" } });
+    expect(found.items.map((item) => [item.node.path, item.target.id])).toEqual([
+      ["from/p00.md", "target.md"],
+      ["from/p00.md", "target.md#setup"],
+      ["from/p01.md", "target.md#setup"],
+      ["from/p02.md", "target.md"],
+      ["from/p02.md", "target.md#setup"],
+    ]);
+    expect((await brain.backlinks("shop", { node: "target.md#setup", offset: 0, limit: 20 })).items.map((item) => item.node.path)).toEqual(["from/p00.md", "from/p01.md", "from/p02.md"]);
+    expect((await brain.backlinks("shop", { node: "inner.md", offset: 0, limit: 20 })).total).toBe(0);
+  });
+
+  it("pages through them and refuses a folder or an unknown node", async () => {
+    const { brain, index } = setup();
+    const tree = buildBrainTree(pages(25), "shop-docs");
+    index.nodes = tree.nodes;
+    index.links_ = tree.links;
+    const first = await brain.backlinks("shop", { node: "target.md#setup", offset: 0, limit: 20 });
+    expect(first).toMatchObject({ total: 25, nextOffset: 20 });
+    expect(first.items).toHaveLength(20);
+    const second = await brain.backlinks("shop", { node: "target.md#setup", offset: 20, limit: 20 });
+    expect(second).toMatchObject({ total: 25, nextOffset: null });
+    expect(second.items).toHaveLength(5);
+    await expect(brain.backlinks("shop", { node: "from/", offset: 0, limit: 20 })).rejects.toThrow(BadRequestException);
+    await expect(brain.backlinks("shop", { node: "nothing.md", offset: 0, limit: 20 })).rejects.toThrow(NotFoundException);
   });
 });
 
