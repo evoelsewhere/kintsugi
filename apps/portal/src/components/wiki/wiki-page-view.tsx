@@ -4,6 +4,7 @@
 
 import type { BrainNode } from "@kintsugi/domain";
 import { Archive, ArchiveRestore, GitCommitHorizontal, PencilLine, Tag } from "lucide-react";
+import { useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Loaded } from "@/components/loaded";
 import { Markdown } from "@/components/results/lazy-markdown";
@@ -21,6 +22,7 @@ import { ExportMarkdownButton } from "./export-markdown-button";
 import { WikiBacklinks } from "./wiki-backlinks";
 import { WikiCompare } from "./wiki-compare";
 import { WikiToc } from "./wiki-toc";
+import { WikiComments } from "./wiki-comments";
 import { DeleteButton } from "./wiki-delete";
 import { WikiEditor } from "./wiki-editor";
 import { WikiHistory } from "./wiki-history";
@@ -134,6 +136,7 @@ function PageTabs({ projectId, path, mode }: { projectId: string; path: string; 
 function PageText({ projectId, commit, path }: WikiPageViewProps): React.JSX.Element {
   const file = useLoader(`wiki/${projectId}/${commit}/file/${path}`, () => wikiRead(() => documentsApi.file(projectId, path, commit)));
   useScrollToHeading(file.data !== undefined);
+  const article = useRef<HTMLDivElement>(null);
   return (
     <Loaded loader={file}>
       {(loaded) => (
@@ -143,8 +146,15 @@ function PageText({ projectId, commit, path }: WikiPageViewProps): React.JSX.Ele
             <ExportMarkdownButton path={path} text={loaded.content} />
           </div>
           <WikiToc projectId={projectId} path={path} entries={tocOf(path, loaded.content)} />
-          <Markdown text={splitFrontMatter(loaded.content).body} path={path} />
-          <WikiBacklinks projectId={projectId} commit={commit} path={path} />
+          <div className="flex flex-col gap-6 xl:grid xl:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="min-w-0">
+              <div ref={article}>
+                <Markdown text={splitFrontMatter(loaded.content).body} path={path} />
+              </div>
+              <WikiBacklinks projectId={projectId} commit={commit} path={path} />
+            </div>
+            <WikiComments projectId={projectId} commit={commit} path={path} page={article} />
+          </div>
         </>
       )}
     </Loaded>
