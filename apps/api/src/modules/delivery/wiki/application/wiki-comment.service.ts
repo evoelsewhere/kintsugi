@@ -3,14 +3,20 @@
 // anyone with Project Access. An inline comment keeps the passage (`exact`) and what surrounds it, taken from the page as
 // the Brain indexed it, which the server checks and the client cannot choose.
 
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { pageIdOf, reanchor } from "@kintsugi/domain";
 import type { Actor } from "#common/auth/decorators.js";
+import { ProjectAccessService } from "#modules/admin/project-access/index.js";
+import { NotificationService } from "#modules/core/notifications/index.js";
 import { BrainService } from "#modules/delivery/brain/index.js";
 import { DocumentsService } from "#modules/delivery/documents/index.js";
 import { COMMENTS_OPEN_MAX, COMMENT_BODY_MAX, type WikiCommentAnchor, type WikiCommentList, type WikiCommentRow, type WikiCommentView } from "../domain/wiki.comment.js";
-import { WikiComments } from "../domain/wiki.ports.js";
+import { WikiComments, WikiWatches } from "../domain/wiki.ports.js";
 import { WikiAccessService } from "./wiki-access.service.js";
+import { WikiPeopleService } from "./wiki-people.service.js";
+
+/** The most watchers one comment notifies: a page that more people watch than this tells the first of them. */
+const NOTIFY_MAX = 500;
 
 /** The largest page a comment is made on: the one the editor can write. */
 const PAGE_MAX_BYTES = 5 * 1024 * 1024;
@@ -29,7 +35,13 @@ export class WikiCommentService {
     private readonly documents: DocumentsService,
     private readonly brain: BrainService,
     private readonly access: WikiAccessService,
+    private readonly people: WikiPeopleService,
+    private readonly watches: WikiWatches,
+    private readonly notifications: NotificationService,
+    private readonly projectAccess: ProjectAccessService,
   ) {}
+
+  readonly #log = new Logger(WikiCommentService.name);
 
   /** The comments of a page, in time order (`limit` of them after the comment `after`). */
   async list(projectId: string, path: string, limit: number, after: string | undefined): Promise<WikiCommentList> {
@@ -71,7 +83,43 @@ export class WikiCommentService {
     if ("tooMany" in result) {
       throw new ConflictException({ message: `This page already has ${COMMENTS_OPEN_MAX} open comments; resolve some before adding more`, details: { code: "too-many", limit: COMMENTS_OPEN_MAX } });
     }
+    // A repeat of a comment (a double click) is not announced again; a failing notification never loses the comment.
+    if (!result.duplicate) {
+      await this.#notify(projectId, actor, page.key, input.path, result.comment, input.parentId === undefined ? undefined : (await this.comments.find(projectId, input.parentId))?.authorId).catch((error: unknown) =>
+        this.#log.error(`Notifying about comment ${result.comment.id} failed: ${error instanceof Error ? error.message : String(error)}`),
+      );
+    }
     return toView(result.comment, placed === undefined ? undefined : { line: placed.line });
+  }
+
+  /**
+   * Tells the people a comment concerns, each once: those it mentions (`wiki-mention`), the author of the comment it answers
+   * and the people who watch the page, its folders or its space (`wiki-comment`). Never the author of the comment, and only
+   * people who still have Project Access; a name that is nobody's is not found and costs no notification.
+   */
+  async #notify(projectId: string, actor: Actor, pageKey: string, path: string, comment: WikiCommentRow, parentAuthorId: string | undefined): Promise<void> {
+    const mentioned = await this.people.mentionedIds(projectId, comment.body);
+    const folders = path.split("/").slice(0, -1).map((_, index, parts) => parts.slice(0, index + 1).join("/"));
+    const space = await this.brain.lookup(projectId, path).then(
+      (found) => found.matches.find((match) => match.kind === "document")?.space ?? null,
+      () => null,
+    );
+    const watchers = await this.watches.watchersOf(projectId, [
+      { scopeKind: "page", target: pageKey },
+      { scopeKind: "page", target: `path:${path}` },
+      ...folders.map((target) => ({ scopeKind: "folder" as const, target })),
+      ...(space === null ? [] : [{ scopeKind: "space" as const, target: space.toUpperCase() }]),
+    ]);
+    // One notification a person, the strongest reason first: a mention, then an answer or a watch.
+    const kinds = new Map<string, "wiki-mention" | "wiki-comment">();
+    for (const id of [...(parentAuthorId === undefined ? [] : [parentAuthorId]), ...watchers.slice(0, NOTIFY_MAX)]) kinds.set(id, "wiki-comment");
+    for (const id of mentioned) kinds.set(id, "wiki-mention");
+    kinds.delete(actor.id);
+    for (const [userId, kind] of kinds) {
+      // A person who lost Project Access (a watcher from before) hears nothing.
+      if (!(await this.projectAccess.requireRead(userId, projectId).then(() => true, () => false))) continue;
+      await this.notifications.create({ userId, projectId, kind, subject: { pageKey, commentId: comment.id, actorId: actor.id }, dedupeKey: `${kind}:${userId}:${comment.id}:-` });
+    }
   }
 
   /** The page at the head of the default branch: its key (its id, else its path) and that it exists; 404 when it does not. */

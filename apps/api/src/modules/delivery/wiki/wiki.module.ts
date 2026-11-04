@@ -4,6 +4,7 @@
 import { Module } from "@nestjs/common";
 import { DocumentWritesModule } from "#modules/admin/document-writes/index.js";
 import { ProjectAccessModule } from "#modules/admin/project-access/index.js";
+import { NotificationsModule } from "#modules/core/notifications/index.js";
 import { BrainModule } from "#modules/delivery/brain/index.js";
 import { DocumentsModule } from "#modules/delivery/documents/index.js";
 import { WikiAccessService } from "./application/wiki-access.service.js";
@@ -39,7 +40,7 @@ import { WikiRestrictionController } from "./interface/wiki-restriction.controll
 import { WikiWatchController } from "./interface/wiki-watch.controller.js";
 
 @Module({
-  imports: [ProjectAccessModule, DocumentsModule, DocumentWritesModule, BrainModule],
+  imports: [ProjectAccessModule, DocumentsModule, DocumentWritesModule, BrainModule, NotificationsModule],
   controllers: [WikiAccessController, WikiAttachmentController, WikiCommentController, WikiDraftController, WikiMoveController, WikiPageController, WikiPeopleController, WikiPublishController, WikiRestrictionController, WikiWatchController],
   providers: [
     WikiAccessService,
