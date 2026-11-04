@@ -29,6 +29,7 @@ import { PgJobStore } from "./jobs/store.js";
 import { EmptyRepositoryError, onDefaultTipMove, pruneMirrors, syncRepository } from "./git-sync/sync.js";
 import { triggerRebuilds } from "./aggregates.js";
 import { dueBrainBuilds, indexBrain } from "./brain/index.js";
+import { dueWikiNotifies, notifyWikiWatchers } from "./wiki-notify/index.js";
 import { dispatchOutbox, PostgresOutboxStore } from "./outbox/index.js";
 import {
   BRAIN_INDEX_QUEUE,
@@ -40,14 +41,18 @@ import {
   type JobRunRequest,
   QUEUE_SCHEMA,
   WORKSPACE_CLEANUP_QUEUE,
+  WIKI_NOTIFY_QUEUE,
+  type WikiNotifyRequest,
   type WorkspaceCleanupRequest,
   ensureBrainIndexQueue,
   ensureDocumentWriteQueue,
   ensureJobRunQueue,
+  ensureWikiNotifyQueue,
   ensureWorkspaceCleanupQueue,
   sendBrainIndex,
   sendDocumentWrite,
   sendJobRun,
+  sendWikiNotify,
 } from "./queues.js";
 
 export { GIT_SYNC_QUEUE, QUEUE_SCHEMA } from "./queues.js";
@@ -148,9 +153,10 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
   // Created here, before the sweep below sees them (P-039); their workers start further down.
   await ensureWorkspaceCleanupQueue(boss);
   await ensureBrainIndexQueue(boss);
+  await ensureWikiNotifyQueue(boss);
   // A write, a sync, a cleanup or a Brain build a stopped worker had taken is retried now, not after its expiry (DC-002,
   // P-039): the writes, syncs and builds run one per repository or project, so a stuck one blocks the next.
-  await failStrandedQueueJobs(options.pool, boss, [GIT_SYNC_QUEUE, DOCUMENT_WRITE_QUEUE, WORKSPACE_CLEANUP_QUEUE, BRAIN_INDEX_QUEUE], log).catch((error: unknown) =>
+  await failStrandedQueueJobs(options.pool, boss, [GIT_SYNC_QUEUE, DOCUMENT_WRITE_QUEUE, WORKSPACE_CLEANUP_QUEUE, BRAIN_INDEX_QUEUE, WIKI_NOTIFY_QUEUE], log).catch((error: unknown) =>
     log(`could not clear the queue jobs a stopped worker left: ${error instanceof Error ? error.message : String(error)}`),
   );
   await boss.work<{ repositoryId: string }>(GIT_SYNC_QUEUE, { localConcurrency: options.concurrency ?? 2 }, counted(async ([job]) => {
@@ -245,10 +251,16 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     log(`workspace ${job.data.jobId}: ${outcome}${job.data.actor === undefined ? "" : ` (asked by ${job.data.actor})`}`);
   }));
   // The Brain (ADR-0091): one build per project at a time; a build reads a commit, so it never waits for the mirror.
-  const brainDeps = { pool: options.pool, repositories: store, storage: options.storage, log };
+  // After a build of a wiki project, its watchers are told what changed (ADR-0099 decision 3): a queue of its own, so a
+  // slow or failing fan-out never holds up or changes a build, and a cursor that finds what a lost request missed.
+  const brainDeps = { pool: options.pool, repositories: store, storage: options.storage, log, requestWikiNotify: (request: WikiNotifyRequest) => sendWikiNotify(boss, request) };
   await boss.work<BrainIndexRequest>(BRAIN_INDEX_QUEUE, { localConcurrency: 1 }, counted(async ([job]) => {
     if (job === undefined) return;
     await indexBrain(brainDeps, job.data.projectId);
+  }));
+  await boss.work<WikiNotifyRequest>(WIKI_NOTIFY_QUEUE, { localConcurrency: 1 }, counted(async ([job]) => {
+    if (job === undefined) return;
+    await notifyWikiWatchers(brainDeps, job.data.projectId, job.data.to);
   }));
   const requestBrainBuilds = async (repositoryId?: string): Promise<void> => {
     for (const projectId of await dueBrainBuilds(brainDeps, repositoryId)) await sendBrainIndex(boss, { projectId });
@@ -310,7 +322,11 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
   });
   const checkCancels = tick("cancel check", watchCancels);
   // Other branches, builds lost with a stopped worker and a newer builder are found here.
-  const checkBrains = tick("brain check", () => requestBrainBuilds());
+  const checkBrains = tick("brain check", async () => {
+    await requestBrainBuilds();
+    // The watchers of a wiki the Brain got ahead of: a request that was lost, or a first run (the cursor is not set).
+    for (const due of await dueWikiNotifies(brainDeps)) await sendWikiNotify(boss, { projectId: due.projectId, from: due.from, to: due.to });
+  });
   const followJobConcurrency = tick("job concurrency", () => syncJobConcurrency());
   const outboxStore = new PostgresOutboxStore(options.pool);
   const outboxWorkerId = randomUUID();
@@ -361,7 +377,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
 
   const heartbeat = await startHeartbeat({
     pool: options.pool,
-    queues: [GIT_SYNC_QUEUE, DOCUMENT_WRITE_QUEUE, WORKSPACE_CLEANUP_QUEUE, BRAIN_INDEX_QUEUE, ...(options.jobs === undefined ? [] : [JOB_RUN_QUEUE])],
+    queues: [GIT_SYNC_QUEUE, DOCUMENT_WRITE_QUEUE, WORKSPACE_CLEANUP_QUEUE, BRAIN_INDEX_QUEUE, WIKI_NOTIFY_QUEUE, ...(options.jobs === undefined ? [] : [JOB_RUN_QUEUE])],
     activeJobs: () => busy,
     ...(options.heartbeatSeconds === undefined ? {} : { intervalSeconds: options.heartbeatSeconds }),
     log,
