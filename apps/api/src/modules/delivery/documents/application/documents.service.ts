@@ -184,6 +184,14 @@ export class DocumentsService {
    * undefined when the file does not exist there (a new page), 413 when it is larger than `maxBytes`.
    */
   async hashAt(context: DocumentContext, commit: string, path: string, maxBytes: number): Promise<string | undefined> {
+    return (await this.readPage(context, commit, path, maxBytes, false))?.hash;
+  }
+
+  /**
+   * A page at a commit as the editor needs it: its text and the SHA-256 of its bytes, read once; undefined when it does
+   * not exist there, 413 when it is larger than `maxBytes` and 415 when it is not UTF-8 text.
+   */
+  async readPage(context: DocumentContext, commit: string, path: string, maxBytes: number, withText = true): Promise<{ text: string; hash: string } | undefined> {
     const read = await this.reader.readBytes(context.repo, commit, servablePath(path, false), maxBytes);
     switch (read.status) {
       case "missing":
@@ -192,8 +200,15 @@ export class DocumentsService {
         throw new BadRequestException(`${path} is a directory`);
       case "too-large":
         throw new PayloadTooLargeException(`${path} is ${read.size} bytes; pages up to ${maxBytes} bytes can be edited`);
-      case "ok":
-        return createHash("sha256").update(read.bytes).digest("hex");
+      case "ok": {
+        const hash = createHash("sha256").update(read.bytes).digest("hex");
+        if (!withText) return { text: "", hash };
+        try {
+          return { text: new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(read.bytes), hash };
+        } catch {
+          throw new UnsupportedMediaTypeException(`${path} is not UTF-8 text`);
+        }
+      }
     }
   }
 

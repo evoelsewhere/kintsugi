@@ -1,7 +1,7 @@
 // A person's drafts of wiki pages (ADR-0098 decision 2): the text between keystrokes and publication lives in Postgres.
 // Autosave only writes this table; it never reaches the document writer, which publishes (a separate, explicit step).
 
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { isWikiEditablePath } from "@kintsugi/domain";
 import type { Actor } from "#common/auth/decorators.js";
 import { sqlStateOf } from "#common/db/errors.js";
@@ -10,6 +10,7 @@ import { type DocumentContext, DocumentsService } from "#modules/delivery/docume
 import type { WikiDraft, WikiDraftSummary, WikiDraftView } from "../domain/wiki.js";
 import { WikiDrafts } from "../domain/wiki.ports.js";
 import { WikiAccessService } from "./wiki-access.service.js";
+import { revisionConflict } from "./wiki-errors.js";
 
 /** The most bytes of a draft's text: a page is written as one file of at most this size (the write contract's limit). */
 export const DRAFT_TEXT_MAX_BYTES = 5 * 1024 * 1024;
@@ -150,12 +151,4 @@ export class WikiDraftService {
       others,
     };
   }
-}
-
-/** The 409 of a save whose revision is not the stored one (0: there is no draft). The editor reads `details.revision`. */
-function revisionConflict(revision: number): ConflictException {
-  return new ConflictException({
-    message: revision === 0 ? "The draft is gone; read the page again" : `The draft is at revision ${revision}: it was saved from another tab or window`,
-    details: { code: "draft-revision", revision },
-  });
 }
