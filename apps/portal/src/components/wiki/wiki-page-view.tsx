@@ -23,6 +23,7 @@ import { WikiCompare } from "./wiki-compare";
 import { WikiToc } from "./wiki-toc";
 import { WikiEditor } from "./wiki-editor";
 import { WikiHistory } from "./wiki-history";
+import { MoveButton } from "./wiki-move";
 
 export interface WikiPageViewProps {
   projectId: string;
@@ -87,10 +88,13 @@ function EditEntry({ projectId, path }: { projectId: string; path: string }): Re
       )}
       <div className="flex flex-wrap items-center gap-2">
         {view.canWrite ? (
+          <>
           <Button size="small" variant="solid" onClick={() => void navigate(wikiPageLink(projectId, path, { mode: "edit" }))}>
             <PencilLine />
             Edit
           </Button>
+          <MoveButton projectId={projectId} path={path} direct={view.direct} />
+          </>
         ) : (
           <Button size="small" disabled title={view.refusal?.message}>
             <PencilLine />
