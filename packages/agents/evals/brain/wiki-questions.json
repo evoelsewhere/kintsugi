@@ -413,6 +413,72 @@
           "match": "- \"finance\""
         }
       ]
+    },
+    {
+      "id": "W25",
+      "kind": "lookup",
+      "question": "Which pages does a lookup of `label:Sev1` return? (the label is written in another case than the pages write it)",
+      "query": "label:Sev1",
+      "expect": [
+        "20-spaces/eng/runbooks/db-failover.md",
+        "20-spaces/eng/runbooks/payment-outage.md"
+      ],
+      "evidence": [
+        {
+          "file": "20-spaces/eng/runbooks/db-failover.md",
+          "match": "labels: [runbook, sev1, database]"
+        },
+        {
+          "file": "20-spaces/eng/runbooks/payment-outage.md",
+          "match": "labels: [runbook, sev1, payments]"
+        }
+      ]
+    },
+    {
+      "id": "W26",
+      "kind": "lookup",
+      "question": "Which pages does a lookup of `label:Finance` return? (one of them writes its labels as a block list)",
+      "query": "label:Finance",
+      "expect": [
+        "20-spaces/hr/2019-expenses.md",
+        "20-spaces/ops/services/billing.md"
+      ],
+      "evidence": [
+        {
+          "file": "20-spaces/hr/2019-expenses.md",
+          "match": "labels: [policy, finance]"
+        },
+        {
+          "file": "20-spaces/ops/services/billing.md",
+          "match": "- \"finance\""
+        }
+      ]
+    },
+    {
+      "id": "W27",
+      "kind": "lookup",
+      "question": "Which pages does a lookup of `space:eng` return? (the key is written in lower case)",
+      "query": "space:eng",
+      "folder": "20-spaces/eng",
+      "evidence": [
+        {
+          "file": "20-spaces/eng/README.md",
+          "match": "key: ENG"
+        }
+      ]
+    },
+    {
+      "id": "W28",
+      "kind": "lookup",
+      "question": "Which pages does a lookup of `space:Hr` return? (the key is written in mixed case)",
+      "query": "space:Hr",
+      "folder": "20-spaces/hr",
+      "evidence": [
+        {
+          "file": "20-spaces/hr/README.md",
+          "match": "key: HR"
+        }
+      ]
     }
   ]
 }

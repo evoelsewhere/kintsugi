@@ -254,6 +254,23 @@ describe("the wiki eval's key fits its fixture", () => {
     }
   });
 
+  it("asks at least one question by `label:` and one by `space:`, and names their pages as the front matter does (P2-021)", () => {
+    const lookups = ofKind("lookup");
+    expect(lookups.filter((question) => String(question.query).toLowerCase().startsWith("label:")).length).toBeGreaterThanOrEqual(1);
+    expect(lookups.filter((question) => String(question.query).toLowerCase().startsWith("space:")).length).toBeGreaterThanOrEqual(1);
+    for (const question of lookups) {
+      const [kind = "", value = ""] = String(question.query).split(":");
+      if (kind === "label") {
+        expect(sorted(question.expect), question.id).toEqual(pagesWhere((front) => (front.get("labels") as string[] | undefined)?.map((label) => label.toLowerCase()).includes(value.toLowerCase()) === true));
+      } else {
+        // A space is every page under the folder of the home page that gives its key, in any case of the key.
+        const home = frontOf(wikiDocs.get(`${String(question.folder)}/README.md`) ?? "");
+        expect(String(home.get("key")).toUpperCase(), question.id).toBe(value.toUpperCase());
+        expect(value, question.id).not.toBe(String(home.get("key")));
+      }
+    }
+  });
+
   it("names the archived pages and the templates as the front matter does", () => {
     expect(sorted(asked("W09").expect)).toEqual(pagesWhere((front) => front.get("status") === "archived"));
     expect(sorted(asked("W10").expect)).toEqual(pagesWhere((front) => front.get("type") === "template"));
@@ -323,6 +340,12 @@ describe("the Brain on the wiki fixture", () => {
   it("answers every question of the key", () => {
     expect(report.questions.map((result) => result.id)).toEqual(wikiKey.questions.map((question) => question.id));
     expect(report.stats.documents).toBe(wikiSources.length);
+  });
+
+  it("finds every page of a `label:` or `space:` lookup, in any case of the key, and no other (P2-021)", () => {
+    const lookups = report.questions.filter((result) => result.kind === "lookup");
+    expect(lookups.length).toBeGreaterThanOrEqual(2);
+    for (const result of lookups) expect(result.scores, result.id).toMatchObject({ recall: 1, precision: 1, evidenceInNode: 1 });
   });
 
   it("records the baseline when asked to (BRAIN_WIKI_BASELINE=1)", () => {
