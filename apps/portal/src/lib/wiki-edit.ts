@@ -500,6 +500,8 @@ export type PublishFailure =
   | { kind: "conflict"; body: ConflictBody }
   | { kind: "open-write"; author: string; prUrl: string | null; message: string }
   | { kind: "draft-revision"; message: string }
+  /** The id of a new page is taken by another file: the server gave the draft a new id and revision. */
+  | { kind: "id-taken"; message: string; /** The server gave the draft a new id (a new page): publishing again can succeed. A page that exists is not renewed. */ renewed: boolean }
   | { kind: "message"; status: number | undefined; message: string };
 
 /** The structured detail of a failed request: the `details` of the API's error body, or the body itself. */
@@ -522,6 +524,7 @@ export function classifyPublishFailure(error: unknown): PublishFailure {
     return { kind: "open-write", author: typeof write.author === "string" ? write.author : "Someone else", prUrl: typeof write.prUrl === "string" ? write.prUrl : null, message };
   }
   if (status === 409 && detail["code"] === "draft-revision") return { kind: "draft-revision", message };
+  if (status === 409 && detail["code"] === "id-taken") return { kind: "id-taken", message, renewed: typeof detail["pageId"] === "string" };
   return { kind: "message", status: typeof status === "number" ? status : undefined, message };
 }
 
