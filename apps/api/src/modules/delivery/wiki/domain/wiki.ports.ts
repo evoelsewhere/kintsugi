@@ -59,6 +59,12 @@ export abstract class WikiSubjects {
   abstract names(kind: WikiSubjectKind, ids: readonly string[]): Promise<Map<string, string>>;
 }
 
+/** One publish of a page at a time per project: two people publishing at once cannot both open a write for it. */
+export abstract class WikiPageLocks {
+  /** Runs `work` while holding the lock of the page; others asking for it wait their turn. */
+  abstract withLock<T>(projectId: string, path: string, work: () => Promise<T>): Promise<T>;
+}
+
 /** Where a page may be published straight to the default branch. */
 export abstract class WikiDirectPublish {
   /** The globs of `directPublishPaths` in kintsugi.yaml at the head of the default branch; none when there are none or the file cannot be read. */

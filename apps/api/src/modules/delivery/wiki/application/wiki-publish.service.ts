@@ -1,0 +1,111 @@
+// Publishing a draft (ADR-0098 decisions 3 and 4, design-wiki-draft-publish section 3). A publish is one write of kind
+// `page` for the document writer, which opens a pull request or, where the manifest allows, commits to the default
+// branch. When the page moved since the draft started, the draft is merged three ways with the page first and nothing
+// is written until the person has seen the result: a clean merge is a preview they confirm, a conflict is theirs to resolve.
+
+import { createHash } from "node:crypto";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { mergeText, pageIdOf } from "@kintsugi/domain";
+import { AUDIT_ACTIONS, AuditTrail, auditRecord } from "#common/audit/audit-trail.js";
+import type { Actor } from "#common/auth/decorators.js";
+import { DocumentWritesService } from "#modules/admin/document-writes/index.js";
+import { DocumentsService } from "#modules/delivery/documents/index.js";
+import type { WikiDraft, WikiHead, WikiPublishResult } from "../domain/wiki.js";
+import { WikiDrafts, WikiPageLocks } from "../domain/wiki.ports.js";
+import { WikiAccessService } from "./wiki-access.service.js";
+import { DRAFT_TEXT_MAX_BYTES } from "./wiki-draft.service.js";
+import { mergeConflict, openWriteConflict, revisionConflict } from "./wiki-errors.js";
+
+export interface PublishInput {
+  path: string;
+  /** The revision of the draft the person is publishing. */
+  revision: number;
+  message: string;
+  minor?: boolean | undefined;
+  /** The page as the person saw it in the preview or the conflict; the publish goes ahead only if it is still so. */
+  mergedFrom?: { commit: string; hash: string | null } | undefined;
+  /** The person's resolution of a conflict; needs `mergedFrom`. */
+  resolvedText?: string | undefined;
+}
+
+const sha256 = (text: string): string => createHash("sha256").update(Buffer.from(text, "utf8")).digest("hex");
+
+@Injectable()
+export class WikiPublishService {
+  constructor(
+    private readonly drafts: WikiDrafts,
+    private readonly documents: DocumentsService,
+    private readonly writes: DocumentWritesService,
+    private readonly access: WikiAccessService,
+    private readonly locks: WikiPageLocks,
+    private readonly audit: AuditTrail,
+  ) {}
+
+  async publish(projectId: string, actor: Actor, input: PublishInput): Promise<WikiPublishResult> {
+    const { direct } = await this.access.assertCanPublish(projectId, actor, input.path);
+    if (!input.path.toLowerCase().endsWith(".md")) throw new BadRequestException(`${input.path} is not a page that can be published as text`);
+    if (input.resolvedText !== undefined) {
+      if (input.mergedFrom === undefined) throw new BadRequestException("resolvedText needs mergedFrom, the page as the conflict showed it");
+      if (Buffer.byteLength(input.resolvedText, "utf8") > DRAFT_TEXT_MAX_BYTES) throw new BadRequestException(`A page is at most ${DRAFT_TEXT_MAX_BYTES / (1024 * 1024)} MiB of text`);
+    }
+    // From the head being read to the write being recorded, one publish of the page at a time.
+    return this.locks.withLock(projectId, input.path, () => this.#publish(projectId, actor, input, direct));
+  }
+
+  async #publish(projectId: string, actor: Actor, input: PublishInput, direct: boolean): Promise<WikiPublishResult> {
+    const draft = await this.drafts.find(projectId, actor.id, input.path);
+    if (draft === undefined) throw new NotFoundException(`You have no draft of ${input.path} to publish`);
+    if (draft.revision !== input.revision) throw revisionConflict(draft.revision);
+
+    const context = await this.documents.context(projectId);
+    const { defaultTip } = await this.documents.branchTips(context);
+    if (defaultTip === undefined) throw new BadRequestException("The document repo has no default branch to publish to yet");
+    const headPage = await this.documents.readPage(context, defaultTip.commit, input.path, DRAFT_TEXT_MAX_BYTES);
+    const head: WikiHead = { commit: defaultTip.commit, hash: headPage?.hash ?? null };
+    const publish = (text: string): Promise<WikiPublishResult> => this.#publishText(projectId, actor, input, draft, head.hash, text, direct);
+
+    // The person resolved a conflict against the page as it still is: publish what they made of it, and let the writer
+    // refuse if the page changes in the meantime.
+    if (input.resolvedText !== undefined && input.mergedFrom?.hash === head.hash) return publish(input.resolvedText);
+
+    if (sha256(draft.text) === head.hash) return { outcome: "unchanged" };
+    // Nobody touched the page since the draft started.
+    if (head.hash === draft.baseHash) return publish(draft.text);
+
+    // The page moved: merge the draft with it, from the page as the draft started.
+    const basePage = draft.baseCommit === null || draft.baseHash === null ? undefined : await this.documents.readPage(context, draft.baseCommit, input.path, DRAFT_TEXT_MAX_BYTES);
+    const base = basePage?.text ?? "";
+    const theirs = headPage?.text ?? "";
+    const merged = mergeText(base, draft.text, theirs);
+    if (!merged.clean) throw mergeConflict({ base, ours: draft.text, theirs }, head, merged.regions);
+    if (merged.merged === theirs && headPage !== undefined) return { outcome: "unchanged" };
+    // A clean merge is shown first; the person confirms it by sending the page it was made against.
+    if (input.mergedFrom?.hash === head.hash && input.resolvedText === undefined) return publish(merged.merged);
+    return { outcome: "merge-preview", merged: merged.merged, head, base: { commit: draft.baseCommit, hash: draft.baseHash } };
+  }
+
+  /** Records the write (one open write per page), gives its id to the draft and audits the publish. */
+  async #publishText(projectId: string, actor: Actor, input: PublishInput, draft: WikiDraft, expectedHash: string | null, text: string, direct: boolean): Promise<WikiPublishResult> {
+    const author = actor.username ?? actor.id;
+    const open = await this.writes.openPageWrite(projectId, input.path);
+    // The person's own earlier write of the page, once it has a review branch, is continued; anyone else's, or one not yet
+    // on a branch, has to finish first.
+    if (open !== undefined && (open.actor !== author || open.branch === undefined)) throw openWriteConflict({ id: open.id, author: open.actor ?? null, prUrl: open.prUrl ?? null });
+    const pageId = pageIdOf(text) ?? draft.pageId;
+    const write = await this.writes.proposePage(
+      projectId,
+      {
+        message: input.message,
+        files: [{ path: input.path, content: text, ...(expectedHash === null ? { createOnly: true } : { expectedHash }) }],
+        page: { id: pageId, path: input.path, minor: input.minor === true },
+        ...(direct ? { directPublish: true } : {}),
+        ...(open?.branch === undefined ? {} : { continues: open.branch }),
+      },
+      actor,
+    );
+    await this.drafts.setWrite(draft.id, write.id);
+    const mode = direct ? "direct" : "pull-request";
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.wikiPagePublish, { projectId, subject: input.path, detail: { path: input.path, mode, writeId: write.id, pageId } }));
+    return { outcome: "published", write: { id: write.id, status: write.status, mode, ...(write.branch === undefined ? {} : { branch: write.branch }), ...(write.prUrl === undefined ? {} : { prUrl: write.prUrl }) } };
+  }
+}

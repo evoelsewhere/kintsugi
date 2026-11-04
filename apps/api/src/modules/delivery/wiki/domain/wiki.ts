@@ -48,6 +48,18 @@ export interface WikiDraftSummary {
   writeId: string | null;
 }
 
+/** The head of the default branch as far as one page is concerned: the commit, and the hash of the page there (null: it does not exist). */
+export interface WikiHead {
+  commit: string;
+  hash: string | null;
+}
+
+/** What publishing a draft came to. Only `published` has written anything. */
+export type WikiPublishResult =
+  | { outcome: "unchanged" }
+  | { outcome: "merge-preview"; merged: string; head: WikiHead; base: { commit: string | null; hash: string | null } }
+  | { outcome: "published"; write: { id: string; status: string; mode: "pull-request" | "direct"; branch?: string; prUrl?: string } };
+
 /** What a draft is created with; the rest of it is the store's (id, revision 1, time). */
 export interface NewWikiDraft {
   projectId: string;
