@@ -4,7 +4,7 @@
 
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, rm, rmdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { GitError, runGit } from "./cli.js";
 import { type RemoteOptions, addWorktree, assertSafeRemoteUrl, fetchMirror, resolveCommit } from "./repository.js";
@@ -52,6 +52,37 @@ export interface FileWrite {
   expectedHash?: string;
 }
 
+/** A file to remove. `expectedHash` is required: the SHA-256 of the file as it was read. */
+export interface FileDelete {
+  path: string;
+  delete: true;
+  expectedHash: string;
+}
+
+/**
+ * A file moved to `path` with `content` (its text after the links in it were rewritten), in the commit that removes
+ * `renameFrom`. `expectedHash` is the SHA-256 of `renameFrom` as it was read. Git sees a rename by similarity, so
+ * `git log --follow` goes on across it.
+ */
+export interface FileRename {
+  path: string;
+  renameFrom: string;
+  content: string | Uint8Array;
+  expectedHash: string;
+}
+
+/** What one entry of a commit does: write or edit a file, delete one, or move one. */
+export type FileChange = FileWrite | FileDelete | FileRename;
+
+/** The most entries of one commit, deletes and renames included, and the most bytes of content. */
+export const MAX_COMMIT_ENTRIES = 500;
+export const MAX_COMMIT_BYTES = 50 * 1024 * 1024;
+
+const isDelete = (change: FileChange): change is FileDelete => "delete" in change && change.delete === true;
+const isRename = (change: FileChange): change is FileRename => "renameFrom" in change && typeof change.renameFrom === "string";
+const contentOf = (change: FileWrite | FileRename): Buffer => Buffer.from(change.content);
+const sha256 = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
+
 /** A provenance trailer, e.g. `Kintsugi-Job: <id>` (docs/reference/document-repo.md). */
 export interface Trailer {
   key: string;
@@ -59,7 +90,7 @@ export interface Trailer {
 }
 
 export interface CommitInput {
-  files: readonly FileWrite[];
+  files: readonly FileChange[];
   message: string;
   identity: CommitIdentity;
   trailers?: readonly Trailer[];
@@ -133,6 +164,46 @@ async function assertNoSymlink(worktree: string, path: string): Promise<void> {
 }
 
 /**
+ * Checks the entries of a commit against each other before a file is touched: at most 500 entries and 50 MiB, safe
+ * paths, one entry per path, a file moved or removed once, and nothing moved onto or out of the path of another entry.
+ * Returns the paths the commit writes and the paths it removes.
+ */
+function checkEntries(files: readonly FileChange[]): { targets: string[]; removals: string[] } {
+  if (files.length > MAX_COMMIT_ENTRIES) throw new GitError(`A commit carries at most ${MAX_COMMIT_ENTRIES} entries (this one has ${files.length})`, null, "");
+  const bytes = files.reduce((total, file) => total + (isDelete(file) ? 0 : contentOf(file).length), 0);
+  if (bytes > MAX_COMMIT_BYTES) throw new GitError(`A commit carries at most ${MAX_COMMIT_BYTES / (1024 * 1024)} MiB of content`, null, "");
+  const targets = files.map((file) => assertSafeRepoPath(file.path));
+  if (new Set(targets).size !== targets.length) throw new GitError("A file appears twice in one commit", null, "");
+  const removals: string[] = [];
+  for (const file of files) {
+    if (isDelete(file)) removals.push(file.path);
+    if (isRename(file)) {
+      assertSafeRepoPath(file.renameFrom);
+      if (file.renameFrom === file.path) throw new GitError(`Cannot move ${file.path} onto itself`, null, "");
+      removals.push(file.renameFrom);
+    }
+  }
+  if (new Set(removals).size !== removals.length) throw new GitError("A file is removed twice in one commit", null, "");
+  // A path that is written in this commit cannot also be the source of a move.
+  const written = new Set(files.filter((file) => !isDelete(file)).map((file) => file.path));
+  const moved = files.filter(isRename).map((file) => file.renameFrom);
+  for (const source of moved) if (written.has(source)) throw new GitError(`Cannot move ${source}: another entry writes to it`, null, "");
+  return { targets: files.filter((file) => !isDelete(file)).map((file) => file.path), removals };
+}
+
+/** Removes the folders a removed file leaves empty, up to the worktree root: Git keeps no empty folder. */
+async function removeEmptyFolders(worktree: string, path: string): Promise<void> {
+  const parts = path.split("/").slice(0, -1);
+  while (parts.length > 0) {
+    const folder = join(worktree, ...parts);
+    const entries = await readdir(folder).catch(() => undefined);
+    if (entries === undefined || entries.length > 0) return;
+    await rmdir(folder).catch(() => undefined);
+    parts.pop();
+  }
+}
+
+/**
  * Writes the files into the worktree and commits them as `identity` (author and committer).
  * Returns the new commit, or undefined when the files are already identical.
  */
@@ -140,29 +211,70 @@ export async function commitFiles(worktree: string, input: CommitInput, options:
   assertIdentity(input.identity);
   const message = commitMessage(input.message, input.trailers);
   if (input.files.length === 0) throw new GitError("Nothing to commit: no files", null, "");
-  const paths = input.files.map((file) => assertSafeRepoPath(file.path));
-  if (new Set(paths).size !== paths.length) throw new GitError("A file appears twice in one commit", null, "");
+  const { targets, removals } = checkEntries(input.files);
 
   // Check every precondition before mutating any file. Idempotent queue retries may already hold the new bytes.
+  const skip = new Set<string>();
   for (const file of input.files) {
     assertSafeRepoPath(file.path);
     await assertNoSymlink(worktree, file.path);
+    if (isDelete(file)) {
+      await assertNoSymlink(worktree, file.path);
+      if (!/^[0-9a-f]{64}$/.test(file.expectedHash)) throw new GitError("Invalid expected document hash", null, "");
+      const current = await readFile(join(worktree, ...file.path.split("/"))).catch(() => undefined);
+      if (current === undefined || sha256(current) !== file.expectedHash) throw new GitError(`Document ${file.path} changed since it was read; reload and propose the change again`, null, "");
+      continue;
+    }
+    if (isRename(file)) {
+      await assertNoSymlink(worktree, file.renameFrom);
+      if (!/^[0-9a-f]{64}$/.test(file.expectedHash)) throw new GitError("Invalid expected document hash", null, "");
+      const desired = contentOf(file);
+      const source = await readFile(join(worktree, ...file.renameFrom.split("/"))).catch(() => undefined);
+      const target = await readFile(join(worktree, ...file.path.split("/"))).catch(() => undefined);
+      if (target !== undefined && !target.equals(desired)) throw new GitError(`Cannot move ${file.renameFrom} to ${file.path}: a different document is already there`, null, "");
+      if (source === undefined) {
+        // A retry of a move that was already made: the target holds the new text and the source is gone.
+        if (target !== undefined) {
+          skip.add(file.path);
+          continue;
+        }
+        throw new GitError(`Document ${file.renameFrom} changed since it was read; reload and propose the change again`, null, "");
+      }
+      if (sha256(source) !== file.expectedHash) throw new GitError(`Document ${file.renameFrom} changed since it was read; reload and propose the change again`, null, "");
+      continue;
+    }
     if (file.expectedHash === undefined) continue;
     if (!/^[0-9a-f]{64}$/.test(file.expectedHash)) throw new GitError("Invalid expected document hash", null, "");
     const current = await readFile(join(worktree, ...file.path.split("/"))).catch(() => undefined);
     const desired = Buffer.from(file.content);
-    if (current === undefined || (createHash("sha256").update(current).digest("hex") !== file.expectedHash && !current.equals(desired))) {
+    if (current === undefined || (sha256(current) !== file.expectedHash && !current.equals(desired))) {
       throw new GitError(`Document ${file.path} changed since it was read; reload and propose the change again`, null, "");
     }
   }
   for (const file of input.files) {
+    if (isDelete(file)) {
+      await rm(join(worktree, ...file.path.split("/")), { force: true });
+      await removeEmptyFolders(worktree, file.path);
+      continue;
+    }
     await assertNoSymlink(worktree, file.path);
     const target = join(worktree, ...file.path.split("/"));
+    if (isRename(file)) {
+      if (!skip.has(file.path)) {
+        await mkdir(dirname(target), { recursive: true });
+        await writeFile(target, file.content);
+        await rm(join(worktree, ...file.renameFrom.split("/")), { force: true });
+        await removeEmptyFolders(worktree, file.renameFrom);
+      }
+      continue;
+    }
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, file.content);
   }
   const run = { ...options, cwd: worktree };
-  await runGit(["--literal-pathspecs", "add", "--", ...paths], run);
+  if (targets.length > 0) await runGit(["--literal-pathspecs", "add", "--", ...targets], run);
+  // A removed file is already gone from the worktree; a retry of a move finds it gone from the index too.
+  if (removals.length > 0) await runGit(["--literal-pathspecs", "rm", "--quiet", "--cached", "--ignore-unmatch", "--", ...removals], run);
   const { stdout: staged } = await runGit(["diff", "--cached", "--name-only"], run);
   if (staged.trim() === "") return undefined;
   await runGit([...identityConfig(input.identity), "commit", "--quiet", "--no-verify", "--no-gpg-sign", "--cleanup=whitespace", "-F", "-"], {
