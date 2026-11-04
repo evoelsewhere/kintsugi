@@ -6,6 +6,8 @@ import { createContext } from "react";
 export interface MarkdownImages {
   projectId: string;
   commit: string;
+  /** Where an attachment of a draft being edited is served from, by its resolved path (the editor's preview); undefined for any other. */
+  draftUrl?: ((resolvedPath: string) => string | undefined) | undefined;
 }
 
 export const MarkdownImagesContext = createContext<MarkdownImages | null>(null);

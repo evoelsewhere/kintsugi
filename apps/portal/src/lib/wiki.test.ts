@@ -653,3 +653,15 @@ describe("every page of a label", () => {
     await expect(pagesWithLabel(async () => Promise.reject(new Error("down")), "runbook")).rejects.toThrow("down");
   });
 });
+
+describe("the address of a restore", () => {
+  it("is the edit address with the version to restore, which must be a commit id", () => {
+    const sha = "d".repeat(40);
+    const link = wikiPageLink("p", "a/b.md", { mode: "edit", restore: sha });
+    expect(link).toBe(`/wiki/a/b.md?project=p&view=edit&restore=${sha}`);
+    expect(readPageMode(new URLSearchParams(link.split("?")[1]))).toEqual({ mode: "edit", restore: sha });
+    expect(readPageMode(new URLSearchParams("view=edit&restore=main"))).toEqual({ mode: "edit" });
+    expect(readPageMode(new URLSearchParams("view=edit"))).toEqual({ mode: "edit" });
+    expect(wikiPageLink("p", "a/b.md", { mode: "edit" })).toBe("/wiki/a/b.md?project=p&view=edit");
+  });
+});

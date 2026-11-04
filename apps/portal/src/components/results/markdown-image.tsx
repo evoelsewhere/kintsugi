@@ -22,7 +22,7 @@ export function MarkdownImage({ src, alt, basePath }: { src: string | undefined;
     );
   }
   if (source.kind === "attachment" && images !== null && !failed) {
-    return <img src={attachmentUrl(images.projectId, source.path, images.commit)} alt={alt ?? ""} loading="lazy" onError={() => setFailed(true)} className="my-2 h-auto max-w-full rounded-lg" />;
+    return <img src={images.draftUrl?.(source.path) ?? attachmentUrl(images.projectId, source.path, images.commit)} alt={alt ?? ""} loading="lazy" onError={() => setFailed(true)} className="my-2 h-auto max-w-full rounded-lg" />;
   }
   return (
     <span className="inline-flex items-center gap-1 text-text-muted" title={source.kind === "attachment" ? source.path : undefined}>

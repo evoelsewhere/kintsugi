@@ -178,7 +178,7 @@ export function headingIdOfHash(hash: string): string {
 // be compared at two of them. Which of these a page shows is in the address too: `?view=history`, `?version=<sha>`
 // and `?view=compare&from=<sha>&to=<sha>`; no parameter is the current page.
 
-export type PageMode = { mode: "page" } | { mode: "edit" } | { mode: "history" } | { mode: "version"; sha: string } | { mode: "compare"; from: string; to: string };
+export type PageMode = { mode: "page" } | { mode: "edit"; restore?: string } | { mode: "history" } | { mode: "version"; sha: string } | { mode: "compare"; from: string; to: string };
 
 const COMMIT_ID = /^([0-9a-f]{40}|[0-9a-f]{64})$/;
 
@@ -188,7 +188,10 @@ export function readPageMode(params: URLSearchParams): PageMode {
   if (COMMIT_ID.test(version)) return { mode: "version", sha: version };
   const view = params.get("view");
   if (view === "history") return { mode: "history" };
-  if (view === "edit") return { mode: "edit" };
+  if (view === "edit") {
+    const restore = (params.get("restore") ?? "").toLowerCase();
+    return COMMIT_ID.test(restore) ? { mode: "edit", restore } : { mode: "edit" };
+  }
   const from = (params.get("from") ?? "").toLowerCase();
   const to = (params.get("to") ?? "").toLowerCase();
   if (view === "compare" && COMMIT_ID.test(from) && COMMIT_ID.test(to)) return { mode: "compare", from, to };
@@ -199,7 +202,10 @@ export function readPageMode(params: URLSearchParams): PageMode {
 export function wikiPageLink(projectId: string, path: string, mode: PageMode = { mode: "page" }): string {
   const params = new URLSearchParams({ project: projectId });
   if (mode.mode === "history") params.set("view", "history");
-  if (mode.mode === "edit") params.set("view", "edit");
+  if (mode.mode === "edit") {
+    params.set("view", "edit");
+    if (mode.restore !== undefined) params.set("restore", mode.restore);
+  }
   if (mode.mode === "version") params.set("version", mode.sha);
   if (mode.mode === "compare") {
     params.set("view", "compare");

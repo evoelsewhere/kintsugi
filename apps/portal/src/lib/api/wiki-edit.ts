@@ -1,7 +1,7 @@
 // Typed access to the wiki's writing routes (`/api/projects/:id/wiki/...`): what a person may do with a page, their draft of
 // it, and publishing. The shapes are those of threads/design-wiki-draft-publish; the API enforces every rule again.
 
-import type { AccessView, DraftApi, DraftSaveBody, DraftView, MoveBody, MovePreview, NewPageBody, PublishRequest, PublishResult, TemplateOption } from "../wiki-edit";
+import type { AccessView, AttachmentUpload, AttachmentView, DeleteBody, DeleteResult, DraftApi, DraftSaveBody, DraftView, MoveBody, MovePreview, NewPageBody, PublishRequest, PublishResult, TemplateOption } from "../wiki-edit";
 import { apiGet, ApiError, apiSend } from "../api";
 
 const base = (projectId: string): string => `/api/projects/${encodeURIComponent(projectId)}/wiki`;
@@ -35,6 +35,17 @@ export const wikiEditApi = {
 
   /** Moves or renames a page and rewrites the links to it: one write, a pull request or a commit. */
   move: (projectId: string, body: MoveBody): Promise<PublishResult> => apiSend(`${base(projectId)}/move`, "POST", body),
+
+  /** Deletes a page in one write (a pull request or a commit); links into it become broken links. */
+  deletePage: (projectId: string, body: DeleteBody): Promise<DeleteResult> => apiSend(`${base(projectId)}/delete`, "POST", body),
+
+  /** The attachments of the person's draft of a page. */
+  attachments: (projectId: string, path: string): Promise<AttachmentView[]> => apiGet(`${base(projectId)}/draft/attachments?${new URLSearchParams({ path }).toString()}`),
+
+  /** Keeps a file beside the draft; the answer holds the name the server gave it and the Markdown to insert. */
+  attach: (projectId: string, body: AttachmentUpload): Promise<AttachmentView> => apiSend(`${base(projectId)}/draft/attachments`, "POST", body),
+
+  detach: (projectId: string, path: string, name: string): Promise<void> => apiSend(`${base(projectId)}/draft/attachments?${new URLSearchParams({ path, name }).toString()}`, "DELETE"),
 
   publish: (projectId: string, request: PublishRequest): Promise<PublishResult> => apiSend(`${base(projectId)}/publish`, "POST", request),
 };

@@ -14,7 +14,21 @@ import {
   classifyMoveFailure,
   defaultMoveMessage,
   folderOfPath,
+  LABEL_MAX_LENGTH,
+  labelCheck,
+  labelsOf,
+  LABELS_MAX,
+  defaultDeleteMessage,
+  deleteWarning,
+  ATTACHMENT_MAX_BYTES,
+  ATTACHMENTS_MAX_BYTES,
+  attachmentProblem,
+  attachmentTypeOf,
+  draftImageUrl,
   messageProblem,
+  toBase64,
+  restoreMessage,
+  setLabels,
   MOVE_REWRITE_LIMIT,
   moveKind,
   moveTargetProblem,
@@ -306,6 +320,28 @@ describe("saving a draft as it is typed", () => {
     expect(saver.current).toEqual({ text: "my text", revision: 8 });
   });
 
+  it("makes the draft again when the server says it is gone (revision 0), keeping the base it had", async () => {
+    let first = true;
+    const { saver, calls, advance, last } = harness({
+      draft: draft({ revision: 4, baseCommit: "b".repeat(40) }),
+      startCommit: null,
+      answer: async (body, call) => {
+        if (first) {
+          first = false;
+          throw Object.assign(new Error("The draft is gone"), { status: 409, body: { details: { code: "draft-revision", revision: 0 } } });
+        }
+        return draft({ text: body.text, revision: call });
+      },
+    });
+    saver.change("typed after the draft was discarded elsewhere");
+    await advance(AUTOSAVE_QUIET_MS);
+    expect(calls.map((call) => [call.baseRevision, call.baseCommit])).toEqual([
+      [4, undefined],
+      [null, "b".repeat(40)],
+    ]);
+    expect(last()?.status).toBe("saved");
+  });
+
   it("refuses to save a text over 5 MiB and says why", async () => {
     const { saver, calls, advance, last } = harness();
     saver.change("x".repeat(MAX_DRAFT_BYTES + 1));
@@ -581,5 +617,170 @@ describe("moving and renaming a page", () => {
     expect(classifyMoveFailure(refused(409, { code: "target-exists" }, "A page already exists at that path"))).toEqual({ kind: "message", status: 409, message: "A page already exists at that path" });
     expect(classifyMoveFailure(refused(409, { code: "open-write", write: { author: "Kim", prUrl: "https://git.example/pr/9" } }, "A pull request is open"))).toMatchObject({ kind: "open-write", author: "Kim", prUrl: "https://git.example/pr/9" });
     expect(classifyMoveFailure(refused(403, {}, "Editing is restricted to the docs team"))).toEqual({ kind: "message", status: 403, message: "Editing is restricted to the docs team" });
+  });
+});
+
+describe("the labels of a page in its front matter", () => {
+  it("reads the labels of an inline list, a block list and a single value, with or without quotes", () => {
+    expect(labelsOf("---\nlabels: [runbook, sev1]\n---\ntext\n")).toEqual(["runbook", "sev1"]);
+    expect(labelsOf("---\nlabels:\n  - runbook\n  - 'sev1'\n---\n")).toEqual(["runbook", "sev1"]);
+    expect(labelsOf("---\nlabels:\n- runbook\n- sev1\nowner: x\n---\n")).toEqual(["runbook", "sev1"]);
+    expect(labelsOf("---\nlabels: runbook\n---\n")).toEqual(["runbook"]);
+    expect(labelsOf('---\nlabels: ["a b", c] # comment\n---\n')).toEqual(["a b", "c"]);
+    expect(labelsOf("---\ntitle: x\n---\n")).toEqual([]);
+    expect(labelsOf("no front matter\nlabels: [a]\n")).toEqual([]);
+    expect(labelsOf("---\nlabels: [a]\n")).toEqual([]);
+  });
+
+  it("changes an inline list and keeps every other byte", () => {
+    const text = "---\ntitle: Page   \nlabels: [runbook,  sev1]\nowner:  me\n---\n\n# Body  \n\ttabs\n";
+    expect(setLabels(text, ["runbook", "sev1", "database"])).toBe("---\ntitle: Page   \nlabels: [runbook, sev1, database]\nowner:  me\n---\n\n# Body  \n\ttabs\n");
+  });
+
+  it("keeps a block list a block list, with its own indentation and dash", () => {
+    const text = "---\nlabels:\n    -   runbook\n    -   sev1\nowner: me\n---\nbody";
+    expect(setLabels(text, ["runbook", "database"])).toBe("---\nlabels:\n    -   runbook\n    -   database\nowner: me\n---\nbody");
+    expect(setLabels("---\nlabels:\n- a\n---\n", ["a", "b"])).toBe("---\nlabels:\n- a\n- b\n---\n");
+  });
+
+  it("adds the entry at the end of the front matter when it is missing, and makes a front matter for a page without one", () => {
+    expect(setLabels("---\ntitle: x\n---\nbody\n", ["a"])).toBe("---\ntitle: x\nlabels: [a]\n---\nbody\n");
+    expect(setLabels("just text\n", ["a", "b"])).toBe("---\nlabels: [a, b]\n---\njust text\n");
+    expect(setLabels("just text\n", [])).toBe("just text\n");
+    expect(setLabels("---\ntitle: x\n---\nbody\n", [])).toBe("---\ntitle: x\n---\nbody\n");
+  });
+
+  it("removes the entry, a block list included, when no label is left", () => {
+    expect(setLabels("---\ntitle: x\nlabels: [a]\nowner: y\n---\n", [])).toBe("---\ntitle: x\nowner: y\n---\n");
+    expect(setLabels("---\nlabels:\n  - a\n  - b\nowner: y\n---\n", [])).toBe("---\nowner: y\n---\n");
+  });
+
+  it("keeps CRLF line endings and a missing final newline, and gives the text back when the labels are the same", () => {
+    const crlf = "---\r\ntitle: x\r\nlabels: [a]\r\n---\r\n\r\nbody";
+    expect(setLabels(crlf, ["a", "b"])).toBe("---\r\ntitle: x\r\nlabels: [a, b]\r\n---\r\n\r\nbody");
+    expect(setLabels("---\r\ntitle: x\r\n---\r\nbody", ["a"])).toBe("---\r\ntitle: x\r\nlabels: [a]\r\n---\r\nbody");
+    expect(setLabels("plain\r\ntext", ["a"])).toBe("---\r\nlabels: [a]\r\n---\r\nplain\r\ntext");
+    const same = "---\nlabels:   [a,b]\n---\n";
+    expect(setLabels(same, ["a", "b"])).toBe(same);
+  });
+
+  it("only touches the labels entry of the front matter, never a line of the body", () => {
+    const text = "---\ntitle: x\n---\nlabels: [in the body]\n";
+    expect(setLabels(text, ["a"])).toBe("---\ntitle: x\nlabels: [a]\n---\nlabels: [in the body]\n");
+  });
+
+  it("accepts a label only as the Brain would store it, and says why not", () => {
+    expect(labelCheck("runbook", [])).toEqual({ cleaned: "runbook", problem: undefined });
+    expect(labelCheck("  sev-1 ", [])).toEqual({ cleaned: "sev-1", problem: undefined });
+    expect(labelCheck("", [])).toEqual({ cleaned: "", problem: undefined });
+    expect(labelCheck("Run Book", []).problem).toMatch(/stored as “runbook”/);
+    expect(labelCheck("Runbook", []).cleaned).toBe("runbook");
+    expect(labelCheck("!!!", []).problem).toMatch(/letters, digits and hyphens/);
+    expect(labelCheck("runbook", ["runbook"]).problem).toMatch(/already/);
+    expect(labelCheck("x".repeat(LABEL_MAX_LENGTH + 1), []).problem).toMatch(/100/);
+    expect(labelCheck("new", Array.from({ length: LABELS_MAX }, (_, index) => `l${index}`)).problem).toMatch(/at most/);
+  });
+});
+
+describe("deleting a page", () => {
+  it("says before confirming how many links into the page will break", () => {
+    expect(deleteWarning(0)).toBe("No other page links to this page.");
+    expect(deleteWarning(1)).toBe("1 link into this page will break: it will show in the broken links report until fixed.");
+    expect(deleteWarning(37)).toBe("37 links into this page will break: they will show in the broken links report until fixed.");
+  });
+
+  it("starts the message with Delete <path>, within the limit", () => {
+    expect(defaultDeleteMessage("a/b.md")).toBe("Delete a/b.md");
+    expect(defaultDeleteMessage(`a/${"b".repeat(400)}.md`)).toHaveLength(PUBLISH_MESSAGE_MAX);
+  });
+});
+
+describe("restoring an older version", () => {
+  it("starts the message with Restore version <short sha> of <title>", () => {
+    expect(restoreMessage("a1b2c3d4e5f6".padEnd(40, "0"), "Database failover")).toBe("Restore version a1b2c3d of Database failover");
+    expect(restoreMessage("a".repeat(40), "x".repeat(400))).toHaveLength(PUBLISH_MESSAGE_MAX);
+  });
+
+  it("has no draft yet: the old text is the editor's, and the first save carries the commit of the page as it is now", async () => {
+    const current = "c".repeat(40);
+    const { saver, calls } = harness({ startText: "the old version's text", startCommit: current });
+    expect(saver.current).toEqual({ text: "the old version's text", revision: null });
+    await saver.whenSaved();
+    expect(calls).toEqual([{ path: "a/page.md", text: "the old version's text", baseRevision: null, baseCommit: current }]);
+  });
+
+  it("replaces the text of a draft that exists, saving it against the revision the server holds, once the person said so", async () => {
+    let clock = 0;
+    const calls: DraftSaveBody[] = [];
+    const timers: Array<() => void> = [];
+    const saver = new DraftSaver({
+      path: "a/page.md",
+      api: {
+        save: async (body) => {
+          calls.push(body);
+          return draft({ text: body.text, revision: 6 });
+        },
+        load: async () => null,
+      },
+      draft: draft({ text: "my unfinished draft", revision: 5 }),
+      startText: "",
+      startCommit: null,
+      replaceWith: "the old version's text",
+      onChange: () => undefined,
+      onRevisionConflict: () => undefined,
+      now: () => clock,
+      setTimer: (run) => timers.push(run),
+      clearTimer: () => undefined,
+    });
+    clock = 2000;
+    expect(saver.current).toEqual({ text: "the old version's text", revision: 5 });
+    await expect(saver.whenSaved()).resolves.toBe(6);
+    expect(calls).toEqual([{ path: "a/page.md", text: "the old version's text", baseRevision: 5 }]);
+    expect(timers.length).toBeGreaterThan(0);
+  });
+
+  it("changes nothing when the text to restore is the draft's own", async () => {
+    const { saver, calls } = harness({ draft: draft({ text: "same", revision: 2 }) });
+    expect(saver.current.text).toBe("same");
+    expect(calls).toEqual([]);
+  });
+});
+
+describe("attachments of a draft", () => {
+  it("knows the types that may be attached by extension, in any case, and not SVG or scripts", () => {
+    expect(attachmentTypeOf("diagram.PNG")).toBe("image/png");
+    expect(attachmentTypeOf("photo.jpeg")).toBe("image/jpeg");
+    expect(attachmentTypeOf("spec.pdf")).toBe("application/pdf");
+    for (const name of ["logo.svg", "page.html", "run.sh", "archive.zip", "noextension", "x.png.exe"]) expect(attachmentTypeOf(name)).toBeUndefined();
+  });
+
+  it("refuses a file before upload, with the reason: type, empty, over 5 MiB, or over 20 MiB for the page", () => {
+    expect(attachmentProblem({ name: "a.png", size: 1000 }, 0)).toBeUndefined();
+    expect(attachmentProblem({ name: "a.svg", size: 1000 }, 0)).toMatch(/only images/);
+    expect(attachmentProblem({ name: "a.png", size: 0 }, 0)).toMatch(/empty/);
+    expect(attachmentProblem({ name: "a.png", size: ATTACHMENT_MAX_BYTES }, 0)).toBeUndefined();
+    expect(attachmentProblem({ name: "a.png", size: ATTACHMENT_MAX_BYTES + 1 }, 0)).toMatch(/5 MiB/);
+    expect(attachmentProblem({ name: "a.png", size: 1000 }, ATTACHMENTS_MAX_BYTES)).toMatch(/20 MiB/);
+  });
+
+  it("encodes bytes as base64, also for a file larger than one chunk", () => {
+    expect(toBase64(new Uint8Array([104, 105]))).toBe("aGk=");
+    const big = Uint8Array.from({ length: 100_000 }, (_, index) => index % 251);
+    expect(Uint8Array.from(Buffer.from(toBase64(big), "base64"))).toEqual(big);
+    expect(toBase64(new Uint8Array())).toBe("");
+  });
+
+  it("shows an image the draft holds from the draft's own route, and any other image not at all", () => {
+    const page = "20-spaces/eng/runbooks/db-failover.md";
+    expect(draftImageUrl("my project", page, "20-spaces/eng/runbooks/_attachments/failover.png", ["failover.png"])).toBe(
+      `/api/projects/my%20project/wiki/draft/attachments/file?path=${encodeURIComponent(page)}&name=failover.png`,
+    );
+    // Not held by the draft: it may be a published attachment, which the reader's route serves.
+    expect(draftImageUrl("p", page, "20-spaces/eng/runbooks/_attachments/other.png", ["failover.png"])).toBeUndefined();
+    // Another page's folder, a deeper path, an empty name.
+    expect(draftImageUrl("p", page, "20-spaces/eng/_attachments/failover.png", ["failover.png"])).toBeUndefined();
+    expect(draftImageUrl("p", page, "20-spaces/eng/runbooks/_attachments/sub/failover.png", ["sub/failover.png"])).toBeUndefined();
+    expect(draftImageUrl("p", page, "20-spaces/eng/runbooks/_attachments/", [""])).toBeUndefined();
+    expect(draftImageUrl("p", "top.md", "_attachments/a.png", ["a.png"])).toContain("name=a.png");
   });
 });

@@ -6,10 +6,24 @@ import { SkeletonRows } from "@/components/ui/skeleton";
 const Editor = lazy(() => import("./code-editor"));
 
 /** `path` picks the language from the file extension. */
-export function CodeView({ text, path, onChange, lineSeparator }: { text: string; path: string; onChange?: ((text: string) => void) | undefined; lineSeparator?: string | undefined }): React.JSX.Element {
+export function CodeView({
+  text,
+  path,
+  onChange,
+  lineSeparator,
+  registerInsert,
+  onFiles,
+}: {
+  text: string;
+  path: string;
+  onChange?: ((text: string) => void) | undefined;
+  lineSeparator?: string | undefined;
+  registerInsert?: ((insert: (text: string) => void) => void) | undefined;
+  onFiles?: ((files: File[]) => void) | undefined;
+}): React.JSX.Element {
   return (
     <Suspense fallback={<SkeletonRows rows={10} />}>
-      <Editor text={text} path={path} onChange={onChange} lineSeparator={lineSeparator} />
+      <Editor text={text} path={path} onChange={onChange} lineSeparator={lineSeparator} registerInsert={registerInsert} onFiles={onFiles} />
     </Suspense>
   );
 }

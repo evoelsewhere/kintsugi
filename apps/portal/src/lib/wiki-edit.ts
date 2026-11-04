@@ -1,3 +1,4 @@
+import { BRAIN_MAX_LABELS, brainLabels } from "@kintsugi/domain";
 // What the wiki editor says about a page being written: the shapes the API gives and takes (threads/design-wiki-draft-publish),
 // the rules of the autosave, and the text itself. Kept apart from the views so it can be tested without a browser.
 // The text is exactly what was typed: nothing here changes a line ending, a final newline or the order of the front matter
@@ -146,6 +147,11 @@ export interface DraftSaverOptions {
   /** The text the editor started from, and the commit it was read from: the base of a draft that is created. */
   startText: string;
   startCommit: string | null;
+  /**
+   * A text that stands in for the draft's (restoring an older version): it is unsaved from the start, so the next save
+   * replaces the server's draft text with it, against the revision the server holds.
+   */
+  replaceWith?: string | undefined;
   /** The saver reports each change of what it knows. */
   onChange: (state: SaverState) => void;
   /** The server holds another revision (a second tab): the person chooses which text to keep. */
@@ -191,7 +197,15 @@ export class DraftSaver {
     this.savedText = this.text;
     this.revision = options.draft?.revision ?? null;
     this.others = options.draft?.others ?? [];
-    this.baseCommit = options.startCommit;
+    // A draft opened as it was left has no starting text of its own: its own base is the one to send if it has to be made again.
+    this.baseCommit = options.startCommit ?? options.draft?.baseCommit ?? null;
+    if (options.replaceWith !== undefined && options.replaceWith !== this.text) {
+      this.text = options.replaceWith;
+      this.dirtySince = this.now();
+      this.lastChange = this.dirtySince;
+      this.status = "unsaved";
+      this.schedule();
+    }
   }
 
   private now(): number {
@@ -339,6 +353,14 @@ export class DraftSaver {
     } catch (error) {
       this.inFlight = false;
       const failure = (this.options.toFailure ?? defaultFailure)(error);
+      if (failure.status === 409 && failure.details?.["code"] === "draft-revision" && failure.details["revision"] === 0) {
+        // The draft no longer exists on the server (published and merged, or discarded in another tab): make it again from the text typed here.
+        this.revision = null;
+        this.status = "unsaved";
+        this.emit();
+        await this.save();
+        return;
+      }
       if (failure.status === 409 && failure.details?.["code"] === "draft-revision") {
         this.status = "unsaved";
         this.emit();
@@ -653,4 +675,212 @@ export function classifyMoveFailure(error: unknown): MoveFailure {
   const failure = classifyPublishFailure(error);
   // A move has no three-way merge: a conflict answer would still be the API's own words.
   return failure.kind === "conflict" ? { kind: "message", status: 409, message: error instanceof Error ? error.message : "The page could not be moved." } : failure;
+}
+
+// ---- Labels in the front matter ----------------------------------------------------------------------------------
+// A page's labels are the `labels:` entry of its front matter. The editor changes that entry and nothing else: every other
+// byte of the text stays as it was, line endings included.
+
+const eolOf = (line: string): string => (line.endsWith("\r\n") ? "\r\n" : line.endsWith("\n") ? "\n" : "");
+const bare = (line: string): string => line.replace(/\r?\n$/, "");
+
+/** The index of the line that closes the front matter, or -1 when the text has none (it must open on its first line). */
+function frontMatterEnd(lines: readonly string[]): number {
+  if (lines.length === 0 || bare(lines[0] as string).trimEnd() !== "---") return -1;
+  for (let index = 1; index < lines.length; index += 1) {
+    const line = bare(lines[index] as string).trimEnd();
+    if (line === "---" || line === "...") return index;
+  }
+  return -1;
+}
+
+interface LabelsEntry {
+  /** The line of `labels:` and the number of lines the entry takes (the key line and its list lines). */
+  at: number;
+  length: number;
+  form: "inline" | "block";
+  /** The values as written, without quotes. */
+  values: string[];
+  /** The text before a block item's dash, and the dash: `  - `. */
+  itemPrefix: string;
+}
+
+const unquote = (value: string): string => value.trim().replace(/^(["'])(.*)\1$/, "$2").trim();
+const withoutComment = (value: string): string => value.replace(/\s+#.*$/, "");
+
+/** Where the `labels:` entry is in the front matter, and what it holds. */
+function labelsEntry(lines: readonly string[], end: number): LabelsEntry | null {
+  for (let at = 1; at < end; at += 1) {
+    const match = /^labels[ \t]*:(.*)$/.exec(bare(lines[at] as string));
+    if (match === null) continue;
+    const rest = withoutComment(match[1] ?? "").trim();
+    let length = 1;
+    const items: string[] = [];
+    let itemPrefix = "  - ";
+    for (let next = at + 1; next < end; next += 1) {
+      const item = /^(\s*-)(\s+)(.*)$/.exec(bare(lines[next] as string)) ?? /^(\s*-)()$/.exec(bare(lines[next] as string));
+      if (item === null) break;
+      if (items.length === 0) itemPrefix = `${item[1]}${item[2] || " "}`;
+      items.push(unquote(withoutComment(item[3] ?? "")));
+      length += 1;
+    }
+    if (rest === "") return { at, length, form: "block", values: items.filter((value) => value !== ""), itemPrefix };
+    const inner = rest.startsWith("[") ? rest.replace(/^\[/, "").replace(/\]\s*$/, "") : rest;
+    return { at, length: 1, form: "inline", values: inner.split(",").map(unquote).filter((value) => value !== ""), itemPrefix };
+  }
+  return null;
+}
+
+/** The labels a page's front matter lists, as written (the Brain cleans them when it reads them). */
+export function labelsOf(text: string): string[] {
+  const lines = linesOf(text);
+  const end = frontMatterEnd(lines);
+  return end < 0 ? [] : (labelsEntry(lines, end)?.values ?? []);
+}
+
+/**
+ * The text with its `labels:` entry set to `labels`: an inline list stays inline and a block list stays a block, a missing
+ * entry is added (as an inline list, at the end of the front matter, which is made when the page has none) and an empty
+ * list removes the entry. Every other byte of the text is kept. The same labels in the same order give the text back.
+ */
+export function setLabels(text: string, labels: readonly string[]): string {
+  const lines = linesOf(text);
+  const end = frontMatterEnd(lines);
+  const eol = text.includes("\r\n") ? "\r\n" : "\n";
+  const list = `[${labels.join(", ")}]`;
+  if (end < 0) return labels.length === 0 ? text : `---${eol}labels: ${list}${eol}---${eol}${text}`;
+  const entry = labelsEntry(lines, end);
+  if (entry === null) {
+    if (labels.length === 0) return text;
+    return [...lines.slice(0, end), `labels: ${list}${eol}`, ...lines.slice(end)].join("");
+  }
+  if (entry.values.length === labels.length && entry.values.every((value, index) => value === labels[index])) return text;
+  const keyLine = lines[entry.at] as string;
+  const rest = [...lines.slice(0, entry.at), ...lines.slice(entry.at + entry.length)];
+  if (labels.length === 0) return [...rest.slice(0, entry.at), ...rest.slice(entry.at)].join("");
+  const lineEnding = eolOf(keyLine) || eol;
+  const written =
+    entry.form === "block"
+      ? [keyLine.endsWith("\n") ? keyLine : keyLine + lineEnding, ...labels.map((label) => `${entry.itemPrefix}${label}${lineEnding}`)]
+      : [`labels: ${list}${eolOf(keyLine)}`];
+  return [...lines.slice(0, entry.at), ...written, ...lines.slice(entry.at + entry.length)].join("");
+}
+
+/** The most labels a page keeps and the longest one (the Brain cleans and cuts anything beyond). */
+export const LABELS_MAX = BRAIN_MAX_LABELS;
+export const LABEL_MAX_LENGTH = 100;
+
+/**
+ * What typing a label into the chip box comes to: the form the Brain would store (lower case, letters, digits and hyphens),
+ * and a reason it is not added when it is not stored as typed, is a duplicate, is too long or there are too many already.
+ */
+export function labelCheck(input: string, existing: readonly string[]): { cleaned: string; problem: string | undefined } {
+  const typed = input.trim();
+  // The Brain's own rules (`brainLabels`), so that what is accepted here is what it stores.
+  const cleaned = brainLabels([typed])[0] ?? "";
+  if (typed === "") return { cleaned: "", problem: undefined };
+  if (cleaned === "") return { cleaned, problem: "A label holds letters, digits and hyphens." };
+  if (typed.length > LABEL_MAX_LENGTH) return { cleaned, problem: `A label has at most ${LABEL_MAX_LENGTH} characters.` };
+  if (cleaned !== typed) return { cleaned, problem: `It would be stored as “${cleaned}”: type it that way to add it.` };
+  if (existing.includes(cleaned)) return { cleaned, problem: "The page has this label already." };
+  if (existing.length >= LABELS_MAX) return { cleaned, problem: `A page has at most ${LABELS_MAX} labels.` };
+  return { cleaned, problem: undefined };
+}
+
+// ---- Deleting a page ---------------------------------------------------------------------------------------------
+
+/** `POST wiki/delete`: the page goes in one write; links to it become broken links. */
+export interface DeleteBody {
+  path: string;
+  message: string;
+}
+
+/** The answer of a delete: like a publish, with how many links into the page break. */
+export interface DeleteResult {
+  outcome: "published";
+  write: WriteSummary;
+  brokenLinks: number;
+}
+
+/** The message a restore starts with: `Restore version <short sha> of <title>`. */
+export const restoreMessage = (sha: string, title: string): string => `Restore version ${sha.slice(0, 7)} of ${title}`.slice(0, PUBLISH_MESSAGE_MAX);
+
+/** The message a delete starts with. */
+export const defaultDeleteMessage = (path: string): string => `Delete ${path}`.slice(0, PUBLISH_MESSAGE_MAX);
+
+/** What the dialog says about the links into the page, before anything is confirmed. */
+export function deleteWarning(links: number): string {
+  if (links === 0) return "No other page links to this page.";
+  return `${links} ${links === 1 ? "link into this page" : "links into this page"} will break: ${links === 1 ? "it" : "they"} will show in the broken links report until fixed.`;
+}
+
+// ---- Attachments of a draft --------------------------------------------------------------------------------------
+// A file or an image added while editing is kept beside the draft and joins the repository, under the page's
+// `_attachments/` folder, when the page is published (threads/design-wiki-draft-publish, decision of 01:14).
+
+/** An attachment of a draft: the name the server gave it and the Markdown to insert. */
+export interface AttachmentView {
+  name: string;
+  contentType: string;
+  size: number;
+  markdown: string;
+}
+
+/** `POST wiki/draft/attachments`. */
+export interface AttachmentUpload {
+  path: string;
+  name: string;
+  contentType: string;
+  contentBase64: string;
+}
+
+/** The types an attachment may have (SVG is not one: it can carry script), by file extension. */
+export const ATTACHMENT_TYPES: Readonly<Record<string, string>> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  pdf: "application/pdf",
+};
+
+/** The most a file, and all the files of a draft, may weigh (the API refuses more). */
+export const ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
+export const ATTACHMENTS_MAX_BYTES = 20 * 1024 * 1024;
+
+/** The type of a file from its extension, or undefined when it is not one that may be attached. */
+export function attachmentTypeOf(name: string): string | undefined {
+  const extension = /\.([A-Za-z0-9]+)$/.exec(name)?.[1]?.toLowerCase();
+  return extension === undefined ? undefined : ATTACHMENT_TYPES[extension];
+}
+
+/** Why a file cannot be attached, in a person's words; undefined when it can. `held` is what the draft's attachments weigh already. */
+export function attachmentProblem(file: { name: string; size: number }, held: number): string | undefined {
+  if (attachmentTypeOf(file.name) === undefined) return `${file.name}: only images (png, jpg, gif, webp) and PDF files can be attached.`;
+  if (file.size === 0) return `${file.name} is empty.`;
+  if (file.size > ATTACHMENT_MAX_BYTES) return `${file.name} is larger than 5 MiB.`;
+  if (held + file.size > ATTACHMENTS_MAX_BYTES) return `${file.name} would take this page's attachments over 20 MiB.`;
+  return undefined;
+}
+
+/** The bytes of a file as base64, for the JSON body of an upload. */
+export function toBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let at = 0; at < bytes.length; at += 0x8000) binary += String.fromCharCode(...bytes.subarray(at, at + 0x8000));
+  return btoa(binary);
+}
+
+/** The address of an attachment of the person's own draft: what the editor's preview shows an image from. */
+export const draftAttachmentUrl = (projectId: string, path: string, name: string): string =>
+  `/api/projects/${encodeURIComponent(projectId)}/wiki/draft/attachments/file?${new URLSearchParams({ path, name }).toString()}`;
+
+/**
+ * Where an image the preview of a page being edited points at is served from while the page is a draft: an attachment
+ * the draft holds (`<page folder>/_attachments/<name>`), else nothing (the published route does not have it yet).
+ */
+export function draftImageUrl(projectId: string, pagePath: string, resolvedPath: string, held: readonly string[]): string | undefined {
+  const folder = `${pagePath.includes("/") ? pagePath.slice(0, pagePath.lastIndexOf("/")) : ""}/_attachments/`.replace(/^\//, "");
+  if (!resolvedPath.startsWith(folder)) return undefined;
+  const name = resolvedPath.slice(folder.length);
+  return name !== "" && !name.includes("/") && held.includes(name) ? draftAttachmentUrl(projectId, pagePath, name) : undefined;
 }
