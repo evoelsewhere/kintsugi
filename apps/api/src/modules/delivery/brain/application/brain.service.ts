@@ -6,7 +6,9 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import {
   BRAIN_MAX_DOCUMENTS,
+  BRAIN_MAX_BROKEN_LINKS,
   BRAIN_ROOT_ID,
+  type BrainBrokenView,
   type BrainCrumb,
   type BrainGrepMatch,
   type BrainChangedFile,
@@ -367,6 +369,13 @@ export class BrainService {
     const sets = lists.flatMap((nodes) => (nodes === undefined ? [] : [new Set(nodes.map((node) => node.path))]));
     const [first, ...rest] = sets;
     return new Set([...(first ?? [])].filter((path) => rest.every((other) => other.has(path))));
+  }
+
+  /** The links of the indexed documents to Markdown files the repository does not have, as the last build found them. */
+  async broken(projectId: string): Promise<BrainBrokenView> {
+    const { source } = await this.ready(projectId);
+    const links = await this.index.broken(projectId);
+    return { projectId, branch: source.branch, commit: source.indexedCommit, links, truncated: links.length >= BRAIN_MAX_BROKEN_LINKS };
   }
 
   /**

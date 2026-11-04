@@ -1247,6 +1247,17 @@ export interface BrainChangedFile {
   nodes: BrainNode[];
 }
 
+/** The links of the indexed documents that point at a Markdown file the repository does not have, at the indexed commit. */
+export interface BrainBrokenView {
+  projectId: string;
+  branch: string;
+  commit: string;
+  /** Source document and the target path as written, in the order the build found them. */
+  links: BrainBrokenLink[];
+  /** The build keeps at most `BRAIN_MAX_BROKEN_LINKS`: there may be more. */
+  truncated: boolean;
+}
+
 /** What changed in the indexed documents between an earlier commit and the indexed one. */
 export interface BrainChangesView {
   projectId: string;
