@@ -96,6 +96,8 @@ export abstract class WikiWatches {
   abstract add(projectId: string, userId: string, scopeKind: WikiWatchScope, target: string): Promise<{ created: boolean } | undefined>;
   /** Stops watching; whether there was a watch. */
   abstract remove(projectId: string, userId: string, scopeKind: WikiWatchScope, target: string): Promise<boolean>;
+  /** The people who watch any of these targets (a page, a folder or a space), once each. */
+  abstract watchersOf(projectId: string, targets: ReadonlyArray<{ scopeKind: WikiWatchScope; target: string }>): Promise<string[]>;
   /** The watches of the person among these targets. */
   abstract among(projectId: string, userId: string, targets: ReadonlyArray<{ scopeKind: WikiWatchScope; target: string }>): Promise<WikiWatch[]>;
 }

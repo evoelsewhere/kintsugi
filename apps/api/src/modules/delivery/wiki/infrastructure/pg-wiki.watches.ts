@@ -39,6 +39,17 @@ export class PgWikiWatches extends WikiWatches {
     return ((await getPool().query("delete from knowledge.wiki_watch where project_id = $1 and user_id = $2 and scope_kind = $3 and target = $4", [projectId, userId, scopeKind, target])).rowCount ?? 0) > 0;
   }
 
+  async watchersOf(projectId: string, targets: ReadonlyArray<{ scopeKind: WikiWatchScope; target: string }>): Promise<string[]> {
+    if (targets.length === 0) return [];
+    const result = await getPool().query<{ user_id: string }>(
+      `select distinct user_id from knowledge.wiki_watch
+        where project_id = $1 and (scope_kind, target) in (select * from unnest($2::text[], $3::text[]))
+        order by user_id`,
+      [projectId, targets.map((entry) => entry.scopeKind), targets.map((entry) => entry.target)],
+    );
+    return result.rows.map((row) => row.user_id);
+  }
+
   async among(projectId: string, userId: string, targets: ReadonlyArray<{ scopeKind: WikiWatchScope; target: string }>): Promise<WikiWatch[]> {
     if (targets.length === 0) return [];
     const result = await getPool().query<WatchRow>(
