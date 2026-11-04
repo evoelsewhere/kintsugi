@@ -1,7 +1,7 @@
 import type { BrainGrepMatch, BrainNode } from "@kintsugi/domain";
 import { describe, expect, it } from "vitest";
 import { resolveDocumentLink } from "./document-links";
-import { attachmentUrl, hitCount, isFrontMatterLine, readableExcerpt, imageSource, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiLink, wikiRead, hitPaths, withDocuments, highlightParts, normalizeLabel, normalizeSpace, readWikiSearch, searchFacets, searchHits, searchLineLink, wikiSearchLink, labelledPages, wikiLabelLink, wikiPhase, hiddenPaths, groupBacklinks, tocOf } from "./wiki";
+import { attachmentUrl, hitCount, isFrontMatterLine, readableExcerpt, imageSource, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiLink, wikiRead, hitPaths, withDocuments, highlightParts, normalizeLabel, normalizeSpace, readWikiSearch, searchFacets, searchHits, searchLineLink, wikiSearchLink, labelledPages, wikiLabelLink, wikiPhase, hiddenPaths, groupBacklinks, tocOf, spacePages, spaceHomePath, wikiSpaceLink } from "./wiki";
 
 const node = (over: Partial<BrainNode> & Pick<BrainNode, "id" | "kind" | "path">): BrainNode => ({
   parentId: null,
@@ -511,5 +511,47 @@ describe("the table of contents of a page", () => {
   it("has none for a short page", () => {
     expect(tocOf("a/short.md", "# Title\n\n## One\n\n## Two\n")).toEqual([]);
     expect(tocOf("a/empty.md", "")).toEqual([]);
+  });
+});
+
+describe("the home page of a space", () => {
+  it("has an address of its own that cannot be the path of a page", () => {
+    expect(wikiSpaceLink("billing", "ENG")).toBe("/wiki/-/space/ENG?project=billing");
+    expect(wikiSpaceLink("a b", "E/G")).toBe("/wiki/-/space/E%2FG?project=a%20b");
+  });
+
+  it("is the README of the topmost folder of the space, not that of a folder inside it", () => {
+    const pages = [
+      page("20-spaces/eng/runbooks/README.md", { space: "ENG" }),
+      page("20-spaces/eng/README.md", { space: "ENG" }),
+      page("20-spaces/eng/decisions/adr-1.md", { space: "ENG" }),
+      page("20-spaces/hr/README.md", { space: "HR" }),
+    ];
+    expect(spaceHomePath(pages, "ENG")).toBe("20-spaces/eng/README.md");
+    expect(spaceHomePath(pages, "eng")).toBe("20-spaces/eng/README.md");
+    expect(spaceHomePath(pages, "HR")).toBe("20-spaces/hr/README.md");
+    expect(spaceHomePath([page("x/index.md", { space: "OPS" })], "OPS")).toBe("x/index.md");
+  });
+
+  it("is none when the space has no home page, or it is archived or a template", () => {
+    expect(spaceHomePath([page("20-spaces/eng/a.md", { space: "ENG" })], "ENG")).toBeUndefined();
+    expect(spaceHomePath([page("20-spaces/eng/README.md", { space: "ENG", status: "archived" })], "ENG")).toBeUndefined();
+    expect(spaceHomePath([page("20-spaces/eng/README.md", { space: "ENG", template: true })], "ENG")).toBeUndefined();
+    expect(spaceHomePath([], "ENG")).toBeUndefined();
+  });
+});
+
+describe("the pages of a space without a home page", () => {
+  it("lists its pages by title, without sections, archived pages or templates", () => {
+    const matches = [
+      page("20-spaces/eng/b.md", { title: "Beta" }),
+      page("20-spaces/eng/a.md", { title: "Alpha" }),
+      page("20-spaces/eng/old.md", { title: "Old", status: "archived" }),
+      node({ id: "20-spaces/eng/a.md#x", kind: "section", path: "20-spaces/eng/a.md", title: "Intro" }),
+    ];
+    expect(spacePages(matches)).toEqual([
+      { path: "20-spaces/eng/a.md", title: "Alpha" },
+      { path: "20-spaces/eng/b.md", title: "Beta" },
+    ]);
   });
 });

@@ -13,7 +13,7 @@ import { documentsApi } from "@/lib/api/documents";
 import { formatRelative, shortSha } from "@/lib/format";
 import { splitFrontMatter } from "@/lib/front-matter";
 import { useLoader } from "@/lib/use-loader";
-import { type PageMode, pathTrail, readPageMode, wikiLabelLink, wikiLink, wikiPageLink, wikiRead, tocOf } from "@/lib/wiki";
+import { type PageMode, pathTrail, readPageMode, wikiLabelLink, wikiLink, wikiPageLink, wikiRead, tocOf, wikiSpaceLink } from "@/lib/wiki";
 import { useScrollToHeading, useWikiLinks } from "./use-wiki-links";
 import { ExportMarkdownButton } from "./export-markdown-button";
 import { WikiBacklinks } from "./wiki-backlinks";
@@ -152,7 +152,13 @@ export function PageTrail({ projectId, path }: { projectId: string; path: string
 /** The labels, the status and the last change of a page: what the Brain knows beyond its text. */
 function PageFacts({ projectId, node, commit }: { projectId: string; node: BrainNode; commit: string }): React.JSX.Element | null {
   const facts: React.ReactNode[] = [];
-  if (node.space !== null) facts.push(<span key="space">Space {node.space}</span>);
+  if (node.space !== null) {
+    facts.push(
+      <Link key="space" to={wikiSpaceLink(projectId, node.space)} title={`The home page of the space ${node.space}`} className="hover:text-text hover:underline">
+        Space {node.space}
+      </Link>,
+    );
+  }
   if (node.status !== null) facts.push(<span key="status">{node.status}</span>);
   if (node.owner !== null) facts.push(<span key="owner">Owner {node.owner}</span>);
   if (node.changed !== null) {

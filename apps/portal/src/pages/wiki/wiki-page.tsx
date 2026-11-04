@@ -16,6 +16,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { BrokenLinksPanel } from "@/components/wiki/broken-links-panel";
 import { WikiLabelPage } from "@/components/wiki/wiki-label-page";
 import { WikiOff } from "@/components/wiki/wiki-off";
+import { WikiSpaceHome } from "@/components/wiki/wiki-space-home";
 import { WikiFolderView } from "@/components/wiki/wiki-folder-view";
 import { WikiPageView } from "@/components/wiki/wiki-page-view";
 import { WikiSearchBox } from "@/components/wiki/wiki-search-box";
@@ -140,11 +141,15 @@ function WikiReader({ projectId, commit, path, label }: { projectId: string; com
   const { q, space, label: searchLabel } = search;
   // `/wiki/-/broken` is the report of broken links; like the label page it cannot be the path of a page.
   const broken = useMatch(`${WIKI_BASE}/-/broken`) !== null;
+  // `/wiki/-/space/<KEY>` opens the home page of a space.
+  const spaceKey = useParams()["space"];
   // The page changes with the address: a key resets what the view of the previous page held.
   const view = useMemo(
     () =>
       label !== undefined ? (
         <WikiLabelPage key={label} projectId={projectId} commit={commit} label={label} />
+      ) : spaceKey !== undefined ? (
+        <WikiSpaceHome key={spaceKey} projectId={projectId} commit={commit} space={spaceKey} />
       ) : broken ? (
         <BrokenLinksPanel projectId={projectId} />
       ) : q !== "" ? (
@@ -154,7 +159,7 @@ function WikiReader({ projectId, commit, path, label }: { projectId: string; com
       ) : (
         <WikiFolderView key={path} projectId={projectId} commit={commit} path={path} />
       ),
-    [projectId, commit, path, label, broken, q, space, searchLabel],
+    [projectId, commit, path, label, broken, spaceKey, q, space, searchLabel],
   );
   return (
     <div className="flex min-h-[560px] flex-col overflow-hidden rounded-xl bg-surface shadow-border-medium lg:h-[calc(100vh-var(--page-header-height,0px)-8rem)] lg:flex-row">

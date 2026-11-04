@@ -521,3 +521,30 @@ export function tocOf(path: string, text: string): TocEntry[] {
     .map((entry) => ({ anchor: entry.anchor ?? "", title: entry.title, indent: Math.max(0, entry.depth - 1) }));
   return entries.length < TOC_MIN_HEADINGS ? [] : entries;
 }
+
+// ---- Spaces -----------------------------------------------------------------------------------------------------
+// A space is a folder whose home page has a `key` (ADR-0096). Its page is the home page: the README of the folder.
+
+/** The address of the home page of a space: a route of its own, so it never collides with the path of a page. */
+export function wikiSpaceLink(projectId: string, key: string): string {
+  return `${WIKI_BASE}/-/space/${encodeURIComponent(key)}?project=${encodeURIComponent(projectId)}`;
+}
+
+/**
+ * The home page of a space among the pages the Brain found for it (`space:<KEY>`): the README or index of its topmost
+ * folder, the shallowest one when the space has several (a sub-folder's README is its own page, not the space's).
+ */
+export function spaceHomePath(pages: ReadonlyArray<Pick<BrainNode, "kind" | "path" | "space" | "status" | "template">>, key: string): string | undefined {
+  const wanted = key.toUpperCase();
+  const homes = pages.filter((page) => isHomePage(page) && page.space?.toUpperCase() === wanted && !isHiddenPage(page));
+  homes.sort((a, b) => a.path.split("/").length - b.path.split("/").length || a.path.localeCompare(b.path));
+  return homes[0]?.path;
+}
+
+/** The pages the Brain found for a space (documents only, none archived or a template), by title. */
+export function spacePages(matches: ReadonlyArray<Pick<BrainNode, "kind" | "path" | "title" | "status" | "template">>): Array<{ path: string; title: string }> {
+  return matches
+    .filter((match) => match.kind === "document" && !isHiddenPage(match))
+    .map((match) => ({ path: match.path, title: match.title }))
+    .sort((a, b) => a.title.localeCompare(b.title) || a.path.localeCompare(b.path));
+}
