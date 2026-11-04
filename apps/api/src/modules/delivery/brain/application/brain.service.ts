@@ -432,6 +432,17 @@ export class BrainService {
   }
 
   /**
+   * The sections and cards of a document at the indexed commit, in document order, with the lines of their own text: where a
+   * passage of a page is placed again (comments, P3-003). Empty for a document the index does not have.
+   */
+  async outline(projectId: string, path: string): Promise<{ commit: string; sections: Array<{ anchor: string; lineStart: number; lineEnd: number }> }> {
+    const { source } = await this.ready(projectId);
+    const nodes = await this.index.nodesInRanges(projectId, path, [{ start: 1, end: 2_147_483_647 }], BRAIN_MAX_DOCUMENTS);
+    const sections = nodes.flatMap((node) => (node.anchor !== null && node.lineStart !== null && node.lineEnd !== null && (node.kind === "section" || node.kind === "card") ? [{ anchor: node.anchor, lineStart: node.lineStart, lineEnd: node.lineEnd }] : []));
+    return { commit: source.indexedCommit, sections };
+  }
+
+  /**
    * The pages that link to a page (the page itself or any of its headings and cards), or to one heading or card, from
    * other pages: a window of them, ordered by the linking node's path and line. Links inside the same page are not
    * backlinks. `brain_read`'s `incoming` keeps its meaning: the links to exactly that node.

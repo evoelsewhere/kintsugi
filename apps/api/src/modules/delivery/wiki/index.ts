@@ -4,6 +4,7 @@ export { WikiModule } from "./wiki.module.js";
 export { WikiAccessService } from "./application/wiki-access.service.js";
 export { WikiDraftService } from "./application/wiki-draft.service.js";
 export { WikiAttachmentService } from "./application/wiki-attachment.service.js";
+export { WikiCommentService } from "./application/wiki-comment.service.js";
 export { WikiDeleteService } from "./application/wiki-delete.service.js";
 export { WikiPeopleService } from "./application/wiki-people.service.js";
 export { WikiPublishService } from "./application/wiki-publish.service.js";

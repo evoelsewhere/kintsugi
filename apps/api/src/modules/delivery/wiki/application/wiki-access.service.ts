@@ -16,6 +16,9 @@ import { evaluateRestrictions } from "../domain/wiki.restrictions.js";
 const WIKI_WRITE = "wiki.write";
 const WIKI_PUBLISH = "wiki.publish";
 
+/** The permission to comment on wiki pages (ADR-0099 decision 5). */
+const WIKI_COMMENT = "wiki.comment";
+
 /** What a refused person was doing, for the audit entry. */
 export type WikiOperation = "draft" | "publish";
 
@@ -67,6 +70,11 @@ export class WikiAccessService {
     const decision = await this.#decide(projectId, actor, path);
     await this.#enforce(projectId, actor, path, "publish", decision);
     return { direct: await this.#direct(projectId, actor, path, decision) };
+  }
+
+  /** Commenting needs `wiki.comment`: reading comments is Project Access alone. */
+  assertCanComment(actor: Actor): void {
+    if (!actor.permissions.includes(WIKI_COMMENT)) throw new ForbiddenException(`Missing permission: ${WIKI_COMMENT}`);
   }
 
   /** Discarding a draft needs the permission but no page restriction: it is the caller's own text. */

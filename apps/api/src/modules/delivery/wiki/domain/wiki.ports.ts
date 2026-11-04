@@ -1,5 +1,6 @@
 // Ports of the wiki's working state (ADR-0098, ADR-0099); the Pg adapters implement them.
 
+import type { NewWikiComment, WikiCommentRow } from "./wiki.comment.js";
 import type { NewWikiDraft, WikiAttachment, WikiWatch, WikiWatchScope, WikiDraft, WikiPresence, WikiRestriction, WikiRestrictionKind, WikiSubjectKind } from "./wiki.js";
 
 export abstract class WikiDrafts {
@@ -97,6 +98,20 @@ export abstract class WikiWatches {
   abstract remove(projectId: string, userId: string, scopeKind: WikiWatchScope, target: string): Promise<boolean>;
   /** The watches of the person among these targets. */
   abstract among(projectId: string, userId: string, targets: ReadonlyArray<{ scopeKind: WikiWatchScope; target: string }>): Promise<WikiWatch[]>;
+}
+
+export abstract class WikiComments {
+  /**
+   * Records the comment. The same person sending the same text for the same page and parent again within a few seconds
+   * (a double click) gets the first comment back, and a page that holds the most open comments takes no more.
+   */
+  abstract createOnce(comment: NewWikiComment): Promise<{ comment: WikiCommentRow; duplicate: boolean } | { tooMany: true }>;
+  abstract find(projectId: string, id: string): Promise<WikiCommentRow | undefined>;
+  /**
+   * The comments of a page in time order, `limit` of them after the comment `after`; a deleted comment is there only while an
+   * answer to it is. `next` is the `after` of the following page, or null.
+   */
+  abstract listOfPage(projectId: string, pageKey: string, limit: number, after: string | undefined): Promise<{ rows: WikiCommentRow[]; next: string | null }>;
 }
 
 /** One publish of a page at a time per project: two people publishing at once cannot both open a write for it. */
