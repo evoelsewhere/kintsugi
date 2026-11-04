@@ -43,6 +43,7 @@ Responsibilities beyond the feature modules below:
   a correction to the named gap's row in its original specification. It checks the document the user read and the
   writer checks its old hash again; the correction is always reviewed in a PR. A merged answer with evidence can
   clear a blocking gap; draft designs remain non-final. See [ADR-0082](../../docs/decisions/0082-design-readiness-drafts-and-in-place-gap-answers.md).
+- Core → notifications (ADR-0099 decision 3, module `core/notifications`, migration `058`): `GET /api/notifications` (`?unread&limit&before`), `GET /api/notifications/unread-count` and `POST /api/notifications/read` (`{ ids }` or `{ all: true }`) are the signed-in person's own inbox, with no permission code; a notification of a project the person cannot open now is left out of the list and the count. A row holds ids only (`pageKey`, `commit`, `commentId`, `actorId`; `NotificationService.create` refuses any other key), made once by its `dedupe_key`; the page's title and path come from the Brain when the inbox is read. Making one tells the person's event stream (`notifications` topic, scope = their id), and `/api/events` sends that topic to that person only.
 - Cross-project reads (session only): `GET /api/document-writes`
   (`?status=queued,failed&projectId`); `GET /api/monitoring/overview` (counts, what needs
   attention, recent activity, the worker's pg-boss queue counts — `null` when unreadable) and
