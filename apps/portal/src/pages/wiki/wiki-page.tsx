@@ -14,6 +14,7 @@ import { StickyHeader } from "@/components/sticky-header";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { BrokenLinksPanel } from "@/components/wiki/broken-links-panel";
+import { WikiLabelPage } from "@/components/wiki/wiki-label-page";
 import { WikiFolderView } from "@/components/wiki/wiki-folder-view";
 import { WikiPageView } from "@/components/wiki/wiki-page-view";
 import { WikiSearchBox } from "@/components/wiki/wiki-search-box";
@@ -31,7 +32,10 @@ export function WikiPage(): React.JSX.Element {
   const { projectId, select, notFound } = useProjectSelection(projects.data?.map((project) => project.id));
   const current = projects.data?.find((project) => project.id === projectId);
   const navigate = useNavigate();
-  const path = pathOfSplat(useParams()["*"]);
+  const routeParams = useParams();
+  const path = pathOfSplat(routeParams["*"]);
+  // `/wiki/-/label/<label>` is the page of a label; any other address is a path of the document repo.
+  const label = routeParams["label"];
 
   return (
     <div className="flex flex-col gap-4">
@@ -79,7 +83,7 @@ export function WikiPage(): React.JSX.Element {
               />
             </Card>
           ) : (
-            <WikiProject key={projectId} projectId={projectId} projectName={current?.name ?? projectId} path={path} />
+            <WikiProject key={projectId} projectId={projectId} projectName={current?.name ?? projectId} path={path} label={label} />
           )
         }
       </Loaded>
@@ -88,7 +92,7 @@ export function WikiPage(): React.JSX.Element {
 }
 
 /** The reader of one project: it opens once the Brain has a tree, and says what is missing until then. */
-function WikiProject({ projectId, projectName, path }: { projectId: string; projectName: string; path: string }): React.JSX.Element {
+function WikiProject({ projectId, projectName, path, label }: { projectId: string; projectName: string; path: string; label: string | undefined }): React.JSX.Element {
   const status = useLoader(`wiki/${projectId}/status`, () => wikiRead(() => brainApi.status(projectId)), { live: [`brain:${projectId}`, `repositories`] });
   return (
     <Loaded loader={status} rows={6}>
@@ -111,7 +115,7 @@ function WikiProject({ projectId, projectName, path }: { projectId: string; proj
         }
         if (view.enabled && view.commit !== null) {
           // A rebuild of the same commit (a newer builder) changes the tree too: the build time keys what was loaded.
-          return <WikiReader key={view.indexedAt ?? view.commit} projectId={projectId} commit={view.commit} path={path} />;
+          return <WikiReader key={view.indexedAt ?? view.commit} projectId={projectId} commit={view.commit} path={path} label={label} />;
         }
         const building = view.state === "queued" || view.state === "indexing";
         const failed = view.state === "failed";
@@ -140,28 +144,30 @@ function WikiProject({ projectId, projectName, path }: { projectId: string; proj
   );
 }
 
-function WikiReader({ projectId, commit, path }: { projectId: string; commit: string; path: string }): React.JSX.Element {
+function WikiReader({ projectId, commit, path, label }: { projectId: string; commit: string; path: string; label: string | undefined }): React.JSX.Element {
   // Where the attachments of the pages are served from (the commit the Brain indexed).
   const images = useMemo(() => ({ projectId, commit }), [projectId, commit]);
   // A search is in the address (`?q=`); while there is one, its results are shown in place of the page.
   const [params] = useSearchParams();
   const search = readWikiSearch(params);
-  const { q, space, label } = search;
+  const { q, space, label: searchLabel } = search;
   // `/wiki/-/broken` is the report of broken links; like the label page it cannot be the path of a page.
   const broken = useMatch(`${WIKI_BASE}/-/broken`) !== null;
   // The page changes with the address: a key resets what the view of the previous page held.
   const view = useMemo(
     () =>
-      broken ? (
+      label !== undefined ? (
+        <WikiLabelPage key={label} projectId={projectId} commit={commit} label={label} />
+      ) : broken ? (
         <BrokenLinksPanel projectId={projectId} />
       ) : q !== "" ? (
-        <WikiSearchResults projectId={projectId} commit={commit} search={{ q, space, label }} />
+        <WikiSearchResults projectId={projectId} commit={commit} search={{ q, space, label: searchLabel }} />
       ) : isPagePath(path) ? (
         <WikiPageView key={path} projectId={projectId} commit={commit} path={path} />
       ) : (
         <WikiFolderView key={path} projectId={projectId} commit={commit} path={path} />
       ),
-    [projectId, commit, path, broken, q, space, label],
+    [projectId, commit, path, label, broken, q, space, searchLabel],
   );
   return (
     <div className="flex min-h-[560px] flex-col overflow-hidden rounded-xl bg-surface shadow-border-medium lg:h-[calc(100vh-var(--page-header-height,0px)-8rem)] lg:flex-row">

@@ -404,3 +404,37 @@ export function highlightParts(text: string, needle: string): Array<{ text: stri
   if (at < text.length) parts.push({ text: text.slice(at), match: false });
   return parts;
 }
+
+// ---- Labels -----------------------------------------------------------------------------------------------------
+// A label is a word in a page's front matter (`labels: [runbook]`); its page lists every page that carries it.
+
+/** The address of the page of a label: a route of its own, so it never collides with the path of a page. */
+export function wikiLabelLink(projectId: string, label: string): string {
+  return `${WIKI_BASE}/-/label/${encodeURIComponent(label)}?project=${encodeURIComponent(projectId)}`;
+}
+
+/** One page of a label's list. */
+export interface LabelledPage {
+  path: string;
+  title: string;
+  /** The folders above the page, from the top. */
+  breadcrumb: string[];
+  space: string | null;
+  status: string | null;
+  labels: string[];
+}
+
+/** The pages a `label:` lookup found, by title: sections, cards, archived pages and templates are not pages to list. */
+export function labelledPages(matches: ReadonlyArray<BrainNode & { breadcrumb: ReadonlyArray<{ kind: string; title: string }> }>): LabelledPage[] {
+  return matches
+    .filter((match) => match.kind === "document" && !isHiddenPage(match))
+    .map((match) => ({
+      path: match.path,
+      title: match.title,
+      breadcrumb: match.breadcrumb.filter((crumb) => crumb.kind === "folder").map((crumb) => crumb.title),
+      space: match.space,
+      status: match.status,
+      labels: match.labels,
+    }))
+    .sort((a, b) => a.title.localeCompare(b.title) || a.path.localeCompare(b.path));
+}

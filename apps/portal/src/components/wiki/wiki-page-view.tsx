@@ -13,7 +13,7 @@ import { documentsApi } from "@/lib/api/documents";
 import { formatRelative, shortSha } from "@/lib/format";
 import { splitFrontMatter } from "@/lib/front-matter";
 import { useLoader } from "@/lib/use-loader";
-import { type PageMode, pathTrail, readPageMode, wikiLink, wikiPageLink, wikiRead } from "@/lib/wiki";
+import { type PageMode, pathTrail, readPageMode, wikiLabelLink, wikiLink, wikiPageLink, wikiRead } from "@/lib/wiki";
 import { useScrollToHeading, useWikiLinks } from "./use-wiki-links";
 import { ExportMarkdownButton } from "./export-markdown-button";
 import { WikiCompare } from "./wiki-compare";
@@ -37,7 +37,7 @@ export function WikiPageView({ projectId, commit, path }: WikiPageViewProps): Re
   return (
     <article className="flex flex-col gap-3" aria-label={node?.title ?? path}>
       <PageTrail projectId={projectId} path={path} />
-      {node === undefined ? null : <PageFacts node={node} commit={commit} />}
+      {node === undefined ? null : <PageFacts projectId={projectId} node={node} commit={commit} />}
       <PageTabs projectId={projectId} path={path} mode={mode} />
       {mode.mode === "page" ? (
         <PageText projectId={projectId} commit={commit} path={path} />
@@ -146,7 +146,7 @@ export function PageTrail({ projectId, path }: { projectId: string; path: string
 }
 
 /** The labels, the status and the last change of a page: what the Brain knows beyond its text. */
-function PageFacts({ node, commit }: { node: BrainNode; commit: string }): React.JSX.Element | null {
+function PageFacts({ projectId, node, commit }: { projectId: string; node: BrainNode; commit: string }): React.JSX.Element | null {
   const facts: React.ReactNode[] = [];
   if (node.space !== null) facts.push(<span key="space">Space {node.space}</span>);
   if (node.status !== null) facts.push(<span key="status">{node.status}</span>);
@@ -167,10 +167,10 @@ function PageFacts({ node, commit }: { node: BrainNode; commit: string }): React
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-text-muted">
       {node.labels.map((label) => (
-        <span key={label} className="flex items-center gap-1 rounded-full bg-recessed px-2 py-0.5 text-text-secondary">
+        <Link key={label} to={wikiLabelLink(projectId, label)} title={`Pages with the label ${label}`} className="flex items-center gap-1 rounded-full bg-recessed px-2 py-0.5 text-text-secondary hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]">
           <Tag className="size-3" strokeWidth={1.75} />
           {label}
-        </span>
+        </Link>
       ))}
       {facts}
     </div>
