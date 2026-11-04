@@ -1,5 +1,6 @@
 // Ports of the Brain (ADR-0091): the stored tree index of a project, and the queue that asks the worker for a build.
 
+import type { BrainSearchFounds, BrainSearchRequest } from "./brain.search.js";
 import type { BrainBacklinkRows, BrainBrokenLink, BrainLinks, BrainNode, BrainNodeKind, BrainNodePage, BrainSource } from "@kintsugi/domain";
 
 export abstract class BrainIndex {
@@ -31,6 +32,14 @@ export abstract class BrainIndex {
   abstract nodesAtLines(projectId: string, hits: ReadonlyArray<{ path: string; line: number }>): Promise<Array<BrainNode | undefined>>;
   /** The nodes of a document whose own text overlaps the line ranges, in document order. */
   abstract nodesInRanges(projectId: string, path: string, ranges: ReadonlyArray<{ start: number; end: number }>, limit: number): Promise<BrainNode[]>;
+}
+
+export abstract class BrainSearchIndex {
+  /**
+   * The nodes whose full-text vector matches the words of a search, best first (ties by path and line), at most `limit`, with
+   * how many pages archived or templates were left out. The index holds lexemes, never text.
+   */
+  abstract search(projectId: string, request: BrainSearchRequest): Promise<BrainSearchFounds>;
 }
 
 export abstract class BrainBuildQueue {

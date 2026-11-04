@@ -63,6 +63,19 @@ export const brainGrepQuerySchema = z.object({
 });
 export type BrainGrepQueryDto = z.infer<typeof brainGrepQuerySchema>;
 
+/** `?text&space&label&archived&limit` of the ranked search: the words as typed (1 to 200 characters), narrowed to a space or a label. */
+export const brainSearchQuerySchema = z.object({
+  text: z.string().trim().min(1).max(200),
+  space: brainGrepQuerySchema.shape.space,
+  label: brainGrepQuerySchema.shape.label,
+  archived: z
+    .enum(["true", "false", "1", "0"])
+    .optional()
+    .transform((value) => value === "true" || value === "1"),
+  limit: z.coerce.number().int().min(1).max(20).default(10),
+});
+export type BrainSearchQueryDto = z.infer<typeof brainSearchQuerySchema>;
+
 /** An earlier commit: a full or abbreviated commit id. */
 export const brainCommitSchema = z.string().trim().regex(/^[0-9a-fA-F]{7,64}$/, "must be a commit id");
 
