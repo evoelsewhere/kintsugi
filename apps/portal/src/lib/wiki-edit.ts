@@ -1,4 +1,4 @@
-import { BRAIN_MAX_LABELS, brainLabels } from "@kintsugi/domain";
+import { BRAIN_MAX_LABELS, brainLabels, mergeWithMarkers } from "@kintsugi/domain";
 // What the wiki editor says about a page being written: the shapes the API gives and takes (threads/design-wiki-draft-publish),
 // the rules of the autosave, and the text itself. Kept apart from the views so it can be tested without a browser.
 // The text is exactly what was typed: nothing here changes a line ending, a final newline or the order of the front matter
@@ -427,78 +427,22 @@ function matchLines(a: readonly string[], b: readonly string[]): number[] {
   return matched;
 }
 
-/** Texts longer than this many lines (on either side) are not compared line by line: the whole page is one conflict. */
-export const MERGE_MAX_LINES = 4000;
-
-export interface MarkedMerge {
-  text: string;
-  /** How many places both sides changed differently. */
-  conflicts: number;
-}
-
-const ending = (text: string): string => (text.includes("\r\n") ? "\r\n" : "\n");
-const closed = (lines: readonly string[], eol: string): string => {
-  const joined = lines.join("");
-  return joined === "" || joined.endsWith("\n") ? joined : joined + eol;
-};
-
 /**
- * The three texts as a Git merge result with conflict markers (diff3 over whole lines): a place only one side changed takes
- * that side, a place both changed the same way is taken once, and a place both changed differently is a conflict written as
- * `<<<<<<< yours` / `=======` / `>>>>>>> theirs`. Neighbouring changes of the two sides are one conflict.
+ * The three texts as a Git merge result with conflict markers: what only one side changed is taken, a change both made the
+ * same way is taken once, and each place both changed differently is written between `<<<<<<< yours`, `=======` and
+ * `>>>>>>> theirs`. It is the domain's `mergeWithMarkers`, the very merge the API runs, so the screen shows exactly the regions
+ * the server calls conflicts.
  */
-export function withConflictMarkers(base: string, ours: string, theirs: string): MarkedMerge {
-  const a = linesOf(base);
-  const o = linesOf(ours);
-  const t = linesOf(theirs);
-  const eol = ending(ours + theirs + base);
-  if (a.length > MERGE_MAX_LINES || o.length > MERGE_MAX_LINES || t.length > MERGE_MAX_LINES) {
-    return ours === theirs ? { text: ours, conflicts: 0 } : { text: `<<<<<<< yours\n${closed(o, eol)}=======\n${closed(t, eol)}>>>>>>> theirs\n`, conflicts: 1 };
-  }
-  const withOurs = matchLines(a, o);
-  const withTheirs = matchLines(a, t);
-  const out: string[] = [];
-  let conflicts = 0;
-  let baseAt = 0;
-  let oursAt = 0;
-  let theirsAt = 0;
-
-  const chunk = (baseTo: number, oursTo: number, theirsTo: number): void => {
-    const b = a.slice(baseAt, baseTo);
-    const mine = o.slice(oursAt, oursTo);
-    const other = t.slice(theirsAt, theirsTo);
-    const same = (x: readonly string[], y: readonly string[]): boolean => x.length === y.length && x.every((line, index) => line === y[index]);
-    if (same(mine, b)) out.push(...other);
-    else if (same(other, b) || same(mine, other)) out.push(...mine);
-    else {
-      conflicts += 1;
-      out.push("<<<<<<< yours\n", closed(mine, eol), "=======\n", closed(other, eol), ">>>>>>> theirs\n");
-    }
-    baseAt = baseTo;
-    oursAt = oursTo;
-    theirsAt = theirsTo;
-  };
-
-  // A base line both sides kept is a place where the three texts agree again: the stretches between them are the chunks.
-  for (let index = 0; index < a.length; index += 1) {
-    const mine = withOurs[index] as number;
-    const other = withTheirs[index] as number;
-    if (mine < 0 || other < 0 || mine < oursAt || other < theirsAt) continue;
-    chunk(index, mine, other);
-    out.push(a[index] as string);
-    baseAt = index + 1;
-    oursAt = mine + 1;
-    theirsAt = other + 1;
-  }
-  chunk(a.length, o.length, t.length);
-  return { text: out.join(""), conflicts };
-}
+export const withConflictMarkers = (base: string, ours: string, theirs: string): { text: string; conflicts: number } => mergeWithMarkers(base, ours, theirs);
 
 /** A line without its ending, for showing it. */
 export const withoutEnding = (line: string): string => line.replace(/\r?\n$/, "");
 
 /** Whether a text still has a conflict marker line (`<<<<<<<` or `>>>>>>>` at the start of a line). */
 export const hasConflictMarkers = (text: string): boolean => /^(<<<<<<<|>>>>>>>)/m.test(text);
+
+/** Texts longer than this many lines (on either side) are shown as wholly replaced instead of compared line by line. */
+const DIFF_MAX_LINES = 4000;
 
 /** One line of a comparison of two texts. */
 export interface DiffLine {
@@ -510,7 +454,7 @@ export interface DiffLine {
 export function lineDiff(from: string, to: string): DiffLine[] {
   const a = linesOf(from);
   const b = linesOf(to);
-  if (a.length > MERGE_MAX_LINES || b.length > MERGE_MAX_LINES) {
+  if (a.length > DIFF_MAX_LINES || b.length > DIFF_MAX_LINES) {
     return from === to ? a.map((text) => ({ type: "context" as const, text })) : [...a.map((text) => ({ type: "del" as const, text })), ...b.map((text) => ({ type: "add" as const, text }))];
   }
   const matched = matchLines(a, b);

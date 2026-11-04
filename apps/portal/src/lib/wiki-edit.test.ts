@@ -48,7 +48,6 @@ import {
   publishModeLine,
   lineDiff,
   lineSeparatorOf,
-  MERGE_MAX_LINES,
   withConflictMarkers,
   MAX_DRAFT_BYTES,
   type SaverState,
@@ -432,7 +431,7 @@ describe("settling a conflict: the three texts as a Git merge result", () => {
 
   it("keeps CRLF line endings, a missing final newline and front matter as plain text", () => {
     const crlf = withConflictMarkers("a\r\nb\r\nc\r\n", "a\r\nB1\r\nc\r\n", "a\r\nB2\r\nc\r\n");
-    expect(crlf.text).toBe("a\r\n<<<<<<< yours\nB1\r\n=======\nB2\r\n>>>>>>> theirs\nc\r\n");
+    expect(crlf.text).toBe("a\r\n<<<<<<< yours\r\nB1\r\n=======\r\nB2\r\n>>>>>>> theirs\r\nc\r\n");
     const noFinal = withConflictMarkers("a\nb", "a\nB1", "a\nB2");
     expect(noFinal.text).toBe("a\n<<<<<<< yours\nB1\n=======\nB2\n>>>>>>> theirs\n");
     const front = withConflictMarkers("---\ntitle: A\n---\ntext\n", "---\ntitle: A\n---\ntext mine\n", "---\ntitle: B\n---\ntext\n");
@@ -447,13 +446,6 @@ describe("settling a conflict: the three texts as a Git merge result", () => {
   it("gives back the text when nothing changed anywhere", () => {
     expect(withConflictMarkers(base, base, base)).toEqual({ text: base, conflicts: 0 });
     expect(withConflictMarkers("", "", "")).toEqual({ text: "", conflicts: 0 });
-  });
-
-  it("does not compare a very long page line by line: the whole page is the conflict", () => {
-    const long = "line\n".repeat(MERGE_MAX_LINES + 1);
-    const merged = withConflictMarkers(long, `${long}mine\n`, `${long}theirs\n`);
-    expect(merged.conflicts).toBe(1);
-    expect(merged.text.startsWith("<<<<<<< yours\n")).toBe(true);
   });
 
   it("blocks publishing while a marker line is left, and lets go of it once they are gone", () => {
