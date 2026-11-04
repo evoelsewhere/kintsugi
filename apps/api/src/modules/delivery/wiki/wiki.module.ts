@@ -12,12 +12,14 @@ import { WikiDeleteService } from "./application/wiki-delete.service.js";
 import { WikiDraftService } from "./application/wiki-draft.service.js";
 import { WikiMoveService } from "./application/wiki-move.service.js";
 import { WikiPageService } from "./application/wiki-page.service.js";
+import { WikiPeopleService } from "./application/wiki-people.service.js";
 import { WikiPublishService } from "./application/wiki-publish.service.js";
 import { WikiRestrictionService } from "./application/wiki-restriction.service.js";
 import { WikiWatchService } from "./application/wiki-watch.service.js";
-import { WikiAttachments, WikiDirectPublish, WikiDrafts, WikiIdCounters, WikiPageLocks, WikiRestrictions, WikiSubjects, WikiWatches } from "./domain/wiki.ports.js";
+import { WikiAttachments, WikiDirectPublish, WikiDrafts, WikiIdCounters, WikiPageLocks, WikiPeople, WikiRestrictions, WikiSubjects, WikiWatches } from "./domain/wiki.ports.js";
 import { ManifestDirectPublish } from "./infrastructure/manifest-direct-publish.js";
 import { PgWikiIdCounters } from "./infrastructure/pg-wiki.counters.js";
+import { PgWikiPeople } from "./infrastructure/pg-wiki.people.js";
 import { PgWikiPageLocks } from "./infrastructure/pg-wiki.locks.js";
 import { PgWikiAttachments, PgWikiDrafts } from "./infrastructure/pg-wiki.drafts.js";
 import { PgWikiRestrictions } from "./infrastructure/pg-wiki.restrictions.js";
@@ -28,18 +30,20 @@ import { WikiAttachmentController } from "./interface/wiki-attachment.controller
 import { WikiDraftController } from "./interface/wiki-draft.controller.js";
 import { WikiMoveController } from "./interface/wiki-move.controller.js";
 import { WikiPageController } from "./interface/wiki-page.controller.js";
+import { WikiPeopleController } from "./interface/wiki-people.controller.js";
 import { WikiPublishController } from "./interface/wiki-publish.controller.js";
 import { WikiRestrictionController } from "./interface/wiki-restriction.controller.js";
 import { WikiWatchController } from "./interface/wiki-watch.controller.js";
 
 @Module({
   imports: [ProjectAccessModule, DocumentsModule, DocumentWritesModule, BrainModule],
-  controllers: [WikiAccessController, WikiAttachmentController, WikiDraftController, WikiMoveController, WikiPageController, WikiPublishController, WikiRestrictionController, WikiWatchController],
+  controllers: [WikiAccessController, WikiAttachmentController, WikiDraftController, WikiMoveController, WikiPageController, WikiPeopleController, WikiPublishController, WikiRestrictionController, WikiWatchController],
   providers: [
     WikiAccessService,
     WikiDraftService,
     WikiMoveService,
     WikiPageService,
+    WikiPeopleService,
     WikiRestrictionService,
     WikiPublishService,
     WikiDeleteService,
@@ -48,12 +52,13 @@ import { WikiWatchController } from "./interface/wiki-watch.controller.js";
     { provide: WikiDrafts, useClass: PgWikiDrafts },
     { provide: WikiAttachments, useClass: PgWikiAttachments },
     { provide: WikiIdCounters, useClass: PgWikiIdCounters },
+    { provide: WikiPeople, useClass: PgWikiPeople },
     { provide: WikiRestrictions, useClass: PgWikiRestrictions },
     { provide: WikiSubjects, useClass: PgWikiSubjects },
     { provide: WikiWatches, useClass: PgWikiWatches },
     { provide: WikiPageLocks, useClass: PgWikiPageLocks },
     { provide: WikiDirectPublish, useClass: ManifestDirectPublish },
   ],
-  exports: [WikiWatchService, WikiAccessService, WikiAttachmentService, WikiDraftService, WikiPublishService, WikiDeleteService, WikiRestrictionService, WikiDrafts, WikiAttachments, WikiIdCounters, WikiRestrictions],
+  exports: [WikiWatchService, WikiPeopleService, WikiAccessService, WikiAttachmentService, WikiDraftService, WikiPublishService, WikiDeleteService, WikiRestrictionService, WikiDrafts, WikiAttachments, WikiIdCounters, WikiRestrictions],
 })
 export class WikiModule {}

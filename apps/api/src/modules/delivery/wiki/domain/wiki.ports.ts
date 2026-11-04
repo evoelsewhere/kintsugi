@@ -57,6 +57,21 @@ export abstract class WikiRestrictions {
   abstract clear(projectId: string, pathPrefix: string, kind: WikiRestrictionKind): Promise<number>;
 }
 
+/** A person the editor may suggest for a mention: no email, only the name a comment shows. */
+export interface WikiPerson {
+  id: string;
+  username: string;
+  displayName: string;
+}
+
+/** The people a mention can name: those with Project Access on the project, enabled. */
+export abstract class WikiPeople {
+  /** Up to `limit` people whose username or display name holds `query` (case-insensitive), the ones that start with it first. */
+  abstract search(projectId: string, query: string, limit: number): Promise<WikiPerson[]>;
+  /** The people with these usernames (lower case); a name that is nobody's and one without access are not told apart. */
+  abstract byUsernames(projectId: string, usernames: readonly string[]): Promise<Array<{ id: string; username: string }>>;
+}
+
 /** The people and roles restrictions name. */
 export abstract class WikiSubjects {
   /** The ids of the roles a user holds. */
