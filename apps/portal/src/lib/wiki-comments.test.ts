@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkSelection, COMMENT_BODY_MAX, type CommentView, commentProblem, findQuote, plainSelection, QUOTE_MAX, threadsOf } from "./wiki-comments";
+import { checkSelection, COMMENT_BODY_MAX, commentActions, type CommentView, commentProblem, findQuote, plainSelection, QUOTE_MAX, threadsOf } from "./wiki-comments";
 
 const comment = (id: string, over: Partial<CommentView> = {}): CommentView => ({
   id,
@@ -94,5 +94,36 @@ describe("a selection of the rendered page", () => {
 
   it("takes the first place when the passage comes twice", () => {
     expect(findQuote("again and again", "again")).toEqual({ start: 0, end: 5 });
+  });
+});
+
+describe("what a person may do with a comment", () => {
+  const ada = { id: "u1", permissions: ["wiki.comment"] };
+  const kim = { id: "u2", permissions: ["wiki.comment"] };
+  const moderator = { id: "u3", permissions: ["wiki.comment", "wiki.manage"] };
+  const reader = { id: "u4", permissions: [] as string[] };
+  const mine = comment("c1", { author: { id: "u1", username: "ada", displayName: "Ada" } });
+
+  it("offers an author resolve, edit and delete on a comment nobody answered", () => {
+    expect(commentActions(mine, 0, ada)).toEqual({ resolve: true, edit: true, remove: true, moderation: false });
+  });
+
+  it("takes delete from an author once the comment has an answer, and leaves it to a moderator", () => {
+    expect(commentActions(mine, 2, ada)).toEqual({ resolve: true, edit: true, remove: false, moderation: false });
+    expect(commentActions(mine, 2, moderator)).toEqual({ resolve: true, edit: false, remove: true, moderation: true });
+  });
+
+  it("lets another commenter resolve and reopen but not edit or delete, and a moderator delete with the audit note", () => {
+    expect(commentActions(mine, 0, kim)).toEqual({ resolve: true, edit: false, remove: false, moderation: false });
+    expect(commentActions(mine, 0, moderator)).toEqual({ resolve: true, edit: false, remove: true, moderation: true });
+  });
+
+  it("does not resolve an answer, and offers nothing to a reader, a signed-out person or on a deleted comment", () => {
+    const answer = comment("c2", { parentId: "c1", author: { id: "u1", username: "ada", displayName: "Ada" } });
+    expect(commentActions(answer, 0, ada)).toEqual({ resolve: false, edit: true, remove: true, moderation: false });
+    const nothing = { resolve: false, edit: false, remove: false, moderation: false };
+    expect(commentActions(mine, 0, reader)).toEqual(nothing);
+    expect(commentActions(mine, 0, null)).toEqual(nothing);
+    expect(commentActions(comment("c3", { deleted: true, body: "" }), 1, moderator)).toEqual(nothing);
   });
 });

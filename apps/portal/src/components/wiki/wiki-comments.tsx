@@ -8,11 +8,13 @@ import { type RefObject, useState } from "react";
 import { Loaded } from "@/components/loaded";
 import { Markdown } from "@/components/results/lazy-markdown";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { wikiCommentsApi } from "@/lib/api/wiki-comments";
+import { useAuth } from "@/lib/auth";
 import { errorText, formatRelative } from "@/lib/format";
 import { useLoader } from "@/lib/use-loader";
 import { wikiRead } from "@/lib/wiki";
-import { commentProblem, type CommentView, threadsOf, type Thread } from "@/lib/wiki-comments";
+import { commentActions, commentProblem, type CommentView, threadsOf, type Thread } from "@/lib/wiki-comments";
 import { MentionDirectory } from "./mention-directory";
 import { MentionTextarea } from "./mention-textarea";
 import { showPassage, type SelectedPassage, useCommentHighlights, useSelectedPassage } from "./use-comment-anchors";
@@ -173,10 +175,10 @@ function ThreadView({ projectId, path, thread, page, onPosted }: { projectId: st
         </button>
       )}
       {comment.status === "moved" ? <p className="text-[11px] text-text-muted">The passage moved under another heading.</p> : null}
-      <CommentBody comment={comment} />
+      <CommentItem projectId={projectId} comment={comment} answers={thread.replies.length} onChanged={onPosted} />
       {thread.replies.map((reply) => (
         <div key={reply.id} className="ml-3 border-l border-[rgba(0,0,0,0.1)] pl-2.5">
-          <CommentBody comment={reply} />
+          <CommentItem projectId={projectId} comment={reply} answers={0} onChanged={onPosted} />
         </div>
       ))}
       {comment.deleted ? null : replying ? (
@@ -216,5 +218,106 @@ function CommentBody({ comment }: { comment: CommentView }): React.JSX.Element {
       </p>
       {comment.deleted ? <p className="text-text-muted italic">This comment was deleted.</p> : <Markdown text={comment.body} />}
     </div>
+  );
+}
+
+/** A comment with what its person can do to it: resolve or reopen, edit (the author), delete (the author, or a moderator). */
+function CommentItem({ projectId, comment, answers, onChanged }: { projectId: string; comment: CommentView; answers: number; onChanged: () => void }): React.JSX.Element {
+  const { user } = useAuth();
+  const actions = commentActions(comment, answers, user);
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(comment.body);
+  const [deleting, setDeleting] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  const problem = commentProblem(text);
+
+  // One change at a time; the API's own words are shown when it refuses (not the author, too many open comments).
+  const change = async (run: () => Promise<unknown>, done?: () => void): Promise<void> => {
+    setBusy(true);
+    setFailure(null);
+    try {
+      await run();
+      done?.();
+      onChanged();
+    } catch (error) {
+      setFailure(errorText(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <MentionTextarea projectId={projectId} value={text} onChange={setText} label="Edit the comment" className="min-h-14 text-[13px]" autoFocus />
+        {failure === null ? null : (
+          <p role="alert" className="text-[12px] text-[var(--ds-status-red)]">
+            {failure}
+          </p>
+        )}
+        <div className="flex gap-2">
+          <Button size="small" variant="solid" disabled={busy || problem !== undefined || text.trim() === comment.body.trim()} onClick={() => void change(() => wikiCommentsApi.update(projectId, comment.id, { body: text.trim() }), () => setEditing(false))}>
+            {busy ? "Saving…" : "Save"}
+          </Button>
+          <Button size="small" onClick={() => setEditing(false)}>
+            Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <>
+      <CommentBody comment={comment} />
+      {actions.resolve || actions.edit || actions.remove ? (
+        <p className="flex flex-wrap gap-x-3 text-[12px]">
+          {actions.resolve ? (
+            <button type="button" className="text-accent hover:underline disabled:opacity-50" disabled={busy} onClick={() => void change(() => wikiCommentsApi.update(projectId, comment.id, { resolved: !comment.resolved }))}>
+              {comment.resolved ? "Reopen" : "Resolve"}
+            </button>
+          ) : null}
+          {actions.edit ? (
+            <button
+              type="button"
+              className="text-accent hover:underline"
+              onClick={() => {
+                setText(comment.body);
+                setFailure(null);
+                setEditing(true);
+              }}
+            >
+              Edit
+            </button>
+          ) : null}
+          {actions.remove ? (
+            <button type="button" className="text-[var(--ds-status-red)] hover:underline" onClick={() => setDeleting(true)}>
+              Delete
+            </button>
+          ) : null}
+        </p>
+      ) : null}
+      {failure === null ? null : (
+        <p role="alert" className="text-[12px] text-[var(--ds-status-red)]">
+          {failure}
+        </p>
+      )}
+      <ConfirmDialog
+        open={deleting}
+        title="Delete this comment?"
+        confirmLabel="Delete the comment"
+        busyLabel="Deleting…"
+        onClose={() => setDeleting(false)}
+        onConfirm={async () => {
+          await wikiCommentsApi.remove(projectId, comment.id);
+          onChanged();
+        }}
+      >
+        <p className="text-[13px] text-text-secondary">
+          {actions.moderation ? `This is ${comment.author.displayName}'s comment; deleting it is recorded in the audit log.` : "The text of your comment is removed."}
+          {answers > 0 ? " Its answers stay under a note that the comment was deleted." : ""}
+        </p>
+      </ConfirmDialog>
+    </>
   );
 }

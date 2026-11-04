@@ -144,3 +144,42 @@ export function findQuote(blockText: string, exact: string): Found | null {
   if (at < 0) return null;
   return { start: offsets[at] as number, end: (offsets[at + wanted.length - 1] as number) + 1 };
 }
+
+// ---- What a person may do with a comment --------------------------------------------------------------------------
+
+/** The permission that writes, resolves and edits comments; deleting another person's comment needs `wiki.manage`. */
+export const WIKI_COMMENT = "wiki.comment";
+const WIKI_MANAGE = "wiki.manage";
+
+/** `PATCH wiki/comments/:id`: resolve or reopen, and/or edit the text (author only); at least one. */
+export interface CommentChange {
+  resolved?: boolean;
+  body?: string;
+}
+
+export interface CommentActions {
+  /** Resolve or reopen: any commenter, on a comment that is not an answer. */
+  resolve: boolean;
+  /** Edit the text: its author only. */
+  edit: boolean;
+  /** Delete: its author while nobody has answered, or a person with `wiki.manage`. */
+  remove: boolean;
+  /** The delete is a moderator's (somebody else's comment, or one with answers): the dialog says so. */
+  moderation: boolean;
+}
+
+/**
+ * What the buttons under a comment offer. The API decides in the end (403, 409 `has-replies`); the panel only hides what
+ * would be refused, so a person is not shown a button that fails.
+ */
+export function commentActions(comment: CommentView, answers: number, person: { id: string; permissions: readonly string[] } | null): CommentActions {
+  const none: CommentActions = { resolve: false, edit: false, remove: false, moderation: false };
+  if (person === null || comment.deleted) return none;
+  const commenter = person.permissions.includes(WIKI_COMMENT);
+  const manager = person.permissions.includes(WIKI_MANAGE);
+  const own = comment.author.id === person.id;
+  const author = own && commenter;
+  // An author deletes only while nobody has answered; a moderator deletes any, an answered one stays as a marker.
+  const remove = (author && answers === 0) || manager;
+  return { resolve: commenter && comment.parentId === null, edit: author, remove, moderation: remove && !(author && answers === 0) };
+}
