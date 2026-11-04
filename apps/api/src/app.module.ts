@@ -14,6 +14,7 @@ import { ProjectsModule } from "./modules/admin/projects/projects.module.js";
 import { RolesModule } from "./modules/admin/roles/roles.module.js";
 import { UsersModule } from "./modules/admin/users/users.module.js";
 import { AuthModule } from "./modules/core/auth/auth.module.js";
+import { NotificationsModule } from "./modules/core/notifications/index.js";
 import { CatalogModule } from "./modules/delivery/catalog/catalog.module.js";
 import { BuildModule } from "./modules/delivery/build/build.module.js";
 import { DesignModule } from "./modules/delivery/design/design.module.js";
@@ -45,6 +46,7 @@ import { ReleasesModule } from "./modules/system/releases/index.js";
   imports: [
     // core: auth + identity
     AuthModule,
+    NotificationsModule,
     // system
     HealthModule,
     ReleasesModule,
