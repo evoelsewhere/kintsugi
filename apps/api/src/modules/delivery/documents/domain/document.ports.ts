@@ -29,9 +29,10 @@ export abstract class DocumentRepoReader {
   abstract patch(repo: DocumentRepo, from: string, to: string, path: string): Promise<string>;
   /**
    * The lines of the Markdown files at a commit that contain every one of `terms` (fixed strings, not patterns),
-   * under `under` when given; at most `limit` lines, and whether more matched.
+   * under `under` when given and only in the files of `only` when given (applied before `limit`); at most `limit`
+   * lines, and whether more matched.
    */
-  abstract grep(repo: DocumentRepo, commit: string, terms: readonly string[], options: { ignoreCase: boolean; under?: string; limit: number }): Promise<{ matches: GrepLine[]; truncated: boolean }>;
+  abstract grep(repo: DocumentRepo, commit: string, terms: readonly string[], options: { ignoreCase: boolean; under?: string; only?: ReadonlySet<string>; limit: number }): Promise<{ matches: GrepLine[]; truncated: boolean }>;
   /**
    * The Markdown files that changed from `from` (any commit of the mirror, short ids too) to `to`, under `under`
    * when given; undefined when `from` is not a commit of the mirror.

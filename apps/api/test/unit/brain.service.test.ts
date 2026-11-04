@@ -512,6 +512,31 @@ describe("BrainService.grep", () => {
     expect(found.matches.map((match) => match.line)).toEqual([5, 9, 10]);
   });
 
+  it("limits the search to the pages of a space and a label, before the limit applies", async () => {
+    const team = "20-spaces/team/db.md";
+    const { brain, documents, index } = setup({ grep: { matches: [hit(team, 6)], truncated: false } });
+    index.nodes = buildBrainTree(
+      [
+        { path: "20-spaces/team/README.md", text: "---\nkey: TEAM\n---\n\n# Team\n\nThe team's space.\n" },
+        { path: team, text: "---\nlabels: [runbook, sev1]\n---\n\n# Database\n\nlate fee.\n" },
+        { path: "20-spaces/team/cache.md", text: "---\nlabels: [runbook]\n---\n\n# Cache\n\nlate fee.\n" },
+      ],
+      "shop-docs",
+    ).nodes;
+    const onlyOf = (call: number) => ([...(documents.grep.mock.calls[call] as unknown as [unknown, string, string[], { only: ReadonlySet<string> }])[3].only]).sort();
+    const found = await brain.grep("shop", { text: "late", ignoreCase: true, space: "team", label: "sev1" });
+    expect(found).toMatchObject({ space: "TEAM", label: "sev1", truncated: false });
+    expect(onlyOf(0)).toEqual([team]);
+    expect((documents.grep.mock.calls[0] as unknown as unknown[])[3]).toMatchObject({ limit: 2000 });
+    expect(found.matches.map((match) => match.node.path)).toEqual([team]);
+    // A label alone limits to its pages; an unknown one has none, so git is not asked.
+    await brain.grep("shop", { text: "late", ignoreCase: true, label: "runbook" });
+    expect(onlyOf(1)).toEqual(["20-spaces/team/cache.md", team]);
+    const none = await brain.grep("shop", { text: "late", ignoreCase: true, label: "unknown" });
+    expect(none).toMatchObject({ matches: [], truncated: false, space: null, label: "unknown" });
+    expect(documents.grep).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps fifty lines and says when there were more", async () => {
     const many = Array.from({ length: 51 }, (_, at) => hit(SPEC_PATH, 1 + (at % 13)));
     expect((await setup({ grep: { matches: many.slice(0, 50), truncated: false } }).brain.grep("shop", { text: "fee", ignoreCase: true })).truncated).toBe(false);

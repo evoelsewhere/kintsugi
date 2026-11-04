@@ -119,6 +119,10 @@ describe("GitMirrorDocumentReader grep and diff", () => {
     expect((await reader.grep(repo, second, ["LATE"], { ignoreCase: true, limit: 1 })).truncated).toBe(true);
     expect((await reader.grep(repo, second, ["x"], { ignoreCase: false, under: "a[1]", limit: 10 })).matches.map((match) => match.path)).toEqual(["a[1]/x.md"]);
     expect((await reader.grep(repo, second, ["x"], { ignoreCase: false, under: "a1", limit: 10 })).matches.map((match) => match.path)).toEqual(["a1/x.md"]);
+    // `only` keeps the lines of those files, and the limit counts only those.
+    const only = new Set(["a1/x.md"]);
+    expect(await reader.grep(repo, second, ["x"], { ignoreCase: false, only, limit: 1 })).toEqual({ matches: [{ path: "a1/x.md", line: 1, text: "x" }], truncated: false });
+    expect((await reader.grep(repo, second, ["x"], { ignoreCase: false, only: new Set(), limit: 10 })).matches).toEqual([]);
     expect((await reader.grep(repo, second, ["markdown"], { ignoreCase: false, limit: 10 })).matches).toEqual([]);
     expect((await reader.grep(repo, second, ["nothing here"], { ignoreCase: false, limit: 10 })).matches).toEqual([]);
   });
