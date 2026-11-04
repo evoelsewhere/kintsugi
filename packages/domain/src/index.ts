@@ -284,3 +284,4 @@ export { explainFailure, isKnownFailure, stopReasonLabel } from "./failures.js";
 export * from "./text-merge.js";
 export * from "./page-move.js";
 export * from "./page-template.js";
+export * from "./comment-anchor.js";
