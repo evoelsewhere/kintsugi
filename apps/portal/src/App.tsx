@@ -62,6 +62,7 @@ export function App(): React.JSX.Element {
             <Route path="brain" element={<BrainPage />} />
             {/* The splat is the page's path in the document repo, so a heading link (#slug) and a reload open the same page. */}
             <Route path="wiki/-/broken" element={<WikiPage />} />
+            <Route path="wiki/-/recent" element={<WikiPage />} />
             <Route path="wiki/-/label/:label" element={<WikiPage />} />
 
             <Route path="wiki/-/space/:space" element={<WikiPage />} />

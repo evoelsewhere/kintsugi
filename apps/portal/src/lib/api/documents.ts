@@ -406,6 +406,21 @@ export interface DocumentHistory {
   next: string | null;
 }
 
+/** A commit of the recent changes: its version fields and the Markdown files it changed. */
+export interface RecentEntry extends HistoryEntry {
+  files: Array<{ path: string; previousPath: string | null; status: "added" | "modified" | "deleted" | "renamed" }>;
+  /** The commit changed more files than are listed. */
+  moreFiles: boolean;
+}
+
+export interface DocumentRecent {
+  ref: string;
+  commit: string;
+  entries: RecentEntry[];
+  /** The `before` of the next, older page; null when there is none. */
+  next: string | null;
+}
+
 export interface CompareLine {
   type: "context" | "add" | "del";
   oldLine: number | null;
@@ -454,6 +469,14 @@ export const documentsApi = {
     if (options.before !== undefined) query.set("before", options.before);
     if (options.limit !== undefined) query.set("limit", String(options.limit));
     return apiGet(`${project(projectId)}/documents/history?${query.toString()}`);
+  },
+  /** The newest commits that changed Markdown files, newest first; pass the previous answer's `next` as `before` for older ones. */
+  recent: (projectId: string, options: { ref?: string | undefined; before?: string | undefined; limit?: number } = {}): Promise<DocumentRecent> => {
+    const query = new URLSearchParams();
+    if (options.ref !== undefined) query.set("ref", options.ref);
+    if (options.before !== undefined) query.set("before", options.before);
+    if (options.limit !== undefined) query.set("limit", String(options.limit));
+    return apiGet(`${project(projectId)}/documents/recent?${query.toString()}`);
   },
   /** One file at two commits (the shas of two of its versions): the lines that changed. */
   compare: (projectId: string, path: string, from: string, to: string): Promise<DocumentCompare> =>

@@ -1,7 +1,7 @@
 import type { BrainGrepMatch, BrainNode } from "@kintsugi/domain";
 import { describe, expect, it } from "vitest";
 import { resolveDocumentLink } from "./document-links";
-import { attachmentUrl, headingOffPlace, SCROLL_SETTLE_MS, scrollSettled, hitCount, isFrontMatterLine, readableExcerpt, imageSource, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiLink, wikiRead, hitPaths, withDocuments, highlightParts, normalizeLabel, normalizeSpace, readWikiSearch, searchFacets, searchHits, searchLineLink, wikiSearchLink, labelledPages, wikiLabelLink, wikiPhase, hiddenPaths, groupBacklinks, tocOf, spacePages, spaceHomePath, wikiSpaceLink } from "./wiki";
+import { attachmentUrl, headingOffPlace, SCROLL_SETTLE_MS, scrollSettled, hitCount, isFrontMatterLine, readableExcerpt, imageSource, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiLink, wikiRead, hitPaths, withDocuments, highlightParts, normalizeLabel, normalizeSpace, readWikiSearch, searchFacets, searchHits, searchLineLink, wikiSearchLink, labelledPages, wikiLabelLink, wikiPhase, hiddenPaths, groupBacklinks, tocOf, spacePages, spaceHomePath, wikiSpaceLink, CHANGE_LABEL, changedFileTarget, wikiRecentLink } from "./wiki";
 
 const node = (over: Partial<BrainNode> & Pick<BrainNode, "id" | "kind" | "path">): BrainNode => ({
   parentId: null,
@@ -570,5 +570,20 @@ describe("holding a heading in place while the page settles", () => {
     expect(scrollSettled(SCROLL_SETTLE_MS - 1, false)).toBe(false);
     expect(scrollSettled(SCROLL_SETTLE_MS, false)).toBe(true);
     expect(scrollSettled(100, true)).toBe(true);
+  });
+});
+
+describe("the recent changes", () => {
+  it("has an address of its own that cannot be the path of a page", () => {
+    expect(wikiRecentLink("billing")).toBe("/wiki/-/recent?project=billing");
+    expect(wikiRecentLink("a b")).toBe("/wiki/-/recent?project=a%20b");
+  });
+
+  it("opens a page a commit added, edited or renamed, and nothing for one it deleted", () => {
+    expect(changedFileTarget({ path: "a/new.md", status: "added" })).toBe("a/new.md");
+    expect(changedFileTarget({ path: "a/x.md", status: "modified" })).toBe("a/x.md");
+    expect(changedFileTarget({ path: "a/renamed.md", status: "renamed" })).toBe("a/renamed.md");
+    expect(changedFileTarget({ path: "a/gone.md", status: "deleted" })).toBeUndefined();
+    expect(CHANGE_LABEL.modified).toBe("edited");
   });
 });
