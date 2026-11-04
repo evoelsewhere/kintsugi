@@ -5,7 +5,7 @@
 
 import { createHash } from "node:crypto";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { type PageMoveEntry, type PageMoveRefusal, type PageFile, pageIdOf, planMove } from "@kintsugi/domain";
+import { type PageMoveEntry, type PageMoveRefusal, type PageFile, isWikiEditablePath, pageIdOf, planMove } from "@kintsugi/domain";
 import { AUDIT_ACTIONS, AuditTrail, auditRecord } from "#common/audit/audit-trail.js";
 import type { Actor } from "#common/auth/decorators.js";
 import { DocumentWritesService } from "#modules/admin/document-writes/index.js";
@@ -42,6 +42,8 @@ interface Plan {
 
 const sha256 = (text: string): string => createHash("sha256").update(text, "utf8").digest("hex");
 const folderOf = (path: string): string => path.slice(0, Math.max(0, path.lastIndexOf("/")));
+/** A Markdown page the wiki may write: not `restricted/`, `_generated/`, a hidden folder or a file of another type, and no `..`. */
+const isMovablePage = (path: string): boolean => isWikiEditablePath(path) && path.toLowerCase().endsWith(".md");
 
 @Injectable()
 export class WikiMoveService {
@@ -112,6 +114,8 @@ export class WikiMoveService {
 
   async #plan(projectId: string, from: string, to: string): Promise<Plan> {
     if (from === to) throw new BadRequestException(`${from} is already there`);
+    // Before anything is read: what is not a page of the wiki is refused the same whether it exists or not, so the answer says nothing of what is there.
+    for (const path of [from, to]) if (!isMovablePage(path)) throw new BadRequestException(`${path} is not a page the wiki can write`);
     const heads = new Map<string, string>();
     const read = async (path: string): Promise<string | undefined> => {
       if (heads.has(path)) return heads.get(path);

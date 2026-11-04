@@ -100,6 +100,26 @@ describe.skipIf(!hasDatabase)("wiki move (integration)", () => {
     expect((await move(editor, { from: FROM, to: TO })).status).toBe(400);
   });
 
+  it("answers 400 for a target that is not a page of the wiki, before any existence check, the same whether it is there or not (QA-001)", async () => {
+    const targets = ["restricted/x.md", "restricted/there.md", "restricted/sub/x.md", "RESTRICTED/x.md", "_generated/x.md", "../escape.md", "20-spaces/eng/.git/x.md", "20-spaces/ops/notes.txt", "20-spaces/ops/image.png", "kintsugi.yaml"];
+    for (const to of targets) {
+      for (const [name, call] of [["preview", preview], ["move", move]] as const) {
+        const result = await call(editor, name === "move" ? { from: FROM, to, message: "Move it" } : { from: FROM, to });
+        expect(result.status, `${name} ${to}: ${result.raw}`).toBe(400);
+        expect(result.body).toMatchObject({ message: `${to} is not a page the wiki can write` });
+        expect(result.raw).not.toContain("exists");
+      }
+    }
+    // The source is checked the same way: a page outside the wiki is neither found nor missing.
+    for (const from of ["restricted/there.md", "restricted/nope.md", "_generated/x.md"]) {
+      const result = await preview(editor, { from, to: TO });
+      expect(result.status, from).toBe(400);
+      expect(result.body).toMatchObject({ message: `${from} is not a page the wiki can write` });
+    }
+    expect((await app.db.query("select 1 from workflow.document_write where kind = 'page'")).rowCount).toBe(0);
+    expect((await app.db.query("select 1 from knowledge.wiki_draft")).rowCount).toBe(0);
+  });
+
   it("refuses a member without wiki.write, audits it, and records nothing", async () => {
     const refused = await move(reader, { from: FROM, to: TO, message: "Move the guide" });
     expect(refused.status).toBe(403);
