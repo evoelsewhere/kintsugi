@@ -17,6 +17,7 @@ import { splitFrontMatter } from "@/lib/front-matter";
 import { useLoader } from "@/lib/use-loader";
 import { cn } from "@/lib/utils";
 import { nameOf, wikiPageLink, wikiRead } from "@/lib/wiki";
+import { LabelChips } from "./wiki-label-chips";
 import { PublishFlow } from "./wiki-publish";
 import { type AccessView, DraftSaver, type DraftView, lineSeparatorOf, SAVE_STATUS_LABEL, type SaverState } from "@/lib/wiki-edit";
 
@@ -194,6 +195,15 @@ function Surface({ projectId, path, direct, draft, startText, startCommit }: { p
           return saved.whenSaved();
         }}
         onClose={() => setPublishing(false)}
+      />
+      <LabelChips
+        text={text}
+        onChange={(next) => {
+          // The editor shows the new text: it is rebuilt with it (the cursor goes back to the start).
+          setPreview(next);
+          typed(next);
+          setGeneration((value) => value + 1);
+        }}
       />
       <div className="lg:hidden">
         <Tabs

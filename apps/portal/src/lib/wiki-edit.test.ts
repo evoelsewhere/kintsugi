@@ -14,7 +14,12 @@ import {
   classifyMoveFailure,
   defaultMoveMessage,
   folderOfPath,
+  LABEL_MAX_LENGTH,
+  labelCheck,
+  labelsOf,
+  LABELS_MAX,
   messageProblem,
+  setLabels,
   MOVE_REWRITE_LIMIT,
   moveKind,
   moveTargetProblem,
@@ -581,5 +586,67 @@ describe("moving and renaming a page", () => {
     expect(classifyMoveFailure(refused(409, { code: "target-exists" }, "A page already exists at that path"))).toEqual({ kind: "message", status: 409, message: "A page already exists at that path" });
     expect(classifyMoveFailure(refused(409, { code: "open-write", write: { author: "Kim", prUrl: "https://git.example/pr/9" } }, "A pull request is open"))).toMatchObject({ kind: "open-write", author: "Kim", prUrl: "https://git.example/pr/9" });
     expect(classifyMoveFailure(refused(403, {}, "Editing is restricted to the docs team"))).toEqual({ kind: "message", status: 403, message: "Editing is restricted to the docs team" });
+  });
+});
+
+describe("the labels of a page in its front matter", () => {
+  it("reads the labels of an inline list, a block list and a single value, with or without quotes", () => {
+    expect(labelsOf("---\nlabels: [runbook, sev1]\n---\ntext\n")).toEqual(["runbook", "sev1"]);
+    expect(labelsOf("---\nlabels:\n  - runbook\n  - 'sev1'\n---\n")).toEqual(["runbook", "sev1"]);
+    expect(labelsOf("---\nlabels:\n- runbook\n- sev1\nowner: x\n---\n")).toEqual(["runbook", "sev1"]);
+    expect(labelsOf("---\nlabels: runbook\n---\n")).toEqual(["runbook"]);
+    expect(labelsOf('---\nlabels: ["a b", c] # comment\n---\n')).toEqual(["a b", "c"]);
+    expect(labelsOf("---\ntitle: x\n---\n")).toEqual([]);
+    expect(labelsOf("no front matter\nlabels: [a]\n")).toEqual([]);
+    expect(labelsOf("---\nlabels: [a]\n")).toEqual([]);
+  });
+
+  it("changes an inline list and keeps every other byte", () => {
+    const text = "---\ntitle: Page   \nlabels: [runbook,  sev1]\nowner:  me\n---\n\n# Body  \n\ttabs\n";
+    expect(setLabels(text, ["runbook", "sev1", "database"])).toBe("---\ntitle: Page   \nlabels: [runbook, sev1, database]\nowner:  me\n---\n\n# Body  \n\ttabs\n");
+  });
+
+  it("keeps a block list a block list, with its own indentation and dash", () => {
+    const text = "---\nlabels:\n    -   runbook\n    -   sev1\nowner: me\n---\nbody";
+    expect(setLabels(text, ["runbook", "database"])).toBe("---\nlabels:\n    -   runbook\n    -   database\nowner: me\n---\nbody");
+    expect(setLabels("---\nlabels:\n- a\n---\n", ["a", "b"])).toBe("---\nlabels:\n- a\n- b\n---\n");
+  });
+
+  it("adds the entry at the end of the front matter when it is missing, and makes a front matter for a page without one", () => {
+    expect(setLabels("---\ntitle: x\n---\nbody\n", ["a"])).toBe("---\ntitle: x\nlabels: [a]\n---\nbody\n");
+    expect(setLabels("just text\n", ["a", "b"])).toBe("---\nlabels: [a, b]\n---\njust text\n");
+    expect(setLabels("just text\n", [])).toBe("just text\n");
+    expect(setLabels("---\ntitle: x\n---\nbody\n", [])).toBe("---\ntitle: x\n---\nbody\n");
+  });
+
+  it("removes the entry, a block list included, when no label is left", () => {
+    expect(setLabels("---\ntitle: x\nlabels: [a]\nowner: y\n---\n", [])).toBe("---\ntitle: x\nowner: y\n---\n");
+    expect(setLabels("---\nlabels:\n  - a\n  - b\nowner: y\n---\n", [])).toBe("---\nowner: y\n---\n");
+  });
+
+  it("keeps CRLF line endings and a missing final newline, and gives the text back when the labels are the same", () => {
+    const crlf = "---\r\ntitle: x\r\nlabels: [a]\r\n---\r\n\r\nbody";
+    expect(setLabels(crlf, ["a", "b"])).toBe("---\r\ntitle: x\r\nlabels: [a, b]\r\n---\r\n\r\nbody");
+    expect(setLabels("---\r\ntitle: x\r\n---\r\nbody", ["a"])).toBe("---\r\ntitle: x\r\nlabels: [a]\r\n---\r\nbody");
+    expect(setLabels("plain\r\ntext", ["a"])).toBe("---\r\nlabels: [a]\r\n---\r\nplain\r\ntext");
+    const same = "---\nlabels:   [a,b]\n---\n";
+    expect(setLabels(same, ["a", "b"])).toBe(same);
+  });
+
+  it("only touches the labels entry of the front matter, never a line of the body", () => {
+    const text = "---\ntitle: x\n---\nlabels: [in the body]\n";
+    expect(setLabels(text, ["a"])).toBe("---\ntitle: x\nlabels: [a]\n---\nlabels: [in the body]\n");
+  });
+
+  it("accepts a label only as the Brain would store it, and says why not", () => {
+    expect(labelCheck("runbook", [])).toEqual({ cleaned: "runbook", problem: undefined });
+    expect(labelCheck("  sev-1 ", [])).toEqual({ cleaned: "sev-1", problem: undefined });
+    expect(labelCheck("", [])).toEqual({ cleaned: "", problem: undefined });
+    expect(labelCheck("Run Book", []).problem).toMatch(/stored as “runbook”/);
+    expect(labelCheck("Runbook", []).cleaned).toBe("runbook");
+    expect(labelCheck("!!!", []).problem).toMatch(/letters, digits and hyphens/);
+    expect(labelCheck("runbook", ["runbook"]).problem).toMatch(/already/);
+    expect(labelCheck("x".repeat(LABEL_MAX_LENGTH + 1), []).problem).toMatch(/100/);
+    expect(labelCheck("new", Array.from({ length: LABELS_MAX }, (_, index) => `l${index}`)).problem).toMatch(/at most/);
   });
 });

@@ -1,3 +1,4 @@
+import { BRAIN_MAX_LABELS } from "@kintsugi/domain";
 // What the wiki editor says about a page being written: the shapes the API gives and takes (threads/design-wiki-draft-publish),
 // the rules of the autosave, and the text itself. Kept apart from the views so it can be tested without a browser.
 // The text is exactly what was typed: nothing here changes a line ending, a final newline or the order of the front matter
@@ -653,4 +654,113 @@ export function classifyMoveFailure(error: unknown): MoveFailure {
   const failure = classifyPublishFailure(error);
   // A move has no three-way merge: a conflict answer would still be the API's own words.
   return failure.kind === "conflict" ? { kind: "message", status: 409, message: error instanceof Error ? error.message : "The page could not be moved." } : failure;
+}
+
+// ---- Labels in the front matter ----------------------------------------------------------------------------------
+// A page's labels are the `labels:` entry of its front matter. The editor changes that entry and nothing else: every other
+// byte of the text stays as it was, line endings included.
+
+const eolOf = (line: string): string => (line.endsWith("\r\n") ? "\r\n" : line.endsWith("\n") ? "\n" : "");
+const bare = (line: string): string => line.replace(/\r?\n$/, "");
+
+/** The index of the line that closes the front matter, or -1 when the text has none (it must open on its first line). */
+function frontMatterEnd(lines: readonly string[]): number {
+  if (lines.length === 0 || bare(lines[0] as string).trimEnd() !== "---") return -1;
+  for (let index = 1; index < lines.length; index += 1) {
+    const line = bare(lines[index] as string).trimEnd();
+    if (line === "---" || line === "...") return index;
+  }
+  return -1;
+}
+
+interface LabelsEntry {
+  /** The line of `labels:` and the number of lines the entry takes (the key line and its list lines). */
+  at: number;
+  length: number;
+  form: "inline" | "block";
+  /** The values as written, without quotes. */
+  values: string[];
+  /** The text before a block item's dash, and the dash: `  - `. */
+  itemPrefix: string;
+}
+
+const unquote = (value: string): string => value.trim().replace(/^(["'])(.*)\1$/, "$2").trim();
+const withoutComment = (value: string): string => value.replace(/\s+#.*$/, "");
+
+/** Where the `labels:` entry is in the front matter, and what it holds. */
+function labelsEntry(lines: readonly string[], end: number): LabelsEntry | null {
+  for (let at = 1; at < end; at += 1) {
+    const match = /^labels[ \t]*:(.*)$/.exec(bare(lines[at] as string));
+    if (match === null) continue;
+    const rest = withoutComment(match[1] ?? "").trim();
+    let length = 1;
+    const items: string[] = [];
+    let itemPrefix = "  - ";
+    for (let next = at + 1; next < end; next += 1) {
+      const item = /^(\s*-)(\s+)(.*)$/.exec(bare(lines[next] as string)) ?? /^(\s*-)()$/.exec(bare(lines[next] as string));
+      if (item === null) break;
+      if (items.length === 0) itemPrefix = `${item[1]}${item[2] || " "}`;
+      items.push(unquote(withoutComment(item[3] ?? "")));
+      length += 1;
+    }
+    if (rest === "") return { at, length, form: "block", values: items.filter((value) => value !== ""), itemPrefix };
+    const inner = rest.startsWith("[") ? rest.replace(/^\[/, "").replace(/\]\s*$/, "") : rest;
+    return { at, length: 1, form: "inline", values: inner.split(",").map(unquote).filter((value) => value !== ""), itemPrefix };
+  }
+  return null;
+}
+
+/** The labels a page's front matter lists, as written (the Brain cleans them when it reads them). */
+export function labelsOf(text: string): string[] {
+  const lines = linesOf(text);
+  const end = frontMatterEnd(lines);
+  return end < 0 ? [] : (labelsEntry(lines, end)?.values ?? []);
+}
+
+/**
+ * The text with its `labels:` entry set to `labels`: an inline list stays inline and a block list stays a block, a missing
+ * entry is added (as an inline list, at the end of the front matter, which is made when the page has none) and an empty
+ * list removes the entry. Every other byte of the text is kept. The same labels in the same order give the text back.
+ */
+export function setLabels(text: string, labels: readonly string[]): string {
+  const lines = linesOf(text);
+  const end = frontMatterEnd(lines);
+  const eol = text.includes("\r\n") ? "\r\n" : "\n";
+  const list = `[${labels.join(", ")}]`;
+  if (end < 0) return labels.length === 0 ? text : `---${eol}labels: ${list}${eol}---${eol}${text}`;
+  const entry = labelsEntry(lines, end);
+  if (entry === null) {
+    if (labels.length === 0) return text;
+    return [...lines.slice(0, end), `labels: ${list}${eol}`, ...lines.slice(end)].join("");
+  }
+  if (entry.values.length === labels.length && entry.values.every((value, index) => value === labels[index])) return text;
+  const keyLine = lines[entry.at] as string;
+  const rest = [...lines.slice(0, entry.at), ...lines.slice(entry.at + entry.length)];
+  if (labels.length === 0) return [...rest.slice(0, entry.at), ...rest.slice(entry.at)].join("");
+  const lineEnding = eolOf(keyLine) || eol;
+  const written =
+    entry.form === "block"
+      ? [keyLine.endsWith("\n") ? keyLine : keyLine + lineEnding, ...labels.map((label) => `${entry.itemPrefix}${label}${lineEnding}`)]
+      : [`labels: ${list}${eolOf(keyLine)}`];
+  return [...lines.slice(0, entry.at), ...written, ...lines.slice(entry.at + entry.length)].join("");
+}
+
+/** The most labels a page keeps and the longest one (the Brain cleans and cuts anything beyond). */
+export const LABELS_MAX = BRAIN_MAX_LABELS;
+export const LABEL_MAX_LENGTH = 100;
+
+/**
+ * What typing a label into the chip box comes to: the form the Brain would store (lower case, letters, digits and hyphens),
+ * and a reason it is not added when it is not stored as typed, is a duplicate, is too long or there are too many already.
+ */
+export function labelCheck(input: string, existing: readonly string[]): { cleaned: string; problem: string | undefined } {
+  const typed = input.trim();
+  const cleaned = typed.toLowerCase().replace(/[^a-z0-9-]/g, "");
+  if (typed === "") return { cleaned: "", problem: undefined };
+  if (cleaned === "") return { cleaned, problem: "A label holds letters, digits and hyphens." };
+  if (typed.length > LABEL_MAX_LENGTH) return { cleaned, problem: `A label has at most ${LABEL_MAX_LENGTH} characters.` };
+  if (cleaned !== typed) return { cleaned, problem: `It would be stored as “${cleaned}”: type it that way to add it.` };
+  if (existing.includes(cleaned)) return { cleaned, problem: "The page has this label already." };
+  if (existing.length >= LABELS_MAX) return { cleaned, problem: `A page has at most ${LABELS_MAX} labels.` };
+  return { cleaned, problem: undefined };
 }
