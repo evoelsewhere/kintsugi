@@ -33,12 +33,12 @@ describe.skipIf(!hasDatabase)("wiki editing state (integration)", () => {
     await app?.close();
   });
 
-  it("runs again without error and creates the four tables", async () => {
+  it("runs again without error and creates the editing tables (the watch and notify tables of migration 058 are beside them)", async () => {
     const script = await readFile(MIGRATION, "utf8");
     await app.db.query(script);
     await app.db.query(script);
     const tables = await app.db.query<{ table_name: string }>("select table_name from information_schema.tables where table_schema = 'knowledge' and table_name like 'wiki\\_%' order by 1");
-    expect(tables.rows.map((row) => row.table_name)).toEqual(["wiki_draft", "wiki_draft_attachment", "wiki_id_counter", "wiki_restriction"]);
+    expect(tables.rows.map((row) => row.table_name)).toEqual(["wiki_draft", "wiki_draft_attachment", "wiki_id_counter", "wiki_notify_cursor", "wiki_restriction", "wiki_watch"]);
   });
 
   it("hands out page-id numbers one by one per project and scope", async () => {

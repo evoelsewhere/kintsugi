@@ -1,6 +1,6 @@
 // Ports of the wiki's working state (ADR-0098, ADR-0099); the Pg adapters implement them.
 
-import type { NewWikiDraft, WikiAttachment, WikiDraft, WikiPresence, WikiRestriction, WikiRestrictionKind, WikiSubjectKind } from "./wiki.js";
+import type { NewWikiDraft, WikiAttachment, WikiWatch, WikiWatchScope, WikiDraft, WikiPresence, WikiRestriction, WikiRestrictionKind, WikiSubjectKind } from "./wiki.js";
 
 export abstract class WikiDrafts {
   /** The draft of `userId` for the page, or undefined. */
@@ -63,6 +63,20 @@ export abstract class WikiSubjects {
   abstract rolesOf(userId: string): Promise<string[]>;
   /** The names to show for users (their display name, or sign-in name) and roles; an id that does not exist is missing from the map. */
   abstract names(kind: WikiSubjectKind, ids: readonly string[]): Promise<Map<string, string>>;
+}
+
+/** The most watches a person has in a project. */
+export const WIKI_WATCH_LIMIT = 500;
+
+export abstract class WikiWatches {
+  /** The watches of a person in a project, newest first. */
+  abstract listOf(projectId: string, userId: string): Promise<WikiWatch[]>;
+  /** Watches the target; whether it is new (a second time changes nothing), or undefined at the limit of watches. */
+  abstract add(projectId: string, userId: string, scopeKind: WikiWatchScope, target: string): Promise<{ created: boolean } | undefined>;
+  /** Stops watching; whether there was a watch. */
+  abstract remove(projectId: string, userId: string, scopeKind: WikiWatchScope, target: string): Promise<boolean>;
+  /** The watches of the person among these targets. */
+  abstract among(projectId: string, userId: string, targets: ReadonlyArray<{ scopeKind: WikiWatchScope; target: string }>): Promise<WikiWatch[]>;
 }
 
 /** One publish of a page at a time per project: two people publishing at once cannot both open a write for it. */

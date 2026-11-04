@@ -98,6 +98,29 @@ export interface WikiRestriction {
   createdAt: string;
 }
 
+export type WikiWatchScope = "page" | "folder" | "space";
+
+/** A person's watch as it is stored: what is watched is the page id (`path:<path>` without one), a folder path or a space key. */
+export interface WikiWatch {
+  scopeKind: WikiWatchScope;
+  target: string;
+  createdAt: string;
+}
+
+/** A watch with the name the person knows what it watches by, when the Brain can give it. */
+export interface WikiWatchView extends WikiWatch {
+  path: string | null;
+  title: string | null;
+}
+
+/** Whether a page is watched by the caller, and how: itself, or a folder or space it is in. */
+export interface WikiPageWatch {
+  path: string;
+  watched: boolean;
+  direct: boolean;
+  via: { scopeKind: WikiWatchScope; target: string } | null;
+}
+
 /** Why a person may not write a page. */
 export interface WikiRefusal {
   code: "not-editable" | "permission" | "restriction";

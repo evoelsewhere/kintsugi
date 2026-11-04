@@ -56,6 +56,16 @@ export const attachSchema = z
   .strict();
 export type AttachBody = z.infer<typeof attachSchema>;
 
+/** What a watch is on: a page (its path or id), a folder (its path) or a space (its key). */
+const watchScopeSchema = z.enum(["page", "folder", "space"]);
+export const watchSchema = z.object({ scopeKind: watchScopeSchema, target: z.string().trim().min(1).max(1000) }).strict();
+export type WatchBody = z.infer<typeof watchSchema>;
+export const watchQuerySchema = z.object({ scopeKind: watchScopeSchema, target: z.string().trim().min(1).max(1000) });
+export type WatchQuery = z.infer<typeof watchQuerySchema>;
+/** `?path=` of the watches list: when given, whether that page is watched. */
+export const watchesQuerySchema = z.object({ path: z.string().min(1).max(1000).optional() });
+export type WatchesQuery = z.infer<typeof watchesQuerySchema>;
+
 /** Body of a page delete: the page and the message of the write (its first line is the pull request's title). */
 export const deletePageSchema = z.object({ path: z.string().min(1).max(1000), message: z.string().trim().min(1).max(200) }).strict();
 export type DeletePageBody = z.infer<typeof deletePageSchema>;
