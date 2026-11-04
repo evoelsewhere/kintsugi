@@ -1,7 +1,7 @@
 import type { BrainGrepMatch, BrainNode } from "@kintsugi/domain";
 import { describe, expect, it } from "vitest";
 import { resolveDocumentLink } from "./document-links";
-import { attachmentUrl, imageSource, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiIsOff, wikiLink, wikiRead, hitPaths, withDocuments, highlightParts, normalizeLabel, normalizeSpace, readWikiSearch, searchFacets, searchHits, searchLineLink, wikiSearchLink } from "./wiki";
+import { attachmentUrl, hitCount, isFrontMatterLine, readableExcerpt, imageSource, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiIsOff, wikiLink, wikiRead, hitPaths, withDocuments, highlightParts, normalizeLabel, normalizeSpace, readWikiSearch, searchFacets, searchHits, searchLineLink, wikiSearchLink } from "./wiki";
 
 const node = (over: Partial<BrainNode> & Pick<BrainNode, "id" | "kind" | "path">): BrainNode => ({
   parentId: null,
@@ -364,5 +364,45 @@ describe("the search of the wiki", () => {
     expect(highlightParts("nothing here", "zzz")).toEqual([{ text: "nothing here", match: false }]);
     expect(highlightParts("abc", "")).toEqual([{ text: "abc", match: false }]);
     expect(highlightParts("<b>x</b>", "x").map((part) => part.text).join("")).toBe("<b>x</b>");
+  });
+});
+
+describe("the excerpts of a search", () => {
+  const doc = page("20-spaces/eng/runbooks/db-failover.md", { title: "Database failover" });
+  const failoverCrumbs = [
+    { id: "/", kind: "root", title: "Root" },
+    { id: "20-spaces/eng/runbooks/db-failover.md", kind: "document", title: "Database failover" },
+  ] as const;
+  const found = (over: Partial<BrainGrepMatch>): BrainGrepMatch => ({ node: doc, breadcrumb: [...failoverCrumbs], line: 2, excerpt: "title: Database failover", ...over });
+
+  it("recognises the lines of a page's front matter, only when they belong to the page itself", () => {
+    for (const line of ["---", "title: Database failover", "labels: [runbook, sev1]", "- runbook", "  - nested", "id: PAGE-ENG-0013"]) expect(isFrontMatterLine("document", line)).toBe(true);
+    // Text under a heading is a section's: never taken for front matter, whatever its shape.
+    expect(isFrontMatterLine("section", "title: Database failover")).toBe(false);
+    expect(isFrontMatterLine("card", "- a list item")).toBe(false);
+    for (const line of ["# Database failover", "Writes fail with the primary down.", "Writes: fail"]) expect(isFrontMatterLine("document", line)).toBe(line === "Writes: fail");
+    // A line before the first heading that looks like `key: value` is taken for front matter: the shape is all the search knows.
+  });
+
+  it("drops the front matter lines of a hit but keeps the page, and keeps what the text says elsewhere", () => {
+    const [onlyMeta] = searchHits([found({})]);
+    expect(onlyMeta?.title).toBe("Database failover");
+    expect(onlyMeta?.lines).toEqual([]);
+    const [both] = searchHits([found({}), found({ node: { ...doc, kind: "section", anchor: "symptoms", title: "Symptoms" }, line: 8, excerpt: "Failover is triggered by hand" })]);
+    expect(both?.lines.map((line) => line.line)).toEqual([8]);
+  });
+
+  it("shows a link or an image of an excerpt as its text only", () => {
+    expect(readableExcerpt("See [database failover](../eng/runbooks/db-failover.md) first")).toBe("See database failover first");
+    expect(readableExcerpt("![Failover diagram](../_attachments/f.png) and [a](b) [c](d)")).toBe("Failover diagram and a c");
+    expect(readableExcerpt("no link here, a [bracket] and (paren)")).toBe("no link here, a [bracket] and (paren)");
+    const [hit] = searchHits([found({ node: { ...doc, kind: "section", anchor: "x", title: "X" }, line: 9, excerpt: "[database failover](../db-failover.md)" })]);
+    expect(hit?.lines[0]?.excerpt).toBe("database failover");
+  });
+
+  it("counts one page in the singular", () => {
+    expect(hitCount(1, "failover")).toBe("1 page contains “failover”");
+    expect(hitCount(2, "failover")).toBe("2 pages contain “failover”");
+    expect(hitCount(0, "x")).toBe("0 pages contain “x”");
   });
 });
