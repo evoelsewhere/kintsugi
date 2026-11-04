@@ -133,6 +133,7 @@ export interface MemberPort {
   brainLookup(query: BrainLookupQuery): Promise<BrainLookup>;
   brainGrep(query: BrainGrepQuery): Promise<BrainGrep>;
   brainChanges(query: BrainChangesQuery): Promise<BrainChanges>;
+  brainBacklinks(query: BrainBacklinksQuery): Promise<BrainBacklinks>;
 }
 
 // ---------------------------------------------------------------------------
@@ -223,6 +224,26 @@ export interface BrainGrep extends BrainIndexed {
   under: string | null;
   matches: Array<{ node: MemberBrainNode; breadcrumb: BrainCrumb[]; line: number; excerpt: string }>;
   truncated: boolean;
+}
+
+export interface BrainBacklinksQuery {
+  schemaVersion?: MemberSchemaVersion;
+  projectId: string;
+  /** A page, or one of its headings or cards. */
+  node: string;
+  offset?: number;
+  limit?: number;
+}
+
+/** The pages that link to a page, a heading or a card: a window of them, in path order. */
+export interface BrainBacklinks extends BrainIndexed {
+  node: MemberBrainNode;
+  /** The deepest node of another page that holds the link, what it points at, and the kind of link. */
+  items: Array<{ node: MemberBrainNode; target: MemberBrainNode; linkKind: "link" | "id" }>;
+  total: number;
+  offset: number;
+  /** The offset to ask for next, or null after the last window. */
+  nextOffset: number | null;
 }
 
 export interface BrainChangesQuery {

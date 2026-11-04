@@ -39,7 +39,7 @@ describe("member stdio MCP process", () => {
     const listed = await client.listTools();
     const names = listed.tools.map((tool) => tool.name).sort();
 
-    expect(names).toEqual(["activity_record", "brain_changes", "brain_grep", "brain_lookup", "brain_read", "brain_tree", "document_get", "document_tree", "plugin_list", "project_list"]);
+    expect(names).toEqual(["activity_record", "brain_backlinks", "brain_changes", "brain_grep", "brain_lookup", "brain_read", "brain_tree", "document_get", "document_tree", "plugin_list", "project_list"]);
     expect(listed.tools.filter((tool) => tool.annotations?.readOnlyHint !== true).map((tool) => tool.name)).toEqual(["activity_record"]);
 
     const documentTool = listed.tools.find((tool) => tool.name === "document_get");
@@ -80,6 +80,18 @@ describe("member stdio MCP process", () => {
     const client = await connect("legacy");
     const result = await client.callTool({ name: "document_get", arguments: { path: "a.md" } });
     expect(result.isError).toBe(true);
+  });
+
+  it("lists the backlinks of a page as plain text with a citation of each linking node (P2-025)", async () => {
+    const client = await connect("legacy");
+    const result = await client.callTool({ name: "brain_backlinks", arguments: { projectId: "shop", node: "01-standards/a.md" } });
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({ total: 1, nextOffset: null, items: [{ node: { path: "a.md" }, linkKind: "link" }] });
+    const text = result.content.filter((part) => part.type === "text").map((part) => (part.type === "text" ? part.text : ""));
+    expect(text[1]).toBe(["Backlinks 1-1 of 1:", `a.md:3-5@${"a".repeat(40)} — a.md → 01-standards/a.md (link)`].join("\n"));
+    const tool = (await client.listTools()).tools.find((candidate) => candidate.name === "brain_backlinks");
+    expect(tool?.annotations?.readOnlyHint).toBe(true);
+    expect(tool?.inputSchema.required).toEqual(expect.arrayContaining(["projectId", "node"]));
   });
 
   it("rejects malformed selectors before calling a read tool", async () => {

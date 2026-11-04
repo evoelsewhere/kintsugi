@@ -3,6 +3,7 @@
 // the page attributes on every node of the five Brain responses.
 
 import {
+  brainBacklinksSchema,
   brainChangesSchema,
   brainGrepSchema,
   brainLookupSchema,
@@ -45,6 +46,14 @@ function memberWithBrain() {
     })),
     lookup: vi.fn(async () => ({ ...index, query: "label:runbook", matches: [{ ...page, breadcrumb: crumbs }, { ...other, breadcrumb: crumbs }] })),
     grep: vi.fn(async () => ({ ...index, text: "tax", under: null, matches: [{ node: page, breadcrumb: crumbs, line: 3, excerpt: "tax" }], truncated: false })),
+    // Twenty-five pages link to b.md, one of them to its heading: a window of them as the Brain's own read gives it.
+    backlinks: vi.fn(async (_projectId: string, query: { node: string; offset: number; limit: number }) => {
+      const target = pageNode(query.node, { path: query.node.split("#")[0] });
+      const all = Array.from({ length: 25 }, (_, n) => ({ node: pageNode(`links/p${String(n).padStart(2, "0")}.md`, { lineStart: 4, lineEnd: 6 }), target, linkKind: n === 24 ? "id" : "link" }));
+      const items = all.slice(query.offset, query.offset + query.limit);
+      const end = query.offset + items.length;
+      return { ...index, node: target, items, total: all.length, offset: query.offset, nextOffset: end < all.length ? end : null };
+    }),
     changes: vi.fn(async () => ({
       ...index, since: "b".repeat(40), linesKnown: true, truncated: false,
       files: [{ path: page.path, status: "modified", previousPath: null, added: 1, removed: 0, nodes: [page] }],
@@ -129,5 +138,48 @@ describe("the member API features header (P2-020)", () => {
     const read = await member.brainRead("u1", { projectId: "shop", node: match?.id ?? "" }, asked);
     expect(read.citation).toEqual({ nodeId: "20-spaces/eng/a.md", path: "20-spaces/eng/a.md", lineStart: 1, lineEnd: 9, commit: COMMIT });
     expect(read.commit).toBe(COMMIT);
+  });
+});
+
+describe("backlinks on the member wire (P2-025)", () => {
+  const none = parseMemberFeatures(undefined);
+  const asked = parseMemberFeatures("page-attributes");
+
+  it("returns the linking nodes, what they point at, the total and where the next window starts", async () => {
+    const member = memberWithBrain();
+    const first = await member.brainBacklinks({ projectId: "shop", node: "20-spaces/eng/b.md#setup", limit: 20 }, none);
+    expect(first).toMatchObject({ total: 25, offset: 0, nextOffset: 20, commit: COMMIT });
+    expect(first.items).toHaveLength(20);
+    expect(first.items[0]).toMatchObject({ node: { path: "links/p00.md", lineStart: 4, lineEnd: 6 }, target: { id: "20-spaces/eng/b.md#setup" }, linkKind: "link" });
+    const second = await member.brainBacklinks({ projectId: "shop", node: "20-spaces/eng/b.md#setup", limit: 20, offset: first.nextOffset ?? 0 }, none);
+    expect(second).toMatchObject({ total: 25, offset: 20, nextOffset: null });
+    expect(second.items).toHaveLength(5);
+    expect(second.items.at(-1)?.linkKind).toBe("id");
+    const paths = [...first.items, ...second.items].map((item) => item.node.path);
+    expect(new Set(paths).size).toBe(25);
+  });
+
+  it("gives a client that did not ask the version 1 shape of every node, and one that asked the page attributes", async () => {
+    const member = memberWithBrain();
+    const query = { projectId: "shop", node: "20-spaces/eng/b.md" };
+    const plain = await member.brainBacklinks(query, none);
+    const nodes = nodesIn(plain);
+    expect(nodes.length).toBeGreaterThan(0);
+    for (const node of nodes) for (const field of [...ATTRIBUTES, ...INTERNAL]) expect(node, `${String(node.id)}.${field}`).not.toHaveProperty(field);
+    expect(brainBacklinksSchema.safeParse(plain).success).toBe(true);
+
+    const withAttributes = await member.brainBacklinks(query, asked);
+    for (const node of nodesIn(withAttributes)) {
+      for (const field of ATTRIBUTES) expect(node, `${String(node.id)}.${field}`).toHaveProperty(field);
+      for (const field of INTERNAL) expect(node, field).not.toHaveProperty(field);
+    }
+    expect(brainBacklinksSchema.safeParse(withAttributes).success).toBe(true);
+  });
+
+  it("is a new read: the five that older CLIs call are unchanged by it", async () => {
+    const member = memberWithBrain();
+    for (const body of [await member.brainTree({ projectId: "shop", depth: 2 }, none), await member.brainLookup({ projectId: "shop", query: "label:runbook" }, none)]) {
+      for (const node of nodesIn(body)) expect(node).not.toHaveProperty("labels");
+    }
   });
 });

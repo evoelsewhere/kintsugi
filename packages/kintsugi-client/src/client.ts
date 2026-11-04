@@ -1,6 +1,8 @@
 import {
   activityInputSchema,
   activityReceiptSchema,
+  brainBacklinksQuerySchema,
+  brainBacklinksSchema,
   brainChangesQuerySchema,
   brainChangesSchema,
   brainGrepQuerySchema,
@@ -27,6 +29,8 @@ import {
 import type {
   ActivityInput,
   ActivityReceipt,
+  BrainBacklinks,
+  BrainBacklinksQuery,
   BrainChanges,
   BrainChangesQuery,
   BrainGrep,
@@ -276,6 +280,7 @@ export function createMemberClient(options: MemberClientOptions): MemberPort {
     brainRead: (query: BrainReadQuery): Promise<BrainRead> => request("brain/read", brainReadQuerySchema.parse(query), brainReadSchema),
     brainLookup: (query: BrainLookupQuery): Promise<BrainLookup> => request("brain/lookup", brainLookupQuerySchema.parse(query), brainLookupSchema),
     brainGrep: (query: BrainGrepQuery): Promise<BrainGrep> => request("brain/grep", brainGrepQuerySchema.parse(query), brainGrepSchema),
+    brainBacklinks: (query: BrainBacklinksQuery): Promise<BrainBacklinks> => request("brain/backlinks", brainBacklinksQuerySchema.parse(query), brainBacklinksSchema),
     brainChanges: (query: BrainChangesQuery): Promise<BrainChanges> => request("brain/changes", brainChangesQuerySchema.parse(query), brainChangesSchema),
   };
 }

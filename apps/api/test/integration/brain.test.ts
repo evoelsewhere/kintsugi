@@ -252,6 +252,22 @@ describe.skipIf(!hasDatabase)("brain (integration)", () => {
     expect(page.items.map((item) => [item.node.path, item.target.id, item.linkKind])).toEqual([[spec, `${dataObjects}#invoice-line`, "link"]]);
     const read = (await admin.get<BrainReadView>(`/projects/shop/brain/node?node=${encodeURIComponent(dataObjects)}&scope=node`)).body.data!;
     expect(read.incomingTotal).toBe(0);
+    // A member's agent asks the same question (P2-025): without the features header the nodes are those of version 1, with
+    // it they carry their attributes, and a node that is not there is the same refusal as for the other member reads.
+    const memberBacklinks = (query: string, headers: Record<string, string> = {}) =>
+      new Client(app).request<{ node: Record<string, unknown>; items: Array<{ node: Record<string, unknown> }>; total: number; nextOffset: number | null; commit: string }>(
+        "GET",
+        `/member/v1/brain/backlinks?projectId=shop&${query}`,
+        { csrf: false, headers: { authorization: `Bearer ${token}`, ...headers } },
+      );
+    const plain = await memberBacklinks(`node=${encodeURIComponent(dataObjects)}`);
+    expect(plain.status).toBe(200);
+    expect(plain.body.data).toMatchObject({ total: 1, nextOffset: null, commit: page.commit });
+    expect(plain.body.data?.items[0]?.node).toMatchObject({ path: spec });
+    for (const field of ["labels", "space", "status", "owner", "template", "parentId"]) expect(plain.body.data?.items[0]?.node, field).not.toHaveProperty(field);
+    const asking = await memberBacklinks(`node=${encodeURIComponent(dataObjects)}`, { "kintsugi-member-features": "page-attributes" });
+    expect(asking.body.data?.items[0]?.node).toMatchObject({ path: spec, labels: expect.any(Array), template: false });
+    expect((await memberBacklinks("node=nothing.md")).status).toBe(404);
     // The heading has the same backlink; a page nobody links to has none; links inside a page are not backlinks.
     expect((await backlinks(`node=${encodeURIComponent(`${dataObjects}#invoice-line`)}`)).items.map((item) => item.node.path)).toEqual([spec]);
     expect((await backlinks(`node=${encodeURIComponent(spec)}`)).total).toBe(0);
@@ -275,6 +291,9 @@ describe.skipIf(!hasDatabase)("brain (integration)", () => {
       expect(new Set(paths).size).toBe(26);
       expect(paths).toEqual([...paths].sort());
       expect((await admin.get(`/projects/shop/brain/backlinks?node=${encodeURIComponent(dataObjects)}&limit=101`)).status).toBe(400);
+      const memberFirst = await memberBacklinks(`node=${encodeURIComponent(dataObjects)}&limit=20`);
+      const memberSecond = await memberBacklinks(`node=${encodeURIComponent(dataObjects)}&limit=20&offset=${memberFirst.body.data?.nextOffset}`);
+      expect([memberFirst.body.data?.items.length, memberFirst.body.data?.total, memberSecond.body.data?.items.length, memberSecond.body.data?.nextOffset]).toEqual([20, 26, 6, null]);
     } finally {
       await app.db.query("delete from knowledge.brain_link where project_id = 'shop' and from_id like 'extra/%'");
       await app.db.query("delete from knowledge.brain_node where project_id = 'shop' and path like 'extra/%'");

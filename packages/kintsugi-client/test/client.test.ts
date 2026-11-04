@@ -50,6 +50,20 @@ describe("typed member HTTP client", () => {
     for (const call of fetcher.mock.calls) expect(new Headers(call[1]?.headers).get("kintsugi-member-features")).toBe("page-attributes");
   });
 
+  it("asks for a window of backlinks and parses it (P2-025)", async () => {
+    const node = {
+      id: "b.md", kind: "document", title: "B", summary: "", summarySource: "none", path: "b.md", anchor: null, lineStart: 1, lineEnd: 2, subtreeEnd: 2,
+      tokens: 1, subtreeTokens: 1, children: 0, ids: [], changed: null,
+    };
+    const fetcher = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      expect(String(input)).toBe("https://kintsugi.example/api/member/v1/brain/backlinks?projectId=shop&node=b.md&offset=20&limit=20");
+      return json({ schemaVersion: "1", projectId: "shop", branch: "main", commit: "c".repeat(40), node, items: [{ node: { ...node, id: "a.md", path: "a.md" }, target: node, linkKind: "link" }], total: 21, offset: 20, nextOffset: null });
+    });
+    const client = createMemberClient({ baseUrl: "https://kintsugi.example", tokenProvider: async () => "secret-credential-value", fetch: fetcher });
+    await expect(client.brainBacklinks({ projectId: "shop", node: "b.md", offset: 20, limit: 20 })).resolves.toMatchObject({ total: 21, nextOffset: null, items: [{ linkKind: "link" }] });
+    expect(() => client.brainBacklinks({ projectId: "shop", node: "b.md", limit: 101 })).toThrow();
+  });
+
   it("creates a fresh request timeout for every operation", async () => {
     const fetcher = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => json({ schemaVersion: "1", items: [], limit: 25 }));
     const signals: AbortSignal[] = [];
