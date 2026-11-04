@@ -35,6 +35,13 @@ export const WORKSPACE_CLEANUP_QUEUE = "workspace-cleanup";
  */
 export const BRAIN_INDEX_QUEUE = "brain-index";
 
+/**
+ * Tells the watchers of a wiki what changed after a Brain build (ADR-0099 decision 3); singletonKey = project id. The
+ * `stately` policy keeps one run and one queued request per project; what is not asked for is found by the sweep that
+ * compares the notified commit with the indexed one, so a request that is dropped or lost changes nothing.
+ */
+export const WIKI_NOTIFY_QUEUE = "wiki-notify";
+
 type QueueOptions = NonNullable<Parameters<PgBoss["createQueue"]>[1]>;
 
 export const DOCUMENT_WRITE_QUEUE_OPTIONS: QueueOptions = {
@@ -64,9 +71,27 @@ export const BRAIN_INDEX_QUEUE_OPTIONS: QueueOptions = {
   expireInSeconds: 30 * 60,
 };
 
+export const WIKI_NOTIFY_QUEUE_OPTIONS: QueueOptions = {
+  policy: "stately",
+  retryLimit: 2,
+  retryDelay: 15,
+  retryBackoff: true,
+  expireInSeconds: 10 * 60,
+};
+
 /** Payload of a brain-index job. */
 export interface BrainIndexRequest {
   projectId: string;
+}
+
+/**
+ * Payload of a wiki-notify job: the commit the Brain was indexed at before the build (null the first time) and after it.
+ * The cursor of the project is what the job starts from; `from` is what the request knew.
+ */
+export interface WikiNotifyRequest {
+  projectId: string;
+  from: string | null;
+  to: string;
 }
 
 /** Payload of a workspace-cleanup job. */
@@ -167,4 +192,14 @@ export async function ensureBrainIndexQueue(boss: PgBoss): Promise<void> {
 /** Asks for a build of the project's Brain; deduplicated per project. */
 export async function sendBrainIndex(boss: PgBoss, request: BrainIndexRequest): Promise<void> {
   await boss.send(BRAIN_INDEX_QUEUE, request, { singletonKey: request.projectId });
+}
+
+/** Creates the wiki-notify queue if missing; safe on every start, from any process. */
+export async function ensureWikiNotifyQueue(boss: PgBoss): Promise<void> {
+  await boss.createQueue(WIKI_NOTIFY_QUEUE, WIKI_NOTIFY_QUEUE_OPTIONS);
+}
+
+/** Asks for the watchers of the project to be told what changed up to `to`; deduplicated per project. */
+export async function sendWikiNotify(boss: PgBoss, request: WikiNotifyRequest): Promise<void> {
+  await boss.send(WIKI_NOTIFY_QUEUE, request, { singletonKey: request.projectId });
 }

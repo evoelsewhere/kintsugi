@@ -60,6 +60,7 @@ Start with [Your first modernization project](guides/first-project.md) for a wal
 - [Project memory](reference/project-memory.md): live learned/reviewed notes, daily logs, scratchpads and recovery shared by project agents
 - [The Brain](reference/brain.md): the vectorless tree index of a document repository branch that members' agents reason over and cite
 - [Wiki editing](reference/wiki-editing.md): how a page is drafted, published, moved, deleted and restricted, the routes, the permissions and what is audited
+- [Wiki change notifications](reference/wiki-notifications.md): how the watchers of a page, folder or space are told that it changed, who is told, and how long it takes
 - [Wiki reader](reference/wiki-reader.md): what the portal wiki shows, its addresses, the routes each view reads, what it never does and what members' agents get
 - [Document identifiers](reference/document-identifiers.md): compact stable RULE, SEC and GAP references, scope allocation and ledgers
 - [Item catalog](reference/document-repo-item-catalog.md): catalog items, stable IDs, and the units they become

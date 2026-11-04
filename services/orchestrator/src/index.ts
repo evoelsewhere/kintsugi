@@ -8,16 +8,20 @@ export {
   DOCUMENT_WRITE_QUEUE_OPTIONS,
   JOB_RUN_QUEUE,
   JOB_RUN_QUEUE_OPTIONS,
+  WIKI_NOTIFY_QUEUE,
   ensureBrainIndexQueue,
   ensureDocumentWriteQueue,
   ensureJobRunQueue,
+  ensureWikiNotifyQueue,
   sendBrainIndex,
   sendDocumentWrite,
   sendJobRun,
+  sendWikiNotify,
   type BrainIndexRequest,
   type DocumentWriteFile,
   type DocumentWriteRequest,
   type JobRunRequest,
+  type WikiNotifyRequest,
 } from "./queues.js";
 export { RepositoryStore, type SyncStatus, type SyncTarget } from "./git-sync/repositories.js";
 export { EmptyRepositoryError, pruneMirrors, syncRepository, withMirrorLock, type SyncDeps, type SyncResult } from "./git-sync/sync.js";

@@ -25,6 +25,7 @@ import {
 import { type CheckoutStorage, prefetchDocumentBlobs, resolveCommit, runGit } from "@kintsugi/git";
 import type { Pool } from "pg";
 import type { RepositoryStore, SyncTarget } from "../git-sync/repositories.js";
+import type { WikiNotifyRequest } from "../queues.js";
 import { remoteOptions } from "../git-sync/sync.js";
 import { type BrainBuildState, PgBrainStore } from "./store.js";
 
@@ -33,6 +34,11 @@ export interface BrainIndexDeps {
   repositories: RepositoryStore;
   storage: CheckoutStorage;
   log: (message: string) => void;
+  /**
+   * Asks for the watchers of a wiki to be told what a build brought in (ADR-0099 decision 3). Called after the build is
+   * stored, never inside it, and its failure is logged: a build never fails or changes its result because of it.
+   */
+  requestWikiNotify?: (request: WikiNotifyRequest) => Promise<void>;
 }
 
 export type BrainIndexOutcome =
@@ -230,8 +236,23 @@ async function buildIncrementally(
   return { status: "built", mode: "incremental", commit, documents: tree.documents, nodes: tree.nodes.length, durationMs };
 }
 
-/** Builds and stores the tree of the project's chosen branch, incrementally when that is safe. Never throws: a failure is recorded on the index. */
+/** Builds and stores the tree of the project's chosen branch, incrementally when that is safe, then asks for the watchers of a wiki to be told. Never throws: a failure is recorded on the index. */
 export async function indexBrain(deps: BrainIndexDeps, projectId: string): Promise<BrainIndexOutcome> {
+  const store = new PgBrainStore(deps.pool);
+  const before = await store.source(projectId).catch(() => undefined);
+  const outcome = await buildBrain(deps, projectId);
+  if (outcome.status === "built" && deps.requestWikiNotify !== undefined) {
+    // After the build is stored and outside it: a request that cannot be made is found again by the sweep (the cursor of the job).
+    try {
+      if ((await store.source(projectId))?.wiki === true) await deps.requestWikiNotify({ projectId, from: before?.indexedCommit ?? null, to: outcome.commit });
+    } catch (error) {
+      deps.log(`brain of ${projectId}: could not ask for the wiki notifications: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  return outcome;
+}
+
+async function buildBrain(deps: BrainIndexDeps, projectId: string): Promise<BrainIndexOutcome> {
   const store = new PgBrainStore(deps.pool);
   // What the index says about itself before this build starts.
   const before = await store.source(projectId);
