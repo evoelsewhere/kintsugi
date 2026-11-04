@@ -558,3 +558,40 @@ export function classifyPublishFailure(error: unknown): PublishFailure {
   if (status === 409 && detail["code"] === "draft-revision") return { kind: "draft-revision", message };
   return { kind: "message", status: typeof status === "number" ? status : undefined, message };
 }
+
+// ---- A new page --------------------------------------------------------------------------------------------------
+
+/** A template a new page can start from: `GET wiki/templates?folder=`. */
+export interface TemplateOption {
+  path: string;
+  title: string;
+  summary: string;
+}
+
+/** `POST wiki/pages`: the answer is the draft of the new page (nothing is written to the repository yet). */
+export interface NewPageBody {
+  folder: string;
+  title: string;
+  templatePath?: string;
+}
+
+/** The longest title a new page takes. */
+export const NEW_PAGE_TITLE_MAX = 200;
+
+/** Why a title cannot start a page, in a person's words; undefined when it can. */
+export function newPageProblem(title: string): string | undefined {
+  const text = title.trim();
+  if (text === "") return "Give the page a title.";
+  if (text.length > NEW_PAGE_TITLE_MAX) return `Keep the title to ${NEW_PAGE_TITLE_MAX} characters or fewer.`;
+  if (!/[A-Za-z0-9]/.test(text)) return "The title needs at least one letter or digit: the page's file name is made from it.";
+  return undefined;
+}
+
+/**
+ * A path the access answer can be asked about before a page exists in `folder`: whether the person may write new pages
+ * there. A page lives in a folder, never at the root of the repository (`folder` "" gives undefined).
+ */
+export const newPageProbe = (folder: string): string | undefined => (folder === "" ? undefined : `${folder}/new-page.md`);
+
+/** The body to send: a template only when one is chosen, the title as typed but trimmed. */
+export const newPageBody = (folder: string, title: string, templatePath: string): NewPageBody => ({ folder, title: title.trim(), ...(templatePath === "" ? {} : { templatePath }) });

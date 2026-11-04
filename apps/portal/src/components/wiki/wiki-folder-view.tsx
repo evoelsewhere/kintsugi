@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { brainApi } from "@/lib/api/brain";
 import { useLoader } from "@/lib/use-loader";
 import { homeOf, nameOf, pageEntries, wikiLink, wikiRead } from "@/lib/wiki";
+import { NewPageButton } from "./wiki-new-page";
 import { PageTrail, WikiPageView } from "./wiki-page-view";
 
 export interface WikiFolderViewProps {
@@ -23,6 +24,11 @@ export function WikiFolderView({ projectId, commit, path }: WikiFolderViewProps)
   const level = useLoader(`wiki/${projectId}/${commit}/folder/${id}`, () => wikiRead(() => brainApi.tree(projectId, id, 0, 200)));
   return (
     <div className="flex flex-col gap-4">
+      {path === "" ? null : (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <NewPageButton projectId={projectId} folder={path} />
+        </div>
+      )}
       <Loaded loader={level} rows={4}>
         {(view) => {
           const entries = pageEntries(view.children);
