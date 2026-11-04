@@ -314,11 +314,14 @@ export class PgBrainStore {
     return result.rows.map(toNode);
   }
 
-  /** The documents in the space of a key, by path. */
+  /**
+   * The documents in the space of a key, by path. Both sides are compared in upper case, so an index built before keys
+   * were upper-cased by the builder still answers `space:eng` (P-019).
+   */
   async bySpace(projectId: string, space: string, limit: number): Promise<BrainNode[]> {
     const result = await this.db.query<NodeRow>(
       `select ${NODE_COLUMNS} from knowledge.brain_node
-        where project_id = $1 and kind = 'document' and space = $2
+        where project_id = $1 and kind = 'document' and upper(space) = upper($2)
         order by path collate "C" limit $3`,
       [projectId, space, limit],
     );

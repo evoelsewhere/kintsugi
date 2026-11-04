@@ -7,7 +7,7 @@
  * called to build the tree: titles and summaries come from the documents themselves (front matter, the first
  * paragraph, a table's columns, the layout). The text stays in Git; the tree holds line ranges into it.
  */
-import { DOCUMENT_EXCLUDED_FOLDERS, DOCUMENT_EXCLUDED_ROOTS, describeDocumentFolder } from "./document-layout.js";
+import { DOCUMENT_EXCLUDED_FOLDERS, DOCUMENT_EXCLUDED_ROOTS, describeDocumentFolder, isPageKey } from "./document-layout.js";
 import { createHeadingSlugger, headingSlug, plainInlineText } from "./heading-slug.js";
 
 export const BRAIN_NODE_KINDS = ["root", "folder", "document", "section", "card"] as const;
@@ -119,6 +119,14 @@ export interface BrainTree {
   linkTotals: Record<string, number>;
   /** Links to a Markdown page that is not in the index: the page that holds the link, and the path it points at. */
   broken: BrainBrokenLink[];
+  /** Things a page's author should fix that did not stop the build, such as a space key ADR-0096 does not allow. */
+  warnings: BrainWarning[];
+}
+
+/** A problem the builder found in a page and worked around: the page, and what is wrong. */
+export interface BrainWarning {
+  path: string;
+  message: string;
 }
 
 export interface BrainBrokenLink {
@@ -555,8 +563,10 @@ function linksOf(fromId: string, fromPath: string, lines: readonly string[]): Pe
 interface DocumentNodes {
   nodes: BrainNode[];
   links: PendingLink[];
-  /** Front matter `key` (or `space`) of a home page: the space it makes. */
+  /** Front matter `key` (or `space`) of a home page, upper-cased: the space it makes. Null when absent or not a valid key. */
   key: string | null;
+  /** The `key` as written when it is not a valid space key even upper-cased (ADR-0096), so the tree can warn about it. */
+  invalidKey: string | null;
   /** Front matter `order`: the names of a folder's entries that come first. */
   order: string[];
   /** For each card, the GitHub-style slug of its heading text, which a link may name instead of the card's id. */
@@ -694,7 +704,11 @@ export function buildBrainDocument(path: string, text: string): DocumentNodes {
   }
   if (document.template) document.summary = clip(document.summary === "" ? "Template." : `Template. ${document.summary}`, BRAIN_SUMMARY_MAX);
   const order = front.lists.get("order") ?? [];
-  return { nodes, links, key: front.fields.get("key") ?? front.fields.get("space") ?? null, order, cardAliases };
+  // A space key is read in any case and kept in upper case, the case a lookup compares in (P-019).
+  const writtenKey = front.fields.get("key") ?? front.fields.get("space");
+  const upperKey = writtenKey?.toUpperCase();
+  const valid = upperKey !== undefined && isPageKey(upperKey);
+  return { nodes, links, key: valid ? upperKey : null, invalidKey: writtenKey !== undefined && !valid ? writtenKey : null, order, cardAliases };
 }
 
 /**
@@ -805,6 +819,7 @@ export function buildBrainTree(sources: readonly BrainSourceDocument[], rootTitl
   const documents: DocumentNodes[] = [];
   const orderOf = new Map<string, string[]>();
   const keyOf = new Map<string, string>();
+  const warnings: BrainWarning[] = [];
   const folderChildren = new Map<string, Array<{ name: string; node: BrainNode; folder: boolean }>>();
   for (const source of kept) {
     const built = buildBrainDocument(source.path, source.text);
@@ -817,6 +832,10 @@ export function buildBrainTree(sources: readonly BrainSourceDocument[], rootTitl
     documents.push(built);
     if (built.order.length > 0) orderOf.set(source.path, built.order);
     if (built.key !== null) keyOf.set(source.path, built.key);
+    // Only a home page makes a space, so only its key is worth a warning.
+    if (built.invalidKey !== null && README_FILES.includes(source.path.split("/").pop()?.toLowerCase() ?? "")) {
+      warnings.push({ path: source.path, message: `The space key "${clip(built.invalidKey, 40)}" is not a space key: use 2 to 10 letters or digits, starting with a letter.` });
+    }
     folderChildren.set(folder.id, [...(folderChildren.get(folder.id) ?? []), { name: source.path, node: document, folder: false }]);
   }
   for (const folder of folders.values()) {
@@ -942,7 +961,7 @@ export function buildBrainTree(sources: readonly BrainSourceDocument[], rootTitl
 
   root.children = (folderChildren.get(root.id) ?? []).length;
   const linkTotals = Object.fromEntries([...perNode].filter(([, count]) => count > BRAIN_MAX_LINKS_PER_NODE));
-  return { nodes, links, documents: documents.length, identifiers: definers.size, skipped: indexed.length - kept.length, linkTotals, broken };
+  return { nodes, links, documents: documents.length, identifiers: definers.size, skipped: indexed.length - kept.length, linkTotals, broken, warnings };
 }
 
 // ---------------------------------------------------------------------------

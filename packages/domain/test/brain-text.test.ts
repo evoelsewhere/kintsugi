@@ -433,6 +433,35 @@ describe("spaces", () => {
     expect(byPath(tree, "20-spaces/eng/runbooks/a.md").space).toBe("ENG");
     expect(byPath(tree, "20-spaces/eng/sub/b.md").space).toBe("SUB");
     expect(byPath(tree, "20-spaces/hr/README.md").space).toBe("HR");
+    expect(tree.warnings).toEqual([]);
+  });
+
+  it("keeps a key in upper case whatever case the page writes it in (P-019)", () => {
+    const tree = treeOf({
+      "20-spaces/eng/README.md": page(["key: Eng"]),
+      "20-spaces/eng/a.md": page(["title: a"]),
+      "20-spaces/ops/README.md": page(["space: ops2"]),
+    });
+    expect(byPath(tree, "20-spaces/eng/").space).toBe("ENG");
+    expect(byPath(tree, "20-spaces/eng/a.md").space).toBe("ENG");
+    expect(byPath(tree, "20-spaces/ops/").space).toBe("OPS2");
+    expect(tree.warnings).toEqual([]);
+  });
+
+  it.each(["E", "ENG-1", "1ENG", "ABCDEFGHIJK", "a b"])("does not store %j as a space key and warns about it (P-019)", (key) => {
+    const tree = treeOf({
+      "20-spaces/eng/README.md": page([`key: ${key.includes(" ") ? `"${key}"` : key}`]),
+      "20-spaces/eng/a.md": page(["title: a"]),
+    });
+    expect(byPath(tree, "20-spaces/eng/").space).toBeNull();
+    expect(byPath(tree, "20-spaces/eng/a.md").space).toBeNull();
+    expect(tree.warnings).toEqual([{ path: "20-spaces/eng/README.md", message: expect.stringContaining(`"${key}"`) }]);
+  });
+
+  it("warns only about a home page: another page's key makes no space", () => {
+    const tree = treeOf({ "20-spaces/eng/README.md": page(["key: ENG"]), "20-spaces/eng/a.md": page(["key: x"]) });
+    expect(tree.warnings).toEqual([]);
+    expect(byPath(tree, "20-spaces/eng/a.md").space).toBe("ENG");
   });
 });
 
