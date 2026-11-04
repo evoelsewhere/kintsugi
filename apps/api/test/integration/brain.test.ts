@@ -17,7 +17,7 @@ import { newId } from "../../src/common/domain/ids.js";
 import { hashToken } from "../../src/common/security/token-hash.js";
 import { MEMBER_TOKEN_PREFIX } from "../../src/modules/core/auth/application/member-token.service.js";
 import { hasDatabase } from "../support/database.js";
-import { Client, adminClient, memberClient, startTestApp, type TestApp } from "../support/app.js";
+import { Client, adminClient, memberClient, startTestApp, subRole, type TestApp } from "../support/app.js";
 
 const SPEC = [
   "# Calculate tax",
@@ -296,5 +296,46 @@ describe.skipIf(!hasDatabase)("brain (integration)", () => {
     await admin.request("PUT", "/projects/shop/brain", { body: { enabled: false } });
     expect((await admin.get<BrainStatusView>("/projects/shop/brain")).body.data?.state).toBe("off");
     expect((await new Client(app).request("GET", "/member/v1/brain/tree?projectId=shop", bearer(token))).status).toBe(409);
+  });
+
+  it("turns the wiki on for the default branch, keeps the Brain there and lets it go again", async () => {
+    // wiki.manage and Project Access are both needed: administrators included.
+    const { client: reader } = await memberClient(app, admin, "wiki-reader", ["user"], ["shop"]);
+    expect((await reader.request("PUT", "/projects/shop/wiki", { body: { enabled: true } })).status).toBe(403);
+    await subRole(admin, "wiki-manager", ["wiki.manage"]);
+    const { client: stranger } = await memberClient(app, admin, "wiki-stranger", ["user", "wiki-manager"], []);
+    expect((await stranger.request("PUT", "/projects/shop/wiki", { body: { enabled: true } })).status).toBe(403);
+    const { client: otherAdmin } = await memberClient(app, admin, "wiki-admin", ["admin"], []);
+    expect((await otherAdmin.request("PUT", "/projects/shop/wiki", { body: { enabled: true } })).status).toBe(403);
+    expect((await admin.request("PUT", "/projects/shop/wiki", { body: { enabled: "yes" } })).status).toBe(400);
+    expect((await admin.get<BrainStatusView>("/projects/shop/brain")).body.data).toMatchObject({ wiki: false, enabled: false });
+
+    // Wiki off: the branch is chosen as before (the Brain is off here and sits on the branch "release").
+    const on = await admin.request<BrainStatusView>("PUT", "/projects/shop/wiki", { body: { enabled: true } });
+    expect(on.status).toBe(200);
+    expect(on.body.data).toMatchObject({ wiki: true, enabled: true, branch: "main", state: "queued" });
+    expect(await build()).toMatchObject({ status: "built" });
+    const audit = await app.db.query<{ detail: Record<string, unknown> }>("select detail from governance.audit_event where action = 'wiki.switch' order by id");
+    expect(audit.rows.map((row) => ({ enabled: row.detail["enabled"], branch: row.detail["branch"] }))).toEqual([{ enabled: true, branch: "main" }]);
+
+    // Switching on again changes and queues nothing.
+    expect((await admin.request<BrainStatusView>("PUT", "/projects/shop/wiki", { body: { enabled: true } })).body.data).toMatchObject({ wiki: true, state: "ready" });
+    expect((await app.db.query("select 1 from governance.audit_event where action = 'wiki.switch'")).rowCount).toBe(1);
+
+    // The Brain of a wiki project follows the default branch and cannot be turned off.
+    const moved = await admin.request<{ message: string }>("PUT", "/projects/shop/brain", { body: { enabled: true, branch: "release" } });
+    expect(moved.status).toBe(409);
+    expect(moved.body).toMatchObject({ message: "A wiki project's Brain follows the default branch" });
+    const off = await admin.request("PUT", "/projects/shop/brain", { body: { enabled: false } });
+    expect(off.status).toBe(409);
+    expect((await admin.get<BrainStatusView>("/projects/shop/brain")).body.data).toMatchObject({ wiki: true, enabled: true, branch: "main", state: "ready" });
+    expect((await admin.request("PUT", "/projects/shop/brain", { body: { enabled: true, branch: "main" } })).status).toBe(200);
+    expect((await admin.request("PUT", "/projects/shop/brain", { body: { enabled: true } })).status).toBe(200);
+
+    // Switching the wiki off leaves the Brain as it is and frees the branch.
+    expect((await admin.request<BrainStatusView>("PUT", "/projects/shop/wiki", { body: { enabled: false } })).body.data).toMatchObject({ wiki: false, enabled: true, branch: "main" });
+    expect((await admin.request("PUT", "/projects/shop/brain", { body: { enabled: true, branch: "release" } })).status).toBe(200);
+    expect((await admin.get<BrainStatusView>("/projects/shop/brain")).body.data).toMatchObject({ wiki: false, branch: "release" });
+    expect((await admin.request("PUT", "/projects/shop/brain", { body: { enabled: false } })).status).toBe(200);
   });
 });

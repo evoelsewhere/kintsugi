@@ -27,6 +27,7 @@ interface SourceRow {
   project_id: string;
   branch: string;
   enabled: boolean;
+  wiki: boolean;
   state: BrainIndexState;
   indexed_commit: string | null;
   attempted_commit: string | null;
@@ -85,6 +86,7 @@ function toSource(row: SourceRow): BrainSource {
     projectId: row.project_id,
     branch: row.branch,
     enabled: row.enabled,
+    wiki: row.wiki,
     state: row.state,
     indexedCommit: row.indexed_commit,
     attemptedCommit: row.attempted_commit,
@@ -142,21 +144,32 @@ export class PgBrainStore {
     return row === undefined ? undefined : toSource(row);
   }
 
-  /** Sets the branch and whether the index is kept; an enabled index is queued for a build. */
-  async configure(projectId: string, input: { branch: string; enabled: boolean }, actor: string): Promise<BrainSource> {
+  /** Sets the branch and whether the index is kept (and the wiki flag when given); an enabled index is queued for a build. */
+  async configure(projectId: string, input: { branch: string; enabled: boolean; wiki?: boolean | undefined }, actor: string): Promise<BrainSource> {
     const result = await this.db.query<SourceRow>(
-      `insert into knowledge.brain_source (project_id, branch, enabled, state, updated_by)
-       values ($1, $2, $3, 'queued', $4)
+      `insert into knowledge.brain_source (project_id, branch, enabled, wiki, state, updated_by)
+       values ($1, $2, $3, coalesce($5::boolean, false), 'queued', $4)
        on conflict (project_id) do update set
          branch = excluded.branch,
          enabled = excluded.enabled,
+         wiki = coalesce($5::boolean, knowledge.brain_source.wiki),
          state = case when excluded.enabled then 'queued' else knowledge.brain_source.state end,
          attempted_commit = case when excluded.branch = knowledge.brain_source.branch then knowledge.brain_source.attempted_commit end,
          requested_at = now(), updated_by = excluded.updated_by, updated_at = now()
        returning *`,
-      [projectId, input.branch, input.enabled, actor],
+      [projectId, input.branch, input.enabled, actor, input.wiki ?? null],
     );
     return toSource(result.rows[0] as SourceRow);
+  }
+
+  /** Sets the wiki flag alone, without queuing a build; undefined when the project has no index. */
+  async setWiki(projectId: string, wiki: boolean, actor: string): Promise<BrainSource | undefined> {
+    const result = await this.db.query<SourceRow>(
+      "update knowledge.brain_source set wiki = $2, updated_by = $3, updated_at = now() where project_id = $1 returning *",
+      [projectId, wiki, actor],
+    );
+    const row = result.rows[0];
+    return row === undefined ? undefined : toSource(row);
   }
 
   /** Queues a build of an enabled index; undefined when the project has none or it is off. */

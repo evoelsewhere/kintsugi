@@ -283,6 +283,7 @@ describe("brainBuildDue", () => {
     projectId: "shop",
     branch: "main",
     enabled: true,
+    wiki: false,
     state: "ready",
     indexedCommit: "a".repeat(40),
     attemptedCommit: "a".repeat(40),

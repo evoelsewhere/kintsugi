@@ -53,8 +53,14 @@ class MemoryIndex extends BrainIndex {
   async source() {
     return this.row;
   }
-  async configure(projectId: string, input: { branch: string; enabled: boolean }, actor: string) {
-    this.row = source({ ...this.row, projectId, ...input, updatedBy: actor });
+  async configure(projectId: string, input: { branch: string; enabled: boolean; wiki?: boolean | undefined }, actor: string) {
+    const { wiki, ...rest } = input;
+    this.row = source({ ...this.row, projectId, ...rest, ...(wiki === undefined ? {} : { wiki }), updatedBy: actor });
+    return this.row;
+  }
+  async setWiki(_projectId: string, wiki: boolean, actor: string) {
+    if (this.row === undefined) return undefined;
+    this.row = { ...this.row, wiki, updatedBy: actor };
     return this.row;
   }
   broken_: Array<{ from: string; target: string }> = [];
@@ -134,6 +140,7 @@ function source(overrides: Partial<BrainSource>): BrainSource {
     projectId: "shop",
     branch: "main",
     enabled: true,
+    wiki: false,
     state: "ready",
     indexedCommit: COMMIT,
     attemptedCommit: COMMIT,
@@ -221,6 +228,7 @@ describe("BrainService.status", () => {
       reason: "Project shop has no document repository",
       configured: false,
       enabled: false,
+      wiki: false,
       state: "not-built",
       branch: "main",
       defaultBranch: null,
@@ -254,6 +262,7 @@ describe("BrainService.status", () => {
       available: true,
       configured: true,
       enabled: true,
+      wiki: false,
       state: "ready",
       branch: "release",
       defaultBranch: "main",
@@ -325,6 +334,56 @@ describe("BrainService.configure and rebuild", () => {
     const off = setup({ row: { enabled: false } });
     await expect(off.brain.rebuild("shop", actor)).rejects.toThrow(/off: turn it on first/);
     expect(off.queue.enqueue).not.toHaveBeenCalled();
+  });
+});
+
+describe("BrainService wiki switch", () => {
+  it("turns the Brain on for the default branch, builds it and records the change", async () => {
+    const { brain, queue, audit, index } = setup({ row: { branch: "release", enabled: false }, tips: ["main", "release"] });
+    const status = await brain.setWiki("shop", true, actor);
+    expect(status).toMatchObject({ wiki: true, enabled: true, branch: "main" });
+    expect(index.row).toMatchObject({ wiki: true, enabled: true, branch: "main" });
+    expect(queue.enqueue).toHaveBeenCalledWith("shop");
+    expect(audit.recordChange).toHaveBeenCalledWith({ actor: "u1", action: "wiki.switch", projectId: "shop", detail: { enabled: true, branch: "main", username: "alice" } });
+    const fresh = setup({ noRow: true, tips: ["main"] });
+    await fresh.brain.setWiki("shop", true, actor);
+    expect(fresh.index.row).toMatchObject({ wiki: true, enabled: true, branch: "main" });
+  });
+
+  it("changes and queues nothing when the wiki is already on, and says why the default branch is missing", async () => {
+    const on = setup({ row: { wiki: true, branch: "main" }, tips: ["main"] });
+    await on.brain.setWiki("shop", true, actor);
+    expect(on.queue.enqueue).not.toHaveBeenCalled();
+    expect(on.audit.recordChange).not.toHaveBeenCalled();
+    const off = setup({ row: { wiki: false }, tips: ["main"] });
+    await off.brain.setWiki("shop", false, actor);
+    expect(off.audit.recordChange).not.toHaveBeenCalled();
+    const unsynced = setup({ noRow: true, tips: ["other"] });
+    await expect(unsynced.brain.setWiki("shop", true, actor)).rejects.toThrow(ConflictException);
+    expect(unsynced.index.row).toBeUndefined();
+  });
+
+  it("switches off without touching the Brain, then frees its branch", async () => {
+    const { brain, queue, audit, index } = setup({ row: { wiki: true, branch: "main" }, tips: ["main", "release"] });
+    const status = await brain.setWiki("shop", false, actor);
+    expect(status).toMatchObject({ wiki: false, enabled: true, branch: "main" });
+    expect(queue.enqueue).not.toHaveBeenCalled();
+    expect(audit.recordChange).toHaveBeenCalledWith({ actor: "u1", action: "wiki.switch", projectId: "shop", detail: { enabled: false, branch: "main", username: "alice" } });
+    await brain.configure("shop", { branch: "release", enabled: true }, actor);
+    expect(index.row).toMatchObject({ wiki: false, branch: "release" });
+  });
+
+  it("keeps a wiki project's Brain on the default branch and on", async () => {
+    const { brain, queue, index } = setup({ row: { wiki: true, branch: "main" }, tips: ["main", "release"] });
+    await expect(brain.configure("shop", { branch: "release", enabled: true }, actor)).rejects.toThrow("A wiki project's Brain follows the default branch");
+    await expect(brain.configure("shop", { branch: "release", enabled: true }, actor)).rejects.toThrow(ConflictException);
+    await expect(brain.configure("shop", { enabled: false }, actor)).rejects.toThrow("Turn the wiki off before turning the Brain off");
+    expect(index.row).toMatchObject({ wiki: true, branch: "main", enabled: true });
+    expect(queue.enqueue).not.toHaveBeenCalled();
+    await brain.configure("shop", { branch: "main", enabled: true }, actor);
+    await brain.configure("shop", { enabled: true }, actor);
+    expect(index.row).toMatchObject({ wiki: true, branch: "main" });
+    expect(queue.enqueue).toHaveBeenCalledTimes(2);
   });
 });
 

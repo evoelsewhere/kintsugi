@@ -16,8 +16,12 @@ export class PgBrainIndex extends BrainIndex {
     return this.store.source(projectId);
   }
 
-  configure(projectId: string, input: { branch: string; enabled: boolean }, actor: string): Promise<BrainSource> {
+  configure(projectId: string, input: { branch: string; enabled: boolean; wiki?: boolean | undefined }, actor: string): Promise<BrainSource> {
     return this.store.configure(projectId, input, actor);
+  }
+
+  setWiki(projectId: string, wiki: boolean, actor: string): Promise<BrainSource | undefined> {
+    return this.store.setWiki(projectId, wiki, actor);
   }
 
   request(projectId: string, actor: string): Promise<BrainSource | undefined> {

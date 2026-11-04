@@ -9,10 +9,11 @@ import { BrainBuildQueue, BrainIndex } from "./domain/brain.ports.js";
 import { PgBossBrainBuildQueue } from "./infrastructure/pg-boss-brain-build.queue.js";
 import { PgBrainIndex } from "./infrastructure/pg-brain.index.js";
 import { BrainController } from "./interface/brain.controller.js";
+import { WikiController } from "./interface/wiki.controller.js";
 
 @Module({
   imports: [DocumentsModule, ProjectAccessModule],
-  controllers: [BrainController],
+  controllers: [BrainController, WikiController],
   providers: [BrainService, { provide: BrainIndex, useClass: PgBrainIndex }, { provide: BrainBuildQueue, useClass: PgBossBrainBuildQueue }],
   exports: [BrainService],
 })
