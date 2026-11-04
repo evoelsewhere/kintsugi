@@ -41,6 +41,16 @@ export const BRAIN_TITLE_MAX = 200;
 /** Larger files are left out, as the document read API refuses them (docs/reference/document-repo-read-path.md). */
 export const BRAIN_MAX_FILE_BYTES = 2 * 1024 * 1024;
 export const BRAIN_MAX_DOCUMENTS = 20_000;
+
+/**
+ * When a build may update the stored tree from what changed since the last one instead of building it whole
+ * (ADR-0097 decision 6): at most this many indexed files changed and at most one in `BRAIN_INCREMENTAL_MAX_SHARE` of the
+ * documents; a whole build comes after this many incremental ones, and after this long.
+ */
+export const BRAIN_INCREMENTAL_MAX_FILES = 2000;
+export const BRAIN_INCREMENTAL_MAX_SHARE = 5;
+export const BRAIN_WHOLE_BUILD_EVERY = 50;
+export const BRAIN_WHOLE_BUILD_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 /** Headings beyond this stay text of the node before them. */
 export const BRAIN_MAX_NODES_PER_DOCUMENT = 2_000;
 /**
@@ -905,9 +915,14 @@ function withManualOrder<T extends { name: string; folder: boolean }>(entries: r
 }
 
 export function buildBrainTree(sources: readonly BrainSourceDocument[], rootTitle: string): BrainTree {
+  const { parts, indexed } = brainPartsOfSources(sources);
+  return assembleBrainTree(parts, rootTitle, indexed);
+}
+
+/** The parts of the documents the Brain indexes, in path order and cut at `BRAIN_MAX_DOCUMENTS`; `indexed` counts them before the cut. */
+export function brainPartsOfSources(sources: readonly BrainSourceDocument[]): { parts: BrainDocumentPart[]; indexed: number } {
   const indexed = sources.filter((source) => isBrainIndexedPath(source.path)).sort((a, b) => a.path.localeCompare(b.path, "en"));
-  const kept = indexed.slice(0, BRAIN_MAX_DOCUMENTS);
-  return assembleBrainTree(kept.map(brainDocumentPart), rootTitle, indexed.length);
+  return { parts: indexed.slice(0, BRAIN_MAX_DOCUMENTS).map(brainDocumentPart), indexed: indexed.length };
 }
 
 /** A copy of a part the assembly may change: it sets parents, depths, ordinals, spaces and the commit of the nodes it holds. */
