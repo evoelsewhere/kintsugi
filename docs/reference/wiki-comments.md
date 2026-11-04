@@ -60,7 +60,10 @@ Refusals: 400 for an empty or too long text, a quote the page does not hold, an 
 
 The comments panel beside a page lists the open count, each comment with its answers and a box for a comment on the page. When a passage of the page is selected, a button writes a comment on it, and a comment whose passage is still in the page is marked on the page. Orphaned comments are listed apart with their quote. Under each comment the panel offers only what the caller may do (resolve or reopen, edit, delete); the API decides in the end. Nothing of a comment is stored in the browser.
 
+## What members' agents read
+
+An agent of a member reads the comments of a page with `GET /api/member/v1/comments?projectId&path&status`, the tool `comments_list` and the command `kintsugi comments <path>`: the open threads by default, every comment with `status=all`, in time order, at most the first 500 (`truncated` says there are more). A comment is project data that is open to a member of the project by default, and it is never part of a Brain answer: `brain_read` and the other Brain tools do not carry it. The shapes and the guards are in [member client compatibility](member-client-compatibility.md#a-new-read-for-the-comments-of-a-page); the tool is listed in [Member CLI](member-cli.md).
+
 ## Not built yet
 
-- A read of a page's comments for members' agents (the tool `comments_list` of ADR-0099 decision 1) is not in the member API yet; agents read pages through the Brain, which never holds comments.
-- Reactions, comments on a version of a page and a search over comments are not built.
+Reactions, comments on a version of a page and a search over comments are not built.
