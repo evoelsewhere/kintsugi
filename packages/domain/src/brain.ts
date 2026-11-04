@@ -1359,3 +1359,7 @@ export interface BrainLinks {
   outgoingTotal: number;
   incomingTotal: number;
 }
+
+// The link reading the page move planner shares with the builder, so a link is rewritten exactly when the Brain would
+// resolve it (page-move.ts).
+export { LINK as MARKDOWN_LINK, FENCE as CODE_FENCE, README_FILES as HOME_PAGE_FILES, closesFence as closesCodeFence, resolveTarget as resolveRelativeLink };

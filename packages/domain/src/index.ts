@@ -282,3 +282,4 @@ export { ALL_TESTED_RULES, MAX_REPORTED_RULES, memberTestReportOf, type MemberTe
 export { EMPTY_REPOSITORY_MESSAGE, describeSyncError } from "./repository-sync.js";
 export { explainFailure, isKnownFailure, stopReasonLabel } from "./failures.js";
 export * from "./text-merge.js";
+export * from "./page-move.js";
