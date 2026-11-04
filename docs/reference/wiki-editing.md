@@ -43,7 +43,7 @@ All of it is on top of Project Access to the project: every route below is under
 | 409 `open-write` | Another person's write of the page is waiting for review: names it |
 | `published` | One write was made: `mode` is `pull-request` or `direct`, with its branch and pull request |
 
-The writer is the last to check ids: a page whose id another file already holds is refused, and the write fails with "Page id X is already defined by <path>" and commits nothing.
+The writer is the last to check ids: a page whose id another file already holds is refused, and the write fails with "Page id X is already defined by <path>" and commits nothing. Publish checks the id first, against the head of the default branch and the other open writes, and answers 409 `id-taken` with the path that holds it. A **new page** is given the next free id of its scope at once, and the answer carries the new `pageId` and `revision`: the portal sends the publish again with them, once. A page that **already exists** keeps its id, which is the address the links to it use, and is refused naming the holder, for its author to look at.
 
 A page has **one open write** at a time; the author of it publishes again onto the same branch, which updates the pull request instead of opening another (`continues`). The merge, with its conflict regions, is the domain's `mergeText`; the same function writes the Git-style markers the conflict screen shows (`mergeWithMarkers`).
 
