@@ -30,6 +30,26 @@ describe("typed member HTTP client", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
+  it("asks for page attributes on every request and parses an answer with or without them (P2-020)", async () => {
+    const node = {
+      id: "a.md", kind: "document", title: "A", summary: "", summarySource: "none", path: "a.md", anchor: null, lineStart: 1, lineEnd: 2, subtreeEnd: 2,
+      tokens: 1, subtreeTokens: 1, children: 0, ids: [], changed: null,
+    };
+    const lookup = (matches: unknown[]) => ({ schemaVersion: "1", projectId: "shop", branch: "main", commit: "c".repeat(40), query: "label:runbook", matches });
+    const answers = [
+      lookup([{ ...node, breadcrumb: [], labels: ["runbook"], space: "ENG", status: null, owner: "lead", template: false }]),
+      lookup([{ ...node, breadcrumb: [] }]),
+    ];
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => json(answers.shift()));
+    const client = createMemberClient({ baseUrl: "https://kintsugi.example", tokenProvider: async () => "secret-credential-value", fetch: fetcher });
+    const newer = await client.brainLookup({ projectId: "shop", query: "label:runbook" });
+    expect(newer.matches[0]).toMatchObject({ labels: ["runbook"], space: "ENG", owner: "lead" });
+    // An installation that does not know the header answers in the old shape; it parses the same.
+    const older = await client.brainLookup({ projectId: "shop", query: "label:runbook" });
+    expect(older.matches[0]).not.toHaveProperty("labels");
+    for (const call of fetcher.mock.calls) expect(new Headers(call[1]?.headers).get("kintsugi-member-features")).toBe("page-attributes");
+  });
+
   it("creates a fresh request timeout for every operation", async () => {
     const fetcher = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => json({ schemaVersion: "1", items: [], limit: 25 }));
     const signals: AbortSignal[] = [];

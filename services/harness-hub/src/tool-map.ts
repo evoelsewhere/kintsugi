@@ -22,6 +22,7 @@ import {
   type MemberPort,
 } from "@kintsugi/harness-sdk";
 import type { McpServer } from "@modelcontextprotocol/server";
+import { pageAttributeLines } from "./page-attributes.js";
 
 export const MEMBER_TOOL_NAMES = [
   "project_list",
@@ -73,11 +74,16 @@ function toolFailure(error: unknown) {
   };
 }
 
-async function invokeRead<T extends object>(read: () => Promise<T>) {
+async function invokeRead<T extends object>(read: () => Promise<T>, extra?: (result: T) => string[]) {
   try {
     const result = await read();
+    const lines = extra?.(result) ?? [];
     return {
-      content: [{ type: "text" as const, text: JSON.stringify(result) }],
+      content: [
+        { type: "text" as const, text: JSON.stringify(result) },
+        // A second part, only when there is something to say, so a reader of the JSON part sees the same text as before.
+        ...(lines.length === 0 ? [] : [{ type: "text" as const, text: `Page attributes:\n${lines.join("\n")}` }]),
+      ],
       structuredContent: { ...result },
     };
   } catch (error) {
@@ -122,7 +128,7 @@ export function registerMemberTools(server: McpServer, member: MemberPort): void
     inputSchema: brainTreeQuerySchema,
     outputSchema: brainTreeSchema,
     annotations: READ_ONLY,
-  }, (query) => invokeRead(() => member.brainTree(query)));
+  }, (query) => invokeRead(() => member.brainTree(query), pageAttributeLines));
 
   server.registerTool("brain_read", {
     title: "Read a node of the Brain",
@@ -134,15 +140,18 @@ export function registerMemberTools(server: McpServer, member: MemberPort): void
     inputSchema: brainReadQuerySchema,
     outputSchema: brainReadSchema,
     annotations: READ_ONLY,
-  }, (query) => invokeRead(() => member.brainRead(query)));
+  }, (query) => invokeRead(() => member.brainRead(query), pageAttributeLines));
 
   server.registerTool("brain_lookup", {
     title: "Find a node by id or path",
-    description: "The Brain nodes a reference id (RULE-…, SEC-…, GAP-…, COM-…, REQ-…), a node id or a repository path names, each with its breadcrumb.",
+    description:
+      "The Brain nodes a reference id (RULE-…, SEC-…, GAP-…, COM-…, REQ-…), a node id or a repository path names, each with its breadcrumb. " +
+      "`label:<name>` finds the pages that carry a label and `space:<KEY>` the pages of a space (the key in any case). " +
+      "A node also carries its labels, space, status and owner when the page has them.",
     inputSchema: brainLookupQuerySchema,
     outputSchema: brainLookupSchema,
     annotations: READ_ONLY,
-  }, (query) => invokeRead(() => member.brainLookup(query)));
+  }, (query) => invokeRead(() => member.brainLookup(query), pageAttributeLines));
 
   server.registerTool("brain_grep", {
     title: "Find the nodes that contain a text",
@@ -153,7 +162,7 @@ export function registerMemberTools(server: McpServer, member: MemberPort): void
     inputSchema: brainGrepQuerySchema,
     outputSchema: brainGrepSchema,
     annotations: READ_ONLY,
-  }, (query) => invokeRead(() => member.brainGrep(query)));
+  }, (query) => invokeRead(() => member.brainGrep(query), pageAttributeLines));
 
   server.registerTool("brain_changes", {
     title: "What changed since a commit",
@@ -164,7 +173,7 @@ export function registerMemberTools(server: McpServer, member: MemberPort): void
     inputSchema: brainChangesQuerySchema,
     outputSchema: brainChangesSchema,
     annotations: READ_ONLY,
-  }, (query) => invokeRead(() => member.brainChanges(query)));
+  }, (query) => invokeRead(() => member.brainChanges(query), pageAttributeLines));
 
   server.registerTool("plugin_list", {
     title: "List member plugins",

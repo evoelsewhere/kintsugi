@@ -2,6 +2,32 @@ import { BRAIN_CHANGE_STATUSES, BRAIN_NODE_KINDS, BRAIN_SUMMARY_SOURCES, IDENTIF
 import { z } from "zod";
 
 export const MEMBER_SCHEMA_VERSION = "1" as const;
+
+/**
+ * The request header a client sends to ask for more than the version 1 shape holds. Installed CLIs parse every response
+ * with a strict schema, so the server adds a field only for a client that names the feature (ADR-0097 decision 8); a
+ * client that does not send the header gets the same bytes as before. The value is a comma-separated list, read in any
+ * case, and a name the server does not know is ignored.
+ */
+export const MEMBER_FEATURES_HEADER = "Kintsugi-Member-Features";
+/** Brain nodes carry their labels, space, status, owner and template flag. */
+export const MEMBER_FEATURE_PAGE_ATTRIBUTES = "page-attributes";
+/** The longest header read; a longer one is ignored whole rather than refused. */
+export const MEMBER_FEATURES_HEADER_MAX = 200;
+/** The most names read from one header. */
+export const MEMBER_FEATURES_MAX = 10;
+
+export interface MemberFeatures {
+  pageAttributes: boolean;
+}
+
+/** What a client asked for in the features header. It never throws: a header that is too long or unknown asks for nothing. */
+export function parseMemberFeatures(header: string | readonly string[] | undefined): MemberFeatures {
+  const raw = typeof header === "string" ? header : Array.isArray(header) ? header.join(",") : "";
+  if (raw.length > MEMBER_FEATURES_HEADER_MAX) return { pageAttributes: false };
+  const names = raw.split(",").slice(0, MEMBER_FEATURES_MAX).map((name) => name.trim().toLowerCase());
+  return { pageAttributes: names.includes(MEMBER_FEATURE_PAGE_ATTRIBUTES) };
+}
 export const DEFAULT_LIST_LIMIT = 25;
 export const MAX_LIST_LIMIT = 100;
 export const MAX_DOCUMENT_PATH_LENGTH = 1024;
@@ -155,6 +181,12 @@ export const brainNodeSchema = z.object({
   children: z.number().int().min(0),
   ids: z.array(z.string()),
   changed: z.object({ commit: z.string(), at: z.string(), subject: z.string() }).strict().nullable(),
+  // The page attributes come only to a client that asks for them (MEMBER_FEATURE_PAGE_ATTRIBUTES), so they are optional.
+  labels: z.array(z.string()).optional(),
+  status: z.string().nullable().optional(),
+  owner: z.string().nullable().optional(),
+  template: z.boolean().optional(),
+  space: z.string().nullable().optional(),
 }).strict();
 
 const brainCrumbSchema = z.object({ id: z.string(), kind: brainNodeSchema.shape.kind, title: z.string() }).strict();
