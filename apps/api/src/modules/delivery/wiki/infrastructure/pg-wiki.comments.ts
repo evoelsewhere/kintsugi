@@ -79,6 +79,36 @@ export class PgWikiComments extends WikiComments {
     return result.rows[0] === undefined ? undefined : toRow(result.rows[0]);
   }
 
+  async setStatus(projectId: string, id: string, status: "open" | "resolved", userId: string): Promise<WikiCommentRow | { tooMany: true } | undefined> {
+    return withTransaction(async (tx) => {
+      const current = await tx.query<{ page_key: string; status: string }>("select page_key, status from knowledge.wiki_comment where project_id = $1 and id = $2 and deleted_at is null", [projectId, id]);
+      const found = current.rows[0];
+      if (found === undefined) return undefined;
+      // Reopening takes a place among the open ones, so it is counted like a new comment, one page at a time.
+      await tx.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [JSON.stringify(["wiki-comment", projectId, found.page_key])]);
+      if (status === "open" && found.status !== "open") {
+        const open = await tx.query<{ n: number }>("select count(*)::int as n from knowledge.wiki_comment where project_id = $1 and page_key = $2 and status = 'open' and deleted_at is null", [projectId, found.page_key]);
+        if ((open.rows[0]?.n ?? 0) >= COMMENTS_OPEN_MAX) return { tooMany: true };
+      }
+      if (status === "resolved") await tx.query("update knowledge.wiki_comment set status = 'resolved', resolved_by = $3, resolved_at = now() where project_id = $1 and id = $2", [projectId, id, userId]);
+      else await tx.query("update knowledge.wiki_comment set status = 'open', resolved_by = null, resolved_at = null where project_id = $1 and id = $2", [projectId, id]);
+      return toRow((await tx.query<CommentRow>(`${SELECT} where c.id = $1`, [id])).rows[0]!);
+    });
+  }
+
+  async edit(projectId: string, id: string, body: string): Promise<WikiCommentRow | undefined> {
+    const updated = await getPool().query("update knowledge.wiki_comment set body = $3, edited_at = now() where project_id = $1 and id = $2 and deleted_at is null", [projectId, id, body]);
+    return (updated.rowCount ?? 0) === 0 ? undefined : this.find(projectId, id);
+  }
+
+  async hasReplies(projectId: string, id: string): Promise<boolean> {
+    return ((await getPool().query("select 1 from knowledge.wiki_comment where project_id = $1 and parent_id = $2 and deleted_at is null limit 1", [projectId, id])).rowCount ?? 0) > 0;
+  }
+
+  async remove(projectId: string, id: string): Promise<boolean> {
+    return ((await getPool().query("update knowledge.wiki_comment set deleted_at = now(), body = '' where project_id = $1 and id = $2 and deleted_at is null", [projectId, id])).rowCount ?? 0) > 0;
+  }
+
   async listOfPage(projectId: string, pageKey: string, limit: number, after: string | undefined): Promise<{ rows: WikiCommentRow[]; next: string | null }> {
     const result = await getPool().query<CommentRow>(
       `${SELECT} where c.project_id = $1 and c.page_key = $2

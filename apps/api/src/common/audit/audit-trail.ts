@@ -32,6 +32,7 @@ export const AUDIT_ACTIONS = {
   wikiPageDelete: "wiki-page.delete",
   wikiRestrictionSet: "wiki-restriction.set",
   wikiRestrictionClear: "wiki-restriction.clear",
+  wikiCommentDelete: "wiki-comment.delete",
   brainRebuild: "brain.rebuild",
   projectCreate: "project.create",
   projectUpdate: "project.update",

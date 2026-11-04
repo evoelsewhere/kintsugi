@@ -1,12 +1,12 @@
 // Comments on wiki pages (ADR-0099 decision 1): reading needs Project Access, writing also `wiki.comment`, which the service checks.
 
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { type Actor, CurrentActor } from "#common/auth/decorators.js";
 import { ProjectAccessGuard } from "#modules/admin/project-access/index.js";
 import { WikiCommentService } from "../application/wiki-comment.service.js";
 import type { WikiCommentList, WikiCommentView } from "../domain/wiki.comment.js";
-import { type CommentsQuery, type PostCommentBody, commentsQuerySchema, postCommentSchema } from "./wiki.dto.js";
+import { type CommentsQuery, type PatchCommentBody, type PostCommentBody, commentsQuerySchema, patchCommentSchema, postCommentSchema } from "./wiki.dto.js";
 
 @ApiTags("delivery · wiki")
 @Controller("projects/:id/wiki/comments")
@@ -31,5 +31,24 @@ export class WikiCommentController {
   })
   post(@Param("id") id: string, @Body({ schema: postCommentSchema }) body: PostCommentBody, @CurrentActor() actor: Actor): Promise<WikiCommentView> {
     return this.comments.create(id, actor, body);
+  }
+
+  @Patch(":commentId")
+  @ApiOperation({
+    summary: "Resolve or reopen a comment, or edit its text",
+    description: "Needs wiki.comment. Anyone who holds it may resolve or reopen a comment that is not an answer; only the author edits the text. Reopening is refused (409 too-many) when the page already has 200 open comments.",
+  })
+  update(@Param("id") id: string, @Param("commentId") commentId: string, @Body({ schema: patchCommentSchema }) body: PatchCommentBody, @CurrentActor() actor: Actor): Promise<WikiCommentView> {
+    return this.comments.update(id, actor, commentId, body);
+  }
+
+  @Delete(":commentId")
+  @HttpCode(204)
+  @ApiOperation({
+    summary: "Delete a comment",
+    description: "The author may delete a comment that has no answers; someone with wiki.manage may delete any comment, which is then audited as wiki-comment.delete (path, comment and author, never the text). A deleted comment that has answers stays as an empty marker.",
+  })
+  async remove(@Param("id") id: string, @Param("commentId") commentId: string, @CurrentActor() actor: Actor): Promise<void> {
+    await this.comments.remove(id, actor, commentId);
   }
 }

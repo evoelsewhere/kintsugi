@@ -3,8 +3,9 @@
 // anyone with Project Access. An inline comment keeps the passage (`exact`) and what surrounds it, taken from the page as
 // the Brain indexed it, which the server checks and the client cannot choose.
 
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { pageIdOf, reanchor, reanchorAll } from "@kintsugi/domain";
+import { AUDIT_ACTIONS, AuditTrail, auditRecord } from "#common/audit/audit-trail.js";
 import type { Actor } from "#common/auth/decorators.js";
 import { BrainService } from "#modules/delivery/brain/index.js";
 import { DocumentsService } from "#modules/delivery/documents/index.js";
@@ -29,6 +30,7 @@ export class WikiCommentService {
     private readonly documents: DocumentsService,
     private readonly brain: BrainService,
     private readonly access: WikiAccessService,
+    private readonly audit: AuditTrail,
   ) {}
 
   /** The comments of a page, in time order (`limit` of them after the comment `after`). */
@@ -70,9 +72,61 @@ export class WikiCommentService {
       anchor: placed?.anchor ?? null,
     });
     if ("tooMany" in result) {
-      throw new ConflictException({ message: `This page already has ${COMMENTS_OPEN_MAX} open comments; resolve some before adding more`, details: { code: "too-many", limit: COMMENTS_OPEN_MAX } });
+      throw tooMany();
     }
     return toView(result.comment, placed === undefined ? undefined : { status: "anchored", line: placed.line });
+  }
+
+  /**
+   * Resolves or reopens a comment (anyone with `wiki.comment`; a comment that is not an answer), or edits its text (its author
+   * only). Both may be sent together. Reopening takes a place among the page's 200 open comments.
+   */
+  async update(projectId: string, actor: Actor, id: string, input: { resolved?: boolean | undefined; body?: string | undefined }): Promise<WikiCommentView> {
+    this.access.assertCanComment(actor);
+    let row = await this.#existing(projectId, id);
+    if (input.body !== undefined) {
+      if (row.authorId !== actor.id) throw new ForbiddenException("Only the author can edit a comment");
+      const body = input.body.trim();
+      if (body === "") throw new BadRequestException("Write something to comment");
+      if (body.length > COMMENT_BODY_MAX) throw new BadRequestException(`A comment is at most ${COMMENT_BODY_MAX} characters`);
+      const edited = await this.comments.edit(projectId, id, body);
+      if (edited === undefined) throw gone(id);
+      row = edited;
+    }
+    if (input.resolved !== undefined && (row.status === "resolved") !== input.resolved) {
+      if (row.parentId !== null) throw new BadRequestException("An answer is resolved with the comment it answers");
+      const result = await this.comments.setStatus(projectId, id, input.resolved ? "resolved" : "open", actor.id);
+      if (result === undefined) throw gone(id);
+      if ("tooMany" in result) throw tooMany();
+      row = result;
+    }
+    const placements = await this.#placements(projectId, row.pathAtWrite, [row]);
+    return toView(row, placements.get(row.id));
+  }
+
+  /**
+   * Deletes a comment: its author may while nobody has answered it; someone with `wiki.manage` may delete any, and that is
+   * audited (the path, the comment and its author, never the text). The row stays, blank, while it has answers.
+   */
+  async remove(projectId: string, actor: Actor, id: string): Promise<void> {
+    const row = await this.#existing(projectId, id);
+    const own = row.authorId === actor.id;
+    const moderator = actor.permissions.includes("wiki.manage");
+    if (!own && !moderator) throw new ForbiddenException("Only the author, or someone with wiki.manage, can delete a comment");
+    if (own && !moderator && (await this.comments.hasReplies(projectId, id))) {
+      throw new ConflictException({ message: "This comment has answers: it cannot be deleted by its author", details: { code: "has-replies" } });
+    }
+    if (!(await this.comments.remove(projectId, id))) throw gone(id);
+    if (!own) {
+      await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.wikiCommentDelete, { projectId, subject: id, detail: { path: row.pathAtWrite, commentId: id, authorId: row.authorId } }));
+    }
+  }
+
+  /** A comment of the project that is not deleted; 404 otherwise. */
+  async #existing(projectId: string, id: string): Promise<WikiCommentRow> {
+    const row = await this.comments.find(projectId, id);
+    if (row === undefined || row.deletedAt !== null) throw gone(id);
+    return row;
   }
 
   /**
@@ -132,6 +186,9 @@ export class WikiCommentService {
     return { anchor: { ...anchor, commit }, line: found.line };
   }
 }
+
+const gone = (id: string): NotFoundException => new NotFoundException(`There is no comment ${id.slice(0, 64)}`);
+const tooMany = (): ConflictException => new ConflictException({ message: `This page already has ${COMMENTS_OPEN_MAX} open comments; resolve some before adding more`, details: { code: "too-many", limit: COMMENTS_OPEN_MAX } });
 
 /** Where a comment's passage is now. */
 interface Placement {

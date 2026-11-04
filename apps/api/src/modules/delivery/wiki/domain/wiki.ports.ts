@@ -108,6 +108,17 @@ export abstract class WikiComments {
   abstract createOnce(comment: NewWikiComment): Promise<{ comment: WikiCommentRow; duplicate: boolean } | { tooMany: true }>;
   abstract find(projectId: string, id: string): Promise<WikiCommentRow | undefined>;
   /**
+   * Resolves or reopens a comment; reopening is refused (`tooMany`) when the page already holds the most open comments.
+   * Undefined when the comment is gone.
+   */
+  abstract setStatus(projectId: string, id: string, status: "open" | "resolved", userId: string): Promise<WikiCommentRow | { tooMany: true } | undefined>;
+  /** Replaces the text and marks the comment edited; undefined when it is gone. */
+  abstract edit(projectId: string, id: string, body: string): Promise<WikiCommentRow | undefined>;
+  /** Whether a comment that is not deleted answers this one. */
+  abstract hasReplies(projectId: string, id: string): Promise<boolean>;
+  /** Deletes a comment by blanking it: the row stays, marked deleted with an empty text, so its answers keep their place. */
+  abstract remove(projectId: string, id: string): Promise<boolean>;
+  /**
    * The comments of a page in time order, `limit` of them after the comment `after`; a deleted comment is there only while an
    * answer to it is. `next` is the `after` of the following page, or null.
    */
