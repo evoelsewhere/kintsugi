@@ -88,6 +88,13 @@ export const postCommentSchema = z
   .strict();
 export type PostCommentBody = z.infer<typeof postCommentSchema>;
 
+/** Body of a change of a comment: resolve or reopen it, or edit its text; at least one. */
+export const patchCommentSchema = z
+  .object({ resolved: z.boolean().optional(), body: z.string().max(8000).optional() })
+  .strict()
+  .refine((value) => value.resolved !== undefined || value.body !== undefined, { message: "Change something: resolved or body" });
+export type PatchCommentBody = z.infer<typeof patchCommentSchema>;
+
 /** Body of a page delete: the page and the message of the write (its first line is the pull request's title). */
 export const deletePageSchema = z.object({ path: z.string().min(1).max(1000), message: z.string().trim().min(1).max(200) }).strict();
 export type DeletePageBody = z.infer<typeof deletePageSchema>;
