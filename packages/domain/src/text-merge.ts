@@ -145,21 +145,16 @@ function sideLines(base: readonly string[], start: number, end: number, hunks: r
 
 const sameLines = (left: readonly string[], right: readonly string[]): boolean => left.length === right.length && left.every((line, index) => line === right[index]);
 
-/**
- * Merges `ours` and `theirs`, two changes of `base`. Returns the merged text when every change can be combined, else the
- * regions where the two sides changed the same lines (or lines next to each other) in different ways.
- */
-export function mergeText(base: string, ours: string, theirs: string): MergeResult {
-  if (ours === theirs) return { clean: true, merged: ours };
-  if (ours === base) return { clean: true, merged: theirs };
-  if (theirs === base) return { clean: true, merged: ours };
+/** The pieces of a merge in order: lines that merged, and the regions where the two sides disagree. */
+type MergePart = string[] | MergeRegion;
+
+function mergeParts(base: string, ours: string, theirs: string): MergePart[] {
   const baseLines = textLines(base);
   const mine = hunksOf(baseLines, textLines(ours));
   const yours = hunksOf(baseLines, textLines(theirs));
 
   const all = [...mine.map((hunk) => ({ hunk, mine: true })), ...yours.map((hunk) => ({ hunk, mine: false }))].sort((x, y) => x.hunk.start - y.hunk.start || x.hunk.end - y.hunk.end);
-  const merged: string[] = [];
-  const regions: MergeRegion[] = [];
+  const parts: MergePart[] = [];
   let at = 0;
   for (let index = 0; index < all.length; ) {
     // A cluster: the hunks of both sides whose base lines overlap or touch.
@@ -177,15 +172,65 @@ export function mergeText(base: string, ours: string, theirs: string): MergeResu
     const theirHunks = cluster.filter((entry) => !entry.mine).map((entry) => entry.hunk);
     const ourLines = sideLines(baseLines, start, end, ourHunks);
     const theirLines = sideLines(baseLines, start, end, theirHunks);
-    merged.push(...baseLines.slice(at, start));
-    if (theirHunks.length === 0) merged.push(...ourLines);
-    else if (ourHunks.length === 0) merged.push(...theirLines);
-    else if (sameLines(ourLines, theirLines)) merged.push(...ourLines);
-    else regions.push({ baseStart: start, baseEnd: end, ours: ourLines, theirs: theirLines });
+    parts.push(baseLines.slice(at, start));
+    if (theirHunks.length === 0) parts.push(ourLines);
+    else if (ourHunks.length === 0) parts.push(theirLines);
+    else if (sameLines(ourLines, theirLines)) parts.push(ourLines);
+    else parts.push({ baseStart: start, baseEnd: end, ours: ourLines, theirs: theirLines });
     at = end;
     index = last;
   }
+  parts.push(baseLines.slice(at));
+  return parts;
+}
+
+const isRegion = (part: MergePart): part is MergeRegion => !Array.isArray(part);
+
+/**
+ * Merges `ours` and `theirs`, two changes of `base`. Returns the merged text when every change can be combined, else the
+ * regions where the two sides changed the same lines (or lines next to each other) in different ways.
+ */
+export function mergeText(base: string, ours: string, theirs: string): MergeResult {
+  if (ours === theirs) return { clean: true, merged: ours };
+  if (ours === base) return { clean: true, merged: theirs };
+  if (theirs === base) return { clean: true, merged: ours };
+  const parts = mergeParts(base, ours, theirs);
+  const regions = parts.filter(isRegion);
   if (regions.length > 0) return { clean: false, regions };
-  merged.push(...baseLines.slice(at));
-  return { clean: true, merged: merged.join("") };
+  return { clean: true, merged: parts.flat().join("") };
+}
+
+/** The line ending a conflict region writes its marker lines with: the one of its own lines, else a newline. */
+function endingOf(region: MergeRegion): string {
+  const line = region.ours[0] ?? region.theirs[0] ?? "";
+  return line.endsWith("\r\n") ? "\r\n" : "\n";
+}
+
+/** The lines of a side, the last one ended so that a marker line can follow it. */
+function ended(lines: readonly string[], ending: string): string {
+  const text = lines.join("");
+  return text === "" || text.endsWith("\n") ? text : `${text}${ending}`;
+}
+
+/**
+ * The merge as one text, as Git writes a conflict: every region of `mergeText` is
+ * `<<<<<<< yours`, the lines of `ours`, `=======`, the lines of `theirs` and `>>>>>>> theirs`, and everything else is
+ * merged. `conflicts` is the number of regions, so it is the number `mergeText` reports; a clean merge has none and
+ * `text` is the same as its `merged`. Line endings are kept: a marker line ends as the lines of its region do.
+ */
+export function mergeWithMarkers(base: string, ours: string, theirs: string): { text: string; conflicts: number } {
+  if (ours === theirs) return { text: ours, conflicts: 0 };
+  if (ours === base) return { text: theirs, conflicts: 0 };
+  if (theirs === base) return { text: ours, conflicts: 0 };
+  const parts = mergeParts(base, ours, theirs);
+  let conflicts = 0;
+  const text = parts
+    .map((part) => {
+      if (!isRegion(part)) return part.join("");
+      conflicts += 1;
+      const ending = endingOf(part);
+      return `<<<<<<< yours${ending}${ended(part.ours, ending)}=======${ending}${ended(part.theirs, ending)}>>>>>>> theirs${ending}`;
+    })
+    .join("");
+  return { text, conflicts };
 }

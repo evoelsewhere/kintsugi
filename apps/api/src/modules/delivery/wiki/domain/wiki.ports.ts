@@ -38,6 +38,10 @@ export abstract class WikiAttachments {
 export abstract class WikiIdCounters {
   /** The next number of `scope` in the project, starting at 1; every call hands out a number no other call gets. */
   abstract next(projectId: string, scope: string): Promise<number>;
+  /** Raises the counter so the next number is above `highest`; never lowers it. A scope never used starts here. */
+  abstract startAfter(projectId: string, scope: string, highest: number): Promise<void>;
+  /** The highest number of a page id of `scope` the Brain's index holds in the project; 0 when it holds none. */
+  abstract highestInBrain(projectId: string, scope: string): Promise<number>;
 }
 
 export abstract class WikiRestrictions {
