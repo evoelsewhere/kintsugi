@@ -13,6 +13,7 @@ import { formatRelative, shortSha } from "@/lib/format";
 import { splitFrontMatter } from "@/lib/front-matter";
 import { useLoader } from "@/lib/use-loader";
 import { pathTrail, wikiLink, wikiRead } from "@/lib/wiki";
+import { useScrollToHeading, useWikiLinks } from "./use-wiki-links";
 
 export interface WikiPageViewProps {
   projectId: string;
@@ -26,6 +27,8 @@ export function WikiPageView({ projectId, commit, path }: WikiPageViewProps): Re
   const file = useLoader(`wiki/${projectId}/${commit}/file/${path}`, () => wikiRead(() => documentsApi.file(projectId, path, commit)));
   const meta = useLoader(`wiki/${projectId}/${commit}/meta/${path}`, () => wikiRead(() => brainApi.lookup(projectId, path)));
   const node = meta.data?.matches.find((match) => match.kind === "document" && match.path === path);
+  useWikiLinks(projectId, commit);
+  useScrollToHeading(file.data !== undefined);
 
   return (
     <article className="flex flex-col gap-3" aria-label={node?.title ?? path}>

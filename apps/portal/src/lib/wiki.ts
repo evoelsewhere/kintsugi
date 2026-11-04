@@ -134,3 +134,30 @@ export async function wikiRead<T>(read: () => Promise<T>): Promise<T> {
     throw failure;
   }
 }
+
+/** What a link of a wiki page does: a page of the repository opens in the reader, an attachment is served by the API. */
+export type WikiLinkAction =
+  | { kind: "page"; path: string; anchor?: string }
+  | { kind: "attachment"; path: string }
+  /** Any other file of the repository: left to the shared document drawer. */
+  | { kind: "other"; path: string };
+
+/** A file in an `_attachments/` folder that is not a page: the only files the attachment route serves. */
+export const isAttachmentPath = (path: string): boolean => !isPagePath(path) && path.split("/").slice(0, -1).includes("_attachments");
+
+/** Decides what a link target (already resolved against the page it is written in) does inside the reader. */
+export function wikiLinkAction(target: { path: string; anchor?: string | undefined }): WikiLinkAction {
+  if (isPagePath(target.path)) return { kind: "page", path: target.path, ...(target.anchor !== undefined && target.anchor !== "" && { anchor: target.anchor }) };
+  if (isAttachmentPath(target.path)) return { kind: "attachment", path: target.path };
+  return { kind: "other", path: target.path };
+}
+
+/** The address of an attachment at a commit: the API serves it with a fixed content type and no scripts. */
+export function attachmentUrl(projectId: string, path: string, ref: string): string {
+  return `/api/projects/${encodeURIComponent(projectId)}/documents/attachment?${new URLSearchParams({ ref, path }).toString()}`;
+}
+
+/** The id of the heading an address names (`#install`), as the renderer wrote it: the fragment without `#`, decoded. */
+export function headingIdOfHash(hash: string): string {
+  return decode(hash.startsWith("#") ? hash.slice(1) : hash);
+}
