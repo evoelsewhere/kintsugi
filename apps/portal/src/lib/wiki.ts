@@ -580,3 +580,77 @@ export const CHANGE_LABEL = { added: "added", modified: "edited", deleted: "dele
  * (its history is under the page that replaced it, if any).
  */
 export const changedFileTarget = (file: { path: string; status: string }): string | undefined => (file.status === "deleted" ? undefined : file.path);
+
+// ---- Every page of a label --------------------------------------------------------------------------------------
+// The Brain's `label:` lookup answers at most twenty pages, so the label page lists the pages itself: it walks the
+// Brain's tree (the document nodes carry their `labels`) folder by folder and keeps the pages that have the label.
+
+/** The most folders one walk reads; a repository with more says the list may be incomplete. */
+export const LABEL_WALK_MAX_FOLDERS = 400;
+
+/** How many folders are read at once. */
+const LABEL_WALK_PARALLEL = 6;
+
+/** One page of a folder's children, as the Brain's tree gives it. */
+export interface TreeChildren {
+  children: readonly BrainNode[];
+  total: number;
+}
+
+export interface LabelWalk {
+  pages: LabelledPage[];
+  /** The walk stopped at `LABEL_WALK_MAX_FOLDERS` folders: there may be more pages. */
+  incomplete: boolean;
+}
+
+/**
+ * Every page with `label` in the tree, found by reading each folder's children (`read(folderId, offset)`, a page of
+ * them at a time) from the root: pages by title, with the folders above them; archived pages and templates, and folders
+ * whose home page is archived, are left out as in the page tree. A folder that cannot be read is skipped, the root not.
+ */
+export async function pagesWithLabel(read: (folderId: string, offset: number) => Promise<TreeChildren>, label: string, pageSize = 100): Promise<LabelWalk> {
+  const wanted = normalizeLabel(label);
+  const found = new Map<string, LabelledPage>();
+  const queue: string[] = [BRAIN_ROOT_ID];
+  let folders = 0;
+  let incomplete = false;
+
+  const readFolder = async (folderId: string): Promise<void> => {
+    for (let offset = 0; ; offset += pageSize) {
+      let page: TreeChildren;
+      try {
+        page = await read(folderId, offset);
+      } catch (failure) {
+        // Without the root there is no list to speak of (a refusal, an API that is down): say so rather than "none".
+        if (folderId === BRAIN_ROOT_ID) throw failure;
+        return;
+      }
+      for (const child of pageEntries(page.children)) {
+        if (child.kind === "folder") queue.push(child.id);
+        else if (wanted !== "" && child.labels.includes(wanted)) {
+          const trail = child.path.split("/").slice(0, -1);
+          found.set(child.path, { path: child.path, title: child.title, breadcrumb: trail, space: child.space, status: child.status, labels: child.labels });
+        }
+      }
+      if (page.children.length === 0 || offset + pageSize >= page.total) return;
+    }
+  };
+
+  while (queue.length > 0) {
+    const batch: string[] = [];
+    while (batch.length < LABEL_WALK_PARALLEL && queue.length > 0) {
+      if (folders >= LABEL_WALK_MAX_FOLDERS) {
+        incomplete = true;
+        queue.length = 0;
+        break;
+      }
+      const next = queue.shift();
+      if (next !== undefined) {
+        batch.push(next);
+        folders += 1;
+      }
+    }
+    await Promise.all(batch.map(readFolder));
+  }
+  return { pages: [...found.values()].sort((a, b) => a.title.localeCompare(b.title) || a.path.localeCompare(b.path)), incomplete };
+}

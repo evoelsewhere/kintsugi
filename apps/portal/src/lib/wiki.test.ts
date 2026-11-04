@@ -1,7 +1,7 @@
 import type { BrainGrepMatch, BrainNode } from "@kintsugi/domain";
 import { describe, expect, it } from "vitest";
 import { resolveDocumentLink } from "./document-links";
-import { attachmentUrl, headingOffPlace, SCROLL_SETTLE_MS, scrollSettled, hitCount, isFrontMatterLine, readableExcerpt, imageSource, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiLink, wikiRead, hitPaths, withDocuments, highlightParts, normalizeLabel, normalizeSpace, readWikiSearch, searchFacets, searchHits, searchLineLink, wikiSearchLink, labelledPages, wikiLabelLink, wikiPhase, hiddenPaths, groupBacklinks, tocOf, spacePages, spaceHomePath, wikiSpaceLink, CHANGE_LABEL, changedFileTarget, wikiRecentLink } from "./wiki";
+import { attachmentUrl, LABEL_WALK_MAX_FOLDERS, pagesWithLabel, headingOffPlace, SCROLL_SETTLE_MS, scrollSettled, hitCount, isFrontMatterLine, readableExcerpt, imageSource, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiLink, wikiRead, hitPaths, withDocuments, highlightParts, normalizeLabel, normalizeSpace, readWikiSearch, searchFacets, searchHits, searchLineLink, wikiSearchLink, labelledPages, wikiLabelLink, wikiPhase, hiddenPaths, groupBacklinks, tocOf, spacePages, spaceHomePath, wikiSpaceLink, CHANGE_LABEL, changedFileTarget, wikiRecentLink } from "./wiki";
 
 const node = (over: Partial<BrainNode> & Pick<BrainNode, "id" | "kind" | "path">): BrainNode => ({
   parentId: null,
@@ -585,5 +585,71 @@ describe("the recent changes", () => {
     expect(changedFileTarget({ path: "a/renamed.md", status: "renamed" })).toBe("a/renamed.md");
     expect(changedFileTarget({ path: "a/gone.md", status: "deleted" })).toBeUndefined();
     expect(CHANGE_LABEL.modified).toBe("edited");
+  });
+});
+
+describe("every page of a label", () => {
+  // A repository as the Brain's tree serves it: folders hold pages and folders, read a page of children at a time.
+  const repo = (): Map<string, BrainNode[]> => {
+    const tree = new Map<string, BrainNode[]>();
+    tree.set("/", [folder("ops", { ordinal: 0 }), folder("hr", { ordinal: 1 }), page("README.md", { labels: ["runbook"] })]);
+    tree.set("ops/", [
+      ...Array.from({ length: 45 }, (_, index) => page(`ops/run-${String(index).padStart(2, "0")}.md`, { title: `Run ${String(index).padStart(2, "0")}`, labels: index % 2 === 0 ? ["runbook"] : ["other"], space: "OPS" })),
+      page("ops/old.md", { labels: ["runbook"], status: "archived" }),
+      page("ops/new-page.md", { labels: ["runbook"], template: true }),
+      folder("ops/deep", { ordinal: 9 }),
+    ]);
+    tree.set("ops/deep/", Array.from({ length: 30 }, (_, index) => page(`ops/deep/d${index}.md`, { title: `Deep ${String(index).padStart(2, "0")}`, labels: ["runbook", "deep"] })));
+    tree.set("hr/", [page("hr/leave.md", { labels: ["policy"] }), folder("hr/archive", { status: "archived" })]);
+    tree.set("hr/archive/", [page("hr/archive/x.md", { labels: ["runbook"] })]);
+    return tree;
+  };
+  const readOf =
+    (tree: Map<string, BrainNode[]>, size: number, seen: string[] = []) =>
+    async (id: string, offset: number) => {
+      seen.push(`${id}@${offset}`);
+      const all = tree.get(id) ?? [];
+      return { children: all.slice(offset, offset + size), total: all.length };
+    };
+
+  it("lists every page with the label, past twenty, with its folders and without the pages the tree hides", async () => {
+    const walk = await pagesWithLabel(readOf(repo(), 100), "runbook");
+    // 23 even runs of 45, the 30 deep ones and the README; not the archived page, the template or the archived folder's page.
+    expect(walk.pages).toHaveLength(23 + 30 + 1);
+    expect(walk.incomplete).toBe(false);
+    expect(walk.pages.some((entry) => entry.path === "ops/old.md" || entry.path === "ops/new-page.md" || entry.path === "hr/archive/x.md")).toBe(false);
+    expect(walk.pages.find((entry) => entry.path === "ops/deep/d3.md")).toMatchObject({ title: "Deep 03", breadcrumb: ["ops", "deep"], labels: ["runbook", "deep"] });
+    expect(walk.pages.find((entry) => entry.path === "ops/run-04.md")).toMatchObject({ space: "OPS", breadcrumb: ["ops"] });
+    const titles = walk.pages.map((entry) => entry.title);
+    expect(titles).toEqual([...titles].sort((a, b) => a.localeCompare(b)));
+  });
+
+  it("reads a folder a page of children at a time until its total, so a long folder is not cut", async () => {
+    const reads: string[] = [];
+    const walk = await pagesWithLabel(readOf(repo(), 10, reads), "runbook", 10);
+    expect(walk.pages).toHaveLength(54);
+    // ops holds 45 pages + 3 more entries: five reads of ten.
+    expect(reads.filter((entry) => entry.startsWith("ops/@"))).toEqual(["ops/@0", "ops/@10", "ops/@20", "ops/@30", "ops/@40"]);
+  });
+
+  it("matches the label as the builder writes it, and finds nothing for one that is empty once cleaned", async () => {
+    expect((await pagesWithLabel(readOf(repo(), 100), "RUNBOOK")).pages).toHaveLength(54);
+    expect((await pagesWithLabel(readOf(repo(), 100), "Run-Book")).pages).toHaveLength(0);
+    expect((await pagesWithLabel(readOf(repo(), 100), "!!")).pages).toEqual([]);
+  });
+
+  it("skips a folder it cannot read, and says when it stopped at the folder limit", async () => {
+    const tree = repo();
+    const flaky = async (id: string, offset: number) => {
+      if (id === "ops/deep/") throw new Error("boom");
+      return readOf(tree, 100)(id, offset);
+    };
+    expect((await pagesWithLabel(flaky, "runbook")).pages).toHaveLength(24);
+    const wide = new Map<string, BrainNode[]>([["/", Array.from({ length: LABEL_WALK_MAX_FOLDERS + 20 }, (_, index) => folder(`f${index}`))]]);
+    expect((await pagesWithLabel(readOf(wide, 1000), "runbook")).incomplete).toBe(true);
+  });
+
+  it("fails when the root cannot be read, instead of saying that no page has the label", async () => {
+    await expect(pagesWithLabel(async () => Promise.reject(new Error("down")), "runbook")).rejects.toThrow("down");
   });
 });
