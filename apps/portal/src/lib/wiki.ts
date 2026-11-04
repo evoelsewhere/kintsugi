@@ -2,8 +2,8 @@
 // and in what order, and whether a project's wiki is on. Kept apart from the views so it can be tested.
 // The reader is read-only (ADR-0096, ADR-0097): everything comes from the Brain's tree and the documents routes.
 
-import type { BrainNode } from "@kintsugi/domain";
-import { BRAIN_ROOT_ID } from "@kintsugi/domain";
+import type { BrainGrepMatch, BrainNode } from "@kintsugi/domain";
+import { BRAIN_ROOT_ID, brainLabels } from "@kintsugi/domain";
 import { resolveDocumentLink } from "./document-links";
 
 /** The wiki lives under `/wiki/<path of the page in the document repo>`; the project is the `?project=` of the URL. */
@@ -248,4 +248,141 @@ export function imageSource(src: string | undefined, from: string): ImageSource 
   if (target.kind === "external") return { kind: "external", href: target.href };
   if (target.kind === "document" && isAttachmentPath(target.path) && IMAGE_FILE.test(target.path)) return { kind: "attachment", path: target.path };
   return { kind: "none" };
+}
+
+// ---- Search -----------------------------------------------------------------------------------------------------
+// The reader's search box is the Brain's exact text search (`brain/grep`), narrowed by one space and one label; it is
+// not ranked (ADR-0097). What was asked lives in the address (`/wiki?project=…&q=…&space=…&label=…`), so a result list
+// can be shared and a reload shows the same list.
+
+/** What the search box asks: a text and, optionally, the space and the label the pages must have. */
+export interface WikiSearch {
+  q: string;
+  /** A space key in capitals, or "". */
+  space: string;
+  /** A label as the Brain writes it (lowercase, `a-z0-9-`), or "". */
+  label: string;
+}
+
+export const NO_SEARCH: WikiSearch = { q: "", space: "", label: "" };
+
+const SPACE_KEY = /^[A-Za-z][A-Za-z0-9]{1,9}$/;
+
+/** A space key as the API takes it: capitals; "" for anything that is not a key (it would only be refused). */
+export const normalizeSpace = (value: string): string => (SPACE_KEY.test(value.trim()) ? value.trim().toUpperCase() : "");
+
+/** A label as the Brain writes it; "" when nothing of it is left. */
+export const normalizeLabel = (value: string): string => brainLabels([value])[0] ?? "";
+
+/** The search an address asks (what the reader shows when `q` is set). */
+export function readWikiSearch(params: URLSearchParams): WikiSearch {
+  return { q: (params.get("q") ?? "").trim(), space: normalizeSpace(params.get("space") ?? ""), label: normalizeLabel(params.get("label") ?? "") };
+}
+
+/** The address of a search of a project's wiki. */
+export function wikiSearchLink(projectId: string, search: WikiSearch): string {
+  const params = new URLSearchParams({ project: projectId });
+  if (search.q.trim() !== "") params.set("q", search.q.trim());
+  if (search.space !== "") params.set("space", search.space);
+  if (search.label !== "") params.set("label", search.label);
+  return `${WIKI_BASE}?${params.toString()}`;
+}
+
+/** One line of a page that holds the text, with the heading it is under (to scroll to). */
+export interface SearchLine {
+  line: number;
+  excerpt: string;
+  /** The id of the heading (or card) the line is in; null for a line outside any heading. */
+  anchor: string | null;
+  /** The title of that heading. */
+  section: string | null;
+}
+
+/** A page with the lines of it that matched. */
+export interface SearchHit {
+  path: string;
+  title: string;
+  /** The folders above the page, from the top, without the repository root. */
+  breadcrumb: string[];
+  space: string | null;
+  labels: string[];
+  lines: SearchLine[];
+}
+
+/** Groups the matches of a search by page, in the order the first match of each came; archived pages and templates are left out. */
+export function searchHits(matches: readonly BrainGrepMatch[]): SearchHit[] {
+  const hits = new Map<string, SearchHit>();
+  for (const match of matches) {
+    if (isHiddenPage(match.node)) continue;
+    const path = match.node.path;
+    let hit = hits.get(path);
+    if (hit === undefined) {
+      const crumbs = match.breadcrumb.filter((crumb) => crumb.kind !== "root");
+      const own = crumbs.find((crumb) => crumb.kind === "document");
+      hit = {
+        path,
+        title: own?.title ?? (match.node.kind === "document" ? match.node.title : nameOf(path)),
+        breadcrumb: crumbs.filter((crumb) => crumb.kind === "folder").map((crumb) => crumb.title),
+        // Only the document node carries a page's space and labels (a section or a card holds none): see withDocuments.
+        space: match.node.kind === "document" ? match.node.space : null,
+        labels: match.node.kind === "document" ? match.node.labels : [],
+        lines: [],
+      };
+      hits.set(path, hit);
+    }
+    const inHeading = match.node.kind === "section" || match.node.kind === "card";
+    hit.lines.push({ line: match.line, excerpt: match.excerpt, anchor: inHeading ? match.node.anchor : null, section: inHeading ? match.node.title : null });
+  }
+  return [...hits.values()];
+}
+
+/** How many pages of a result list get their document node looked up: the list shows the first ones, and the filters follow them. */
+export const HIT_DOCUMENT_CAP = 30;
+
+/** The paths of the pages whose document node a result list needs, the first `HIT_DOCUMENT_CAP` of the hits, each once. */
+export const hitPaths = (hits: readonly Pick<SearchHit, "path">[]): string[] => [...new Set(hits.map((hit) => hit.path))].slice(0, HIT_DOCUMENT_CAP);
+
+/**
+ * The hits with what only a page's document node knows: its title, space and labels (a grep match is the section or card
+ * a line is in, which holds none of them). A page whose document is archived or a template is dropped. A hit without
+ * its document (not looked up, or the lookup failed) is kept as it is.
+ */
+export function withDocuments(hits: readonly SearchHit[], documents: ReadonlyMap<string, BrainNode>): SearchHit[] {
+  return hits.flatMap((hit) => {
+    const document = documents.get(hit.path);
+    if (document === undefined) return [hit];
+    if (isHiddenPage(document)) return [];
+    return [{ ...hit, title: document.title, space: document.space, labels: document.labels }];
+  });
+}
+
+/** The address of one line of a hit: the page, scrolled to the heading the line is under. */
+export const searchLineLink = (projectId: string, hit: Pick<SearchHit, "path">, line: Pick<SearchLine, "anchor">): string => wikiLink(projectId, hit.path, line.anchor ?? undefined);
+
+/** The spaces and labels the hits show, each once and sorted: what the filters offer to narrow a search. */
+export function searchFacets(hits: readonly SearchHit[]): { spaces: string[]; labels: string[] } {
+  const spaces = new Set<string>();
+  const labels = new Set<string>();
+  for (const hit of hits) {
+    if (hit.space !== null) spaces.add(hit.space.toUpperCase());
+    for (const label of hit.labels) labels.add(label);
+  }
+  return { spaces: [...spaces].sort(), labels: [...labels].sort() };
+}
+
+/** A text cut into the parts that are the searched text (case does not matter) and those that are not, for marking it. */
+export function highlightParts(text: string, needle: string): Array<{ text: string; match: boolean }> {
+  const wanted = needle.trim().toLowerCase();
+  const lower = text.toLowerCase();
+  const parts: Array<{ text: string; match: boolean }> = [];
+  let at = 0;
+  if (wanted !== "") {
+    for (let index = lower.indexOf(wanted); index >= 0; index = lower.indexOf(wanted, index + wanted.length)) {
+      if (index > at) parts.push({ text: text.slice(at, index), match: false });
+      parts.push({ text: text.slice(index, index + wanted.length), match: true });
+      at = index + wanted.length;
+    }
+  }
+  if (at < text.length) parts.push({ text: text.slice(at), match: false });
+  return parts;
 }
