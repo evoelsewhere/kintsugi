@@ -138,6 +138,12 @@ export class DocumentWritesService {
     return toPage(items, total, query);
   }
 
+  /** One write of the project by id, or undefined (a write of another project is not found). */
+  async find(projectId: string, id: string): Promise<DocumentWriteRecord | undefined> {
+    const write = await this.store.find(id);
+    return write?.projectId === projectId ? write : undefined;
+  }
+
   /** The project's open corrections (ADR-0094), newest first: the gap answers waiting for review. */
   openCorrections(projectId: string): Promise<DocumentWriteRecord[]> {
     return this.store.openCorrections(projectId);

@@ -125,6 +125,11 @@ export class PgDocumentWriteStore extends DocumentWriteStore {
     return { items: rows.rows.map(toRecord), total: count.rows[0]?.total ?? 0 };
   }
 
+  async find(id: string): Promise<DocumentWriteRecord | undefined> {
+    const result = await this.#pool.query<WriteRow>(`select ${COLUMNS} from workflow.document_write where id = $1`, [id]);
+    return result.rows[0] === undefined ? undefined : toRecord(result.rows[0]);
+  }
+
   async markFailed(id: string, error: string): Promise<void> {
     await this.#pool.query("update workflow.document_write set status = 'failed', error = $2, updated_at = now() where id = $1", [id, error.slice(0, 2000)]);
   }

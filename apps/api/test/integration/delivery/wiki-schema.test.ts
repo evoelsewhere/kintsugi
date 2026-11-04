@@ -1,5 +1,5 @@
 // The wiki's editing state (migration 056, delivery/wiki): the script runs twice without error, each table's adapter
-// inserts, reads and deletes, the rows go with the project, and the one route there is says nothing may be written yet.
+// inserts, reads and deletes, and the rows go with the project.
 
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -72,7 +72,7 @@ describe.skipIf(!hasDatabase)("wiki editing state (integration)", () => {
     const { id: otherId } = await memberClient(app, admin, "wiki-schema-other", ["user"], ["shop"]);
     await drafts.create({ projectId: "shop", userId: otherId, path: "01-standards/naming.md", pageId: null, text: "theirs", baseCommit: null, baseHash: null });
     expect((await drafts.listOf("shop", userId)).map((draft) => draft.path)).toEqual(["01-standards/naming.md"]);
-    expect((await drafts.othersOn("shop", "01-standards/naming.md", userId, new Date(Date.now() - 120_000).toISOString())).map((draft) => draft.userId)).toEqual([otherId]);
+    expect(await drafts.othersOn("shop", "01-standards/naming.md", userId, new Date(Date.now() - 120_000).toISOString())).toEqual([{ userId: otherId, name: "wiki-schema-other", touchedAt: expect.any(String) }]);
     expect(await drafts.othersOn("shop", "01-standards/naming.md", userId, new Date(Date.now() + 60_000).toISOString())).toEqual([]);
 
     expect(await drafts.remove(created.id)).toBe(true);
@@ -131,11 +131,11 @@ describe.skipIf(!hasDatabase)("wiki editing state (integration)", () => {
     await expect(app.db.query("insert into knowledge.wiki_restriction (project_id, path_prefix, subject_kind, subject_id, kind) values ('shop', 'a/', 'user', 'u', 'delete')")).rejects.toThrow(/check constraint/);
   });
 
-  it("answers the access route with a placeholder that grants nothing, for people with Project Access only", async () => {
+  it("answers the access route for people with Project Access only", async () => {
     const { client: reader } = await memberClient(app, admin, "wiki-schema-reader", ["user"], ["shop"]);
     const response = await reader.get("/projects/shop/wiki/access?path=01-standards%2Fnaming.md");
     expect(response.status).toBe(200);
-    expect(response.body.data).toEqual({ canWrite: false, canPublish: false, reason: "not-implemented" });
+    expect(response.body.data).toMatchObject({ path: "01-standards/naming.md", editable: true, canWrite: false, canPublish: false, direct: false, refusal: { code: "permission" }, pending: null });
     expect((await reader.get("/projects/shop/wiki/access")).status).toBe(400);
     const { client: outsider } = await memberClient(app, admin, "wiki-schema-outsider", ["user"], []);
     expect((await outsider.get("/projects/shop/wiki/access?path=a.md")).status).toBe(403);

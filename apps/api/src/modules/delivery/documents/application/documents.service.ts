@@ -4,6 +4,7 @@
 // `refs/heads/<branch>`; paths are repository paths (no traversal, nothing in `.git`), and
 // nothing under `restricted/` is ever served (restricted records are not committed, ADR-0029).
 
+import { createHash } from "node:crypto";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, PayloadTooLargeException, UnsupportedMediaTypeException } from "@nestjs/common";
 import { assertSafeRepoPath, GitError } from "@kintsugi/git";
 import { isAttachmentName, isAttachmentType, pageAttachmentsDir, pageFolder } from "@kintsugi/domain";
@@ -176,6 +177,24 @@ export class DocumentsService {
   async branchTips(context: DocumentContext): Promise<{ tips: Map<string, MirrorBranch>; defaultTip: MirrorBranch | undefined }> {
     const tips = new Map((await this.reader.branches(context.repo)).map((branch) => [branch.name, branch]));
     return { tips, defaultTip: tips.get(context.defaultBranch) };
+  }
+
+  /**
+   * The SHA-256 (hex) of the bytes of a file at a commit, the hash a writer checks before it replaces the file;
+   * undefined when the file does not exist there (a new page), 413 when it is larger than `maxBytes`.
+   */
+  async hashAt(context: DocumentContext, commit: string, path: string, maxBytes: number): Promise<string | undefined> {
+    const read = await this.reader.readBytes(context.repo, commit, servablePath(path, false), maxBytes);
+    switch (read.status) {
+      case "missing":
+        return undefined;
+      case "not-a-file":
+        throw new BadRequestException(`${path} is a directory`);
+      case "too-large":
+        throw new PayloadTooLargeException(`${path} is ${read.size} bytes; pages up to ${maxBytes} bytes can be edited`);
+      case "ok":
+        return createHash("sha256").update(read.bytes).digest("hex");
+    }
   }
 
   /** A text file at a commit; undefined when it is missing, not a file, too large or binary. */

@@ -2,24 +2,36 @@
 // that answer who may write. Published documents stay in Git; the Brain module owns the wiki switch.
 
 import { Module } from "@nestjs/common";
+import { DocumentWritesModule } from "#modules/admin/document-writes/index.js";
 import { ProjectAccessModule } from "#modules/admin/project-access/index.js";
+import { DocumentsModule } from "#modules/delivery/documents/index.js";
 import { WikiAccessService } from "./application/wiki-access.service.js";
-import { WikiAttachments, WikiDrafts, WikiIdCounters, WikiRestrictions } from "./domain/wiki.ports.js";
+import { WikiDraftService } from "./application/wiki-draft.service.js";
+import { WikiRestrictionService } from "./application/wiki-restriction.service.js";
+import { WikiAttachments, WikiDirectPublish, WikiDrafts, WikiIdCounters, WikiRestrictions, WikiSubjects } from "./domain/wiki.ports.js";
+import { ManifestDirectPublish } from "./infrastructure/manifest-direct-publish.js";
 import { PgWikiIdCounters } from "./infrastructure/pg-wiki.counters.js";
 import { PgWikiAttachments, PgWikiDrafts } from "./infrastructure/pg-wiki.drafts.js";
 import { PgWikiRestrictions } from "./infrastructure/pg-wiki.restrictions.js";
+import { PgWikiSubjects } from "./infrastructure/pg-wiki.subjects.js";
 import { WikiAccessController } from "./interface/wiki-access.controller.js";
+import { WikiDraftController } from "./interface/wiki-draft.controller.js";
+import { WikiRestrictionController } from "./interface/wiki-restriction.controller.js";
 
 @Module({
-  imports: [ProjectAccessModule],
-  controllers: [WikiAccessController],
+  imports: [ProjectAccessModule, DocumentsModule, DocumentWritesModule],
+  controllers: [WikiAccessController, WikiDraftController, WikiRestrictionController],
   providers: [
     WikiAccessService,
+    WikiDraftService,
+    WikiRestrictionService,
     { provide: WikiDrafts, useClass: PgWikiDrafts },
     { provide: WikiAttachments, useClass: PgWikiAttachments },
     { provide: WikiIdCounters, useClass: PgWikiIdCounters },
     { provide: WikiRestrictions, useClass: PgWikiRestrictions },
+    { provide: WikiSubjects, useClass: PgWikiSubjects },
+    { provide: WikiDirectPublish, useClass: ManifestDirectPublish },
   ],
-  exports: [WikiAccessService, WikiDrafts, WikiAttachments, WikiIdCounters, WikiRestrictions],
+  exports: [WikiAccessService, WikiDraftService, WikiRestrictionService, WikiDrafts, WikiAttachments, WikiIdCounters, WikiRestrictions],
 })
 export class WikiModule {}

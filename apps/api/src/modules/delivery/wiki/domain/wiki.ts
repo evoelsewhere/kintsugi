@@ -19,6 +19,35 @@ export interface WikiDraft {
   touchedAt: string;
 }
 
+/** Another person working on the same page: who and when, never their text. */
+export interface WikiPresence {
+  userId: string;
+  /** Their display name, or their sign-in name when they have none. */
+  name: string;
+  touchedAt: string;
+}
+
+/** A draft as the editor sees it: the caller's own, with who else has touched the page lately. */
+export interface WikiDraftView {
+  path: string;
+  pageId: string | null;
+  text: string;
+  revision: number;
+  baseCommit: string | null;
+  baseHash: string | null;
+  touchedAt: string;
+  writeId: string | null;
+  others: WikiPresence[];
+}
+
+/** One line of the list of a person's drafts. */
+export interface WikiDraftSummary {
+  path: string;
+  touchedAt: string;
+  revision: number;
+  writeId: string | null;
+}
+
 /** What a draft is created with; the rest of it is the store's (id, revision 1, time). */
 export interface NewWikiDraft {
   projectId: string;
@@ -52,9 +81,47 @@ export interface WikiRestriction {
   createdAt: string;
 }
 
-/** What the access route answers until the rules are in place. */
-export interface WikiAccessPlaceholder {
-  canWrite: false;
-  canPublish: false;
-  reason: "not-implemented";
+/** Why a person may not write a page. */
+export interface WikiRefusal {
+  code: "not-editable" | "permission" | "restriction";
+  message: string;
+  /** The restriction that refuses, for code `restriction`. */
+  pathPrefix?: string;
+}
+
+/** The open write of a page, which a person sees as "waiting for review". */
+export interface WikiPendingWrite {
+  writeId: string;
+  status: string;
+  prUrl: string | null;
+  author: string | null;
+}
+
+/** What the caller may do to one page (design-wiki-draft-publish, section 1). The API checks again at every write route. */
+export interface WikiAccess {
+  path: string;
+  /** The path is a page (or attachment) the wiki can edit at all. */
+  editable: boolean;
+  /** Needs `wiki.write`, an editable path and every `edit` restriction that covers it. */
+  canWrite: boolean;
+  /** Publishing goes through a pull request, so it is `canWrite`. */
+  canPublish: boolean;
+  /** Publish straight to the default branch: `canWrite`, `wiki.publish`, a path of `directPublishPaths` and the `publish` restrictions. */
+  direct: boolean;
+  refusal: WikiRefusal | null;
+  pending: WikiPendingWrite | null;
+}
+
+/** A person or role a restriction lets in, with the name to show. */
+export interface WikiSubject {
+  kind: WikiSubjectKind;
+  id: string;
+  name: string;
+}
+
+/** The restriction of one prefix and kind as the portal shows it: everyone it lets in. */
+export interface WikiRestrictionView {
+  pathPrefix: string;
+  kind: WikiRestrictionKind;
+  subjects: WikiSubject[];
 }

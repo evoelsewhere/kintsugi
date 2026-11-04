@@ -1,6 +1,6 @@
 // Ports of the wiki's working state (ADR-0098, ADR-0099); the Pg adapters implement them.
 
-import type { NewWikiDraft, WikiAttachment, WikiDraft, WikiRestriction, WikiRestrictionKind, WikiSubjectKind } from "./wiki.js";
+import type { NewWikiDraft, WikiAttachment, WikiDraft, WikiPresence, WikiRestriction, WikiRestrictionKind, WikiSubjectKind } from "./wiki.js";
 
 export abstract class WikiDrafts {
   /** The draft of `userId` for the page, or undefined. */
@@ -9,7 +9,8 @@ export abstract class WikiDrafts {
   abstract create(draft: NewWikiDraft): Promise<WikiDraft>;
   /**
    * Replaces the text if the stored revision is `baseRevision`, raising the revision by one and touching it; undefined
-   * when the draft is gone or its revision has moved on.
+   * when the draft is gone or its revision has moved on. A change of the text means the draft is no longer what the
+   * write it was published with carried, so `writeId` is cleared; the same text keeps it.
    */
   abstract update(id: string, baseRevision: number, text: string): Promise<WikiDraft | undefined>;
   /** Sets or clears the write that published the draft. */
@@ -17,8 +18,11 @@ export abstract class WikiDrafts {
   abstract remove(id: string): Promise<boolean>;
   /** The drafts of a person in a project, newest touched first. */
   abstract listOf(projectId: string, userId: string): Promise<WikiDraft[]>;
-  /** The drafts of other people for the page touched since `since` (an ISO time), newest first. */
-  abstract othersOn(projectId: string, path: string, exceptUserId: string, since: string): Promise<WikiDraft[]>;
+  /**
+   * The other people who have a draft of the page touched since `since` (an ISO time), newest first, and who still hold
+   * Project Access; their text stays where it is.
+   */
+  abstract othersOn(projectId: string, path: string, exceptUserId: string, since: string): Promise<WikiPresence[]>;
 }
 
 export abstract class WikiAttachments {
@@ -41,6 +45,22 @@ export abstract class WikiRestrictions {
   abstract covering(projectId: string, path: string): Promise<WikiRestriction[]>;
   /** Adds the restriction; the same one again changes nothing. */
   abstract add(input: { projectId: string; pathPrefix: string; subjectKind: WikiSubjectKind; subjectId: string; kind: WikiRestrictionKind; createdBy: string | null }): Promise<WikiRestriction>;
+  /** Makes `subjects` exactly who the prefix lets in for the kind, in one step: the rows it had are replaced. */
+  abstract replace(input: { projectId: string; pathPrefix: string; kind: WikiRestrictionKind; subjects: ReadonlyArray<{ kind: WikiSubjectKind; id: string }>; createdBy: string | null }): Promise<WikiRestriction[]>;
   /** Removes every row of the prefix and kind; the number removed. */
   abstract clear(projectId: string, pathPrefix: string, kind: WikiRestrictionKind): Promise<number>;
+}
+
+/** The people and roles restrictions name. */
+export abstract class WikiSubjects {
+  /** The ids of the roles a user holds. */
+  abstract rolesOf(userId: string): Promise<string[]>;
+  /** The names to show for users (their display name, or sign-in name) and roles; an id that does not exist is missing from the map. */
+  abstract names(kind: WikiSubjectKind, ids: readonly string[]): Promise<Map<string, string>>;
+}
+
+/** Where a page may be published straight to the default branch. */
+export abstract class WikiDirectPublish {
+  /** The globs of `directPublishPaths` in kintsugi.yaml at the head of the default branch; none when there are none or the file cannot be read. */
+  abstract globs(projectId: string): Promise<readonly string[]>;
 }
