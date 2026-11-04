@@ -16,6 +16,7 @@ import {
   type Trailer,
   WRITER_BRANCH_PREFIX,
   fetchMirror,
+  findPageIdOwners,
   pullRequestProvider,
   resolveCommit,
   runGit,
@@ -27,6 +28,7 @@ import type { RepositoryStore } from "../git-sync/repositories.js";
 import { EmptyRepositoryError, remoteOptions, syncRepository, withMirrorLock } from "../git-sync/sync.js";
 import type { DocumentWriteRequest } from "../queues.js";
 import { OutputRuleError, decodeFiles, readOutputDir, splitByAutoCommit, validateOutputs } from "./outputs.js";
+import { assertNoDuplicatePageIds } from "./page-ids.js";
 import type { DocumentWriteOutcome, DocumentWriteStore } from "./store.js";
 
 export interface WriterDeps {
@@ -165,6 +167,8 @@ export async function writeDocument(deps: WriterDeps, request: DocumentWriteRequ
     const options = remoteOptions(repository);
     const defaultBranch = repository.defaultBranch ?? (await mirrorDefaultBranch(mirror));
     const head = await resolveCommit(mirror, `refs/heads/${defaultBranch}`);
+    // Two pages never share an id: the writer is the last to check (ADR-0096 decision 4).
+    await assertNoDuplicatePageIds(files, (id) => findPageIdOwners(mirror, head, id));
     const toWrite = await withoutExisting(mirror, head, files, new Set((request.files ?? []).filter((file) => file.createOnly === true).map((file) => file.path)));
     const { autoCommit, review } = request.reviewAll === true ? { autoCommit: [], review: toWrite } : splitByAutoCommit(toWrite, await autoCommitPaths(mirror, head, options));
 

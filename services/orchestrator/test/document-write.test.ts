@@ -220,6 +220,23 @@ describe.skipIf(!hasDatabase)("document writer (integration)", () => {
     expect((await row(huge.writeId))?.error).toMatch(/limit/);
   });
 
+  it("refuses a page whose id another file already holds, and commits nothing (P2-029)", async () => {
+    const holder = "---\nid: PAGE-ENG-0001\ntitle: Holder\n---\n\n# Holder\n";
+    await remote.commit("docs", "20-spaces/eng/holder.md", holder);
+    const before = remote.git("docs", "rev-parse", "main").trim();
+    const twin = request("docs", { kind: "job-output", files: [{ path: "20-spaces/eng/twin.md", content: "---\nid: PAGE-ENG-0001\n---\n\n# Twin\n" }] });
+    expect(await writeDocument(deps, twin)).toMatchObject({ status: "failed" });
+    expect((await row(twin.writeId))?.error).toBe("Page id PAGE-ENG-0001 is already defined by 20-spaces/eng/holder.md");
+    expect(remote.git("docs", "rev-parse", "main").trim()).toBe(before);
+    expect(() => remote.git("docs", "rev-parse", `kintsugi/alice/${twin.writeId}`)).toThrow();
+
+    // The page itself, edited, and another page with its own id, are accepted.
+    const edit = request("docs", { kind: "job-output", files: [{ path: "20-spaces/eng/holder.md", content: `${holder}\nMore text.\n` }] });
+    expect(await writeDocument(deps, edit)).toMatchObject({ status: "pr-opened" });
+    const fresh = request("docs", { kind: "job-output", files: [{ path: "20-spaces/eng/fresh.md", content: "---\nid: PAGE-ENG-0002\n---\n\n# Fresh\n" }] });
+    expect(await writeDocument(deps, fresh)).toMatchObject({ status: "pr-opened" });
+  });
+
   it("reports identical files as unchanged", async () => {
     const write = request("docs", { files: [{ path: "README.md", content: "docs\n" }] });
     expect(await writeDocument(deps, write)).toEqual({ status: "unchanged" });
