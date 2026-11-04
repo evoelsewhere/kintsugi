@@ -1,7 +1,7 @@
 import type { BrainGrepMatch, BrainNode } from "@kintsugi/domain";
 import { describe, expect, it } from "vitest";
 import { resolveDocumentLink } from "./document-links";
-import { attachmentUrl, LABEL_WALK_MAX_FOLDERS, pagesWithLabel, headingOffPlace, SCROLL_SETTLE_MS, scrollSettled, hitCount, isFrontMatterLine, readableExcerpt, imageSource, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiLink, wikiRead, hitPaths, withDocuments, highlightParts, normalizeLabel, normalizeSpace, readWikiSearch, searchFacets, searchHits, searchLineLink, wikiSearchLink, labelledPages, wikiLabelLink, wikiPhase, hiddenPaths, groupBacklinks, tocOf, spacePages, spaceHomePath, wikiSpaceLink, CHANGE_LABEL, changedFileTarget, wikiRecentLink } from "./wiki";
+import { attachmentUrl, wikiDraftsLink, LABEL_WALK_MAX_FOLDERS, pagesWithLabel, headingOffPlace, SCROLL_SETTLE_MS, scrollSettled, hitCount, isFrontMatterLine, readableExcerpt, imageSource, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiLink, wikiRead, hitPaths, withDocuments, highlightParts, normalizeLabel, normalizeSpace, readWikiSearch, searchFacets, searchHits, searchLineLink, wikiSearchLink, labelledPages, wikiLabelLink, wikiPhase, hiddenPaths, groupBacklinks, tocOf, spacePages, spaceHomePath, wikiSpaceLink, CHANGE_LABEL, changedFileTarget, wikiRecentLink } from "./wiki";
 
 const node = (over: Partial<BrainNode> & Pick<BrainNode, "id" | "kind" | "path">): BrainNode => ({
   parentId: null,
@@ -663,5 +663,12 @@ describe("the address of a restore", () => {
     expect(readPageMode(new URLSearchParams("view=edit&restore=main"))).toEqual({ mode: "edit" });
     expect(readPageMode(new URLSearchParams("view=edit"))).toEqual({ mode: "edit" });
     expect(wikiPageLink("p", "a/b.md", { mode: "edit" })).toBe("/wiki/a/b.md?project=p&view=edit");
+  });
+});
+
+describe("the address of the drafts", () => {
+  it("is a route of its own with the project", () => {
+    expect(wikiDraftsLink("billing")).toBe("/wiki/-/drafts?project=billing");
+    expect(wikiDraftsLink("a b")).toBe("/wiki/-/drafts?project=a%20b");
   });
 });

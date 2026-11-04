@@ -25,7 +25,10 @@ import {
   attachmentProblem,
   attachmentTypeOf,
   draftImageUrl,
+  draftStateLabel,
+  type DraftSummary,
   messageProblem,
+  sortDrafts,
   toBase64,
   restoreMessage,
   setLabels,
@@ -782,5 +785,20 @@ describe("attachments of a draft", () => {
     expect(draftImageUrl("p", page, "20-spaces/eng/runbooks/_attachments/sub/failover.png", ["sub/failover.png"])).toBeUndefined();
     expect(draftImageUrl("p", page, "20-spaces/eng/runbooks/_attachments/", [""])).toBeUndefined();
     expect(draftImageUrl("p", "top.md", "_attachments/a.png", ["a.png"])).toContain("name=a.png");
+  });
+});
+
+describe("the person's drafts", () => {
+  const entry = (path: string, touchedAt: string, writeId: string | null = null): DraftSummary => ({ path, touchedAt, revision: 1, writeId });
+
+  it("lists the newest saved first, by path when saved at the same time", () => {
+    const sorted = sortDrafts([entry("b.md", "2026-11-05T01:00:00Z"), entry("a.md", "2026-11-05T02:00:00Z"), entry("c.md", "2026-11-05T01:00:00Z")]);
+    expect(sorted.map((draft) => draft.path)).toEqual(["a.md", "b.md", "c.md"]);
+    expect(sortDrafts([])).toEqual([]);
+  });
+
+  it("says whether a draft is still being written or its publish waits for review", () => {
+    expect(draftStateLabel(entry("a.md", "x"))).toBe("Not published");
+    expect(draftStateLabel(entry("a.md", "x", "w1"))).toBe("Waiting for review");
   });
 });

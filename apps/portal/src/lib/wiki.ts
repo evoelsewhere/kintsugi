@@ -578,6 +578,9 @@ export const scrollSettled = (elapsedMs: number, scrolledByHand: boolean): boole
 // ---- Recent changes ---------------------------------------------------------------------------------------------
 
 /** The address of the recent changes of a project's wiki: a route of its own, so it never collides with the path of a page. */
+/** The address of the person's drafts of a project's wiki: a route of its own, so it never collides with the path of a page. */
+export const wikiDraftsLink = (projectId: string): string => `${WIKI_BASE}/-/drafts?project=${encodeURIComponent(projectId)}`;
+
 export const wikiRecentLink = (projectId: string): string => `${WIKI_BASE}/-/recent?project=${encodeURIComponent(projectId)}`;
 
 /** What a commit did to one page, in a word. */

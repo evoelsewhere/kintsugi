@@ -787,6 +787,23 @@ export function labelCheck(input: string, existing: readonly string[]): { cleane
   return { cleaned, problem: undefined };
 }
 
+// ---- The person's drafts -----------------------------------------------------------------------------------------
+
+/** One line of `GET wiki/drafts`: a draft of the caller's. */
+export interface DraftSummary {
+  path: string;
+  touchedAt: string;
+  revision: number;
+  /** The write that publishes it, when a publish is waiting for review. */
+  writeId: string | null;
+}
+
+/** The newest saved first. */
+export const sortDrafts = (drafts: readonly DraftSummary[]): DraftSummary[] => [...drafts].sort((a, b) => b.touchedAt.localeCompare(a.touchedAt) || a.path.localeCompare(b.path));
+
+/** Where a draft stands, in a word: waiting for review once it was published as a pull request, else still being written. */
+export const draftStateLabel = (draft: Pick<DraftSummary, "writeId">): string => (draft.writeId === null ? "Not published" : "Waiting for review");
+
 // ---- Deleting a page ---------------------------------------------------------------------------------------------
 
 /** `POST wiki/delete`: the page goes in one write; links to it become broken links. */
