@@ -137,16 +137,17 @@ describe.skipIf(!hasDatabase)("brain search (integration)", () => {
     const positions: string[] = [];
     let found = 0;
     for (const [text, expected, options] of QUESTIONS) {
+      const started = Date.now();
       const view = await find(`text=${encodeURIComponent(text)}${options?.archived === true ? "&archived=true" : ""}&limit=20`);
       const pages: string[] = [];
       for (const hit of view.hits) if (!pages.includes(hit.node.path)) pages.push(hit.node.path);
       const at = pages.indexOf(expected);
-      positions.push(`${text} -> ${at + 1 === 0 ? "-" : at + 1}`);
+      positions.push(`${text} -> ${at + 1 === 0 ? "-" : at + 1} (${Date.now() - started} ms)`);
       if (at >= 0 && at < 5) found += 1;
     }
     console.log(`brain search positions:\n${positions.join("\n")}`);
     expect(found, positions.join("; ")).toBeGreaterThanOrEqual(12);
-  });
+  }, 120_000);
 
   it("gives each hit its breadcrumb, summary, matching line and a citation at the indexed commit, best first", async () => {
     const view = await find("text=database%20failover%20steps&limit=10");

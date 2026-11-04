@@ -306,27 +306,26 @@ export class BrainService {
     const found = await this.searchIndex.search(projectId, { query: searchQueryOf(query.text), space: query.space?.toUpperCase(), label: query.label, includeHidden: query.archived, limit: query.limit });
     const words = searchWords(query.text);
     const context = found.hits.length === 0 ? undefined : await this.documents.context(projectId);
-    // The text of each page once: at most `limit` hits, so at most that many reads.
-    const lines = new Map<string, string[] | undefined>();
-    for (const { node } of found.hits) {
-      if (lines.has(node.path) || context === undefined) continue;
-      const text = await this.documents.readText(context, source.indexedCommit, node.path);
-      lines.set(node.path, text === undefined ? undefined : text.split("\n"));
-    }
-    const hits: BrainSearchHit[] = [];
-    for (const { node, rank } of found.hits) {
-      const own = lines.get(node.path);
-      const start = node.lineStart ?? 1;
-      const end = node.lineEnd ?? start;
-      hits.push({
-        node,
-        breadcrumb: await this.breadcrumb(projectId, node),
-        summary: node.summary,
-        line: own === undefined ? null : matchingLine(own, start, end, words),
-        citation: `${node.path}:${start}-${end}@${source.indexedCommit}`,
-        rank,
-      });
-    }
+    // The text of each page once, all at the same time: at most `limit` hits, so at most that many reads (each a call to Git).
+    const paths = [...new Set(found.hits.map(({ node }) => node.path))];
+    const texts = new Map<string, string[] | undefined>(
+      context === undefined ? [] : await Promise.all(paths.map(async (path) => [path, (await this.documents.readText(context, source.indexedCommit, path))?.split("\n")] as const)),
+    );
+    const hits: BrainSearchHit[] = await Promise.all(
+      found.hits.map(async ({ node, rank }) => {
+        const own = texts.get(node.path);
+        const start = node.lineStart ?? 1;
+        const end = node.lineEnd ?? start;
+        return {
+          node,
+          breadcrumb: await this.breadcrumb(projectId, node),
+          summary: node.summary,
+          line: own === undefined ? null : matchingLine(own, start, end, words),
+          citation: `${node.path}:${start}-${end}@${source.indexedCommit}`,
+          rank,
+        };
+      }),
+    );
     return { commit: source.indexedCommit, hits, leftOut: found.leftOut };
   }
 
