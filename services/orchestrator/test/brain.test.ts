@@ -6,7 +6,7 @@ import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BRAIN_BUILDER_VERSION, BRAIN_MAX_FILE_BYTES, BRAIN_MAX_LINKS_PER_NODE, type BrainSource, buildBrainTree } from "@kintsugi/domain";
+import { BRAIN_BUILDER_VERSION, BRAIN_MAX_FILE_BYTES, BRAIN_MAX_LINKS_PER_NODE, type BrainSource, assembleBrainTree, brainPartsOfSources } from "@kintsugi/domain";
 import { CheckoutStorage } from "@kintsugi/git";
 import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -209,18 +209,18 @@ describe.skipIf(!hasDatabase)("brain links of a node over the cap (integration, 
     await db?.drop();
   });
 
-  const build = (count: number) =>
-    buildBrainTree(
-      [
-        { path: INDEX, text: `# Index\n\n${Array.from({ length: count }, (_, n) => `- [Page ${n}](p${n}.md)`).join("\n")}` },
-        ...Array.from({ length: count }, (_, n) => ({ path: `00-project/p${n}.md`, text: `# Page ${n}\n\nText.` })),
-      ],
-      "wide @ main",
-    );
+  const build = (count: number) => {
+    const { parts, indexed } = brainPartsOfSources([
+      { path: INDEX, text: `# Index\n\n${Array.from({ length: count }, (_, n) => `- [Page ${n}](p${n}.md)`).join("\n")}` },
+      ...Array.from({ length: count }, (_, n) => ({ path: `00-project/p${n}.md`, text: `# Page ${n}\n\nText.` })),
+    ]);
+    return { parts, tree: assembleBrainTree(parts, "wide @ main", indexed) };
+  };
 
   it("stores the cap and says how many links there are, at the cap and one over it", async () => {
     for (const count of [BRAIN_MAX_LINKS_PER_NODE, BRAIN_MAX_LINKS_PER_NODE + 1]) {
-      await store.replace("wide", "c".repeat(40), BRAIN_BUILDER_VERSION, build(count), { durationMs: 1 });
+      const { parts, tree } = build(count);
+      await store.replace("wide", "c".repeat(40), BRAIN_BUILDER_VERSION, tree, { durationMs: 1 }, parts);
       const stored = await db.pool.query<{ count: string }>("select count(*) from knowledge.brain_link where project_id = 'wide' and from_id = $1", [INDEX]);
       expect(Number(stored.rows[0]?.count), String(count)).toBe(BRAIN_MAX_LINKS_PER_NODE);
       const links = await store.links("wide", INDEX, 20);

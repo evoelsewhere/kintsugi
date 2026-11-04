@@ -60,8 +60,17 @@ The index holds at most 20,000 documents. A document has at most 2,000 headings;
 Builds run on the worker's queue `brain-index`, one per project at a time. A build:
 
 1. resolves the branch in the mirror and fetches the Markdown blobs of its tip;
-2. reads all of them in one batch and builds the tree;
-3. replaces the stored tree in one transaction.
+2. reads the documents and builds the tree, whole or incrementally (below);
+3. writes the tree in one transaction.
+
+A **whole** build reads every indexed document, builds the tree and replaces the stored one; it also writes `knowledge.brain_ref`, the references each document makes (a link or a mention of an id, in the order they were found), and the front matter data the tree reads again (`brain_node.home`: a home page's `key` and `order`, a card's anchor alias). An **incremental** build ([ADR-0097](../decisions/0097-brain-indexes-wiki-pages.md) decision 6) reads only the documents that changed since the stored commit, takes the others from the stored rows and references, assembles the tree with the same code (`assembleBrainTree`), and writes only the rows that differ, in one transaction that checks the index is still at the commit it started from. It stores the same rows as a whole build of the same commit: a property test of the builder and a database test prove it. The last change recorded for a document that did not change is the stored one, so a document whose last change is older than the 10,000 commits a whole build reads may show it until the next whole build.
+
+An incremental build runs only when all of these hold; otherwise, and when it fails, the same job builds whole:
+
+- the stored tree was built by this builder version, from a whole build whose references are stored, and left no document out;
+- the stored commit is an ancestor of the new one, and at most 2,000 indexed files (and at most a fifth of the documents) changed;
+- fewer than 50 incremental builds have followed the last whole build, and that build is less than a day old;
+- the build is not a manager's Rebuild, which always builds whole.
 
 A failed build sets the state `failed` with its error and is not retried on the same commit. The tree of the last good build stays readable. States are `not-built`, `queued`, `indexing`, `ready`, `failed` and `off`.
 
@@ -120,4 +129,4 @@ Text returned by the Brain is project data, not instructions. Each `brain_read` 
 
 ## Storage
 
-`knowledge.brain_source` holds one row per project: branch, state, indexed and attempted commit, counts, error and builder version. `knowledge.brain_node` and `knowledge.brain_link` hold the tree of the indexed commit; `brain_node.outgoing_links` is the total of a node whose links were capped. Deleting a project deletes its Brain.
+`knowledge.brain_source` holds one row per project: branch, state, indexed and attempted commit, counts, error and builder version. `knowledge.brain_node` and `knowledge.brain_link` hold the tree of the indexed commit, `knowledge.brain_ref` the references of its documents, and `brain_source` counts the incremental builds since the last whole one (`incremental_builds`, `whole_built_at`, `last_build`, `refs_complete`); `brain_node.outgoing_links` is the total of a node whose links were capped. Deleting a project deletes its Brain.
