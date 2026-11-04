@@ -5,17 +5,21 @@ import { Body, Controller, HttpCode, Param, Post, UseGuards } from "@nestjs/comm
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { type Actor, CurrentActor } from "#common/auth/decorators.js";
 import { ProjectAccessGuard } from "#modules/admin/project-access/index.js";
+import { type WikiDeleteResult, WikiDeleteService } from "../application/wiki-delete.service.js";
 import { WikiPublishService } from "../application/wiki-publish.service.js";
 import type { WikiPublishResult } from "../domain/wiki.js";
-import { type PublishBody, publishSchema } from "./wiki.dto.js";
+import { type DeletePageBody, type PublishBody, deletePageSchema, publishSchema } from "./wiki.dto.js";
 
 @ApiTags("delivery · wiki")
-@Controller("projects/:id/wiki/publish")
+@Controller("projects/:id/wiki")
 @UseGuards(ProjectAccessGuard)
 export class WikiPublishController {
-  constructor(private readonly publishing: WikiPublishService) {}
+  constructor(
+    private readonly publishing: WikiPublishService,
+    private readonly deleting: WikiDeleteService,
+  ) {}
 
-  @Post()
+  @Post("publish")
   @HttpCode(200)
   @ApiOperation({
     summary: "Publish the caller's draft of a page: a pull request, or the default branch where the manifest allows it",
@@ -24,5 +28,15 @@ export class WikiPublishController {
   })
   publish(@Param("id") id: string, @Body({ schema: publishSchema }) body: PublishBody, @CurrentActor() actor: Actor): Promise<WikiPublishResult> {
     return this.publishing.publish(id, actor, body);
+  }
+
+  @Post("delete")
+  @HttpCode(200)
+  @ApiOperation({
+    summary: "Delete a page: one write that removes the file and its name from the folder's order list, by pull request or directly",
+    description: "The answer carries brokenLinks, the number of links into the page that will be left broken; a page with a write open is a 409 open-write.",
+  })
+  delete(@Param("id") id: string, @Body({ schema: deletePageSchema }) body: DeletePageBody, @CurrentActor() actor: Actor): Promise<WikiDeleteResult> {
+    return this.deleting.delete(id, actor, body);
   }
 }

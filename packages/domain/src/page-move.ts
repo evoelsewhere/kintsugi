@@ -208,6 +208,14 @@ function editOrder(text: string, remove: readonly string[], add: string | undefi
   return lines.join("\n");
 }
 
+/**
+ * A home page's text without the page of that folder named `pageFile` in its `order:` list (written with or without `.md`);
+ * the text as it was when the page has no `order:` or is not in it. Deleting a page uses it; moving one does it inside `planMove`.
+ */
+export function withoutOrderEntry(homeText: string, pageFile: string): string {
+  return editOrder(homeText, [pageFile, pageFile.replace(/\.md$/i, "")], undefined);
+}
+
 const folderOf = (path: string): string => path.slice(0, Math.max(0, path.lastIndexOf("/")));
 const nameOf = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
 

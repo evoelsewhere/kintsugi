@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import { buildBrainTree } from "../src/brain.js";
-import { type PageFile, type PageMovePlan, planMove } from "../src/page-move.js";
+import { type PageFile, type PageMovePlan, planMove, withoutOrderEntry } from "../src/page-move.js";
 
 const textOf = (plan: PageMovePlan, path: string): string | undefined => ("entries" in plan ? plan.entries.find((entry) => entry.path === path)?.text : undefined);
 const must = (plan: PageMovePlan): Extract<PageMovePlan, { entries: unknown }> => {
@@ -244,4 +244,22 @@ describe("planMove property test", () => {
     }
     expect(moved).toBeGreaterThan(ROUNDS / 2);
   }, 60_000);
+});
+
+describe("withoutOrderEntry", () => {
+  const page = (order: string): string => `---\ntitle: Space\n${order}---\n\n# Space\n`;
+
+  it("drops the page from a block or an inline order, with or without .md, and keeps every other byte", () => {
+    expect(withoutOrderEntry(page("order:\n  - first\n  - c\n  - last\n"), "c.md")).toBe(page("order:\n  - first\n  - last\n"));
+    expect(withoutOrderEntry(page("order:\n  - first\n  - c.md\n"), "c.md")).toBe(page("order:\n  - first\n"));
+    expect(withoutOrderEntry(page("order: [one, c, two]\n"), "c.md")).toBe(page("order: [one, two]\n"));
+  });
+
+  it("leaves a home page without an order, or without the page in it, exactly as it was", () => {
+    const without = page("");
+    expect(withoutOrderEntry(without, "c.md")).toBe(without);
+    const other = page("order: [one, two]\n");
+    expect(withoutOrderEntry(other, "c.md")).toBe(other);
+    expect(withoutOrderEntry("# No front matter\n", "c.md")).toBe("# No front matter\n");
+  });
 });

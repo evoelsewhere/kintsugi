@@ -46,6 +46,10 @@ export const publishSchema = z
   .strict();
 export type PublishBody = z.infer<typeof publishSchema>;
 
+/** Body of a page delete: the page and the message of the write (its first line is the pull request's title). */
+export const deletePageSchema = z.object({ path: z.string().min(1).max(1000), message: z.string().trim().min(1).max(200) }).strict();
+export type DeletePageBody = z.infer<typeof deletePageSchema>;
+
 /** Body of a draft save (the JSON body limit of the API still applies). */
 export const saveDraftSchema = z
   .object({
