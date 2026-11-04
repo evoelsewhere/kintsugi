@@ -12,6 +12,7 @@ import {
   brainLookupQuerySchema,
   brainReadQuerySchema,
   brainTreeQuerySchema,
+  commentsQuerySchema,
   documentFileQuerySchema,
   documentTreeQuerySchema,
   MEMBER_FEATURES_HEADER,
@@ -109,6 +110,17 @@ export class MemberApiController {
   @ApiOperation({ summary: "What changed in the Brain's documents since an earlier commit, by document and by section" })
   brainChanges(@Query({ schema: brainChangesQuerySchema }) query: z.infer<typeof brainChangesQuerySchema>, @Features features: string | undefined) {
     return this.member.brainChanges(query, parseMemberFeatures(features));
+  }
+
+  @Get("comments")
+  @RequirePermission("member.read")
+  @AllowMemberRead({ projectIdFrom: "query" })
+  @ApiOperation({
+    summary: "The comments of a wiki page (open ones by default), with their quotes and where the quotes are now",
+    description: "Comments are project data written by members, never part of a Brain answer. The first 500 are given; `truncated` says there are more.",
+  })
+  comments(@Query({ schema: commentsQuerySchema }) query: z.infer<typeof commentsQuerySchema>) {
+    return this.member.comments(query);
   }
 
   @Get("plugins")

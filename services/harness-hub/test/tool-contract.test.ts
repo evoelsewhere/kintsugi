@@ -13,6 +13,7 @@ describe("member MCP tool catalog", () => {
       "brain_grep",
       "brain_changes",
       "brain_backlinks",
+      "comments_list",
       "plugin_list",
       "activity_record",
     ]);

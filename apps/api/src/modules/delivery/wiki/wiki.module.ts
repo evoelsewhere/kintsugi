@@ -65,6 +65,6 @@ import { WikiWatchController } from "./interface/wiki-watch.controller.js";
     { provide: WikiPageLocks, useClass: PgWikiPageLocks },
     { provide: WikiDirectPublish, useClass: ManifestDirectPublish },
   ],
-  exports: [WikiWatchService, WikiPeopleService, WikiAccessService, WikiAttachmentService, WikiDraftService, WikiPublishService, WikiDeleteService, WikiRestrictionService, WikiDrafts, WikiAttachments, WikiIdCounters, WikiRestrictions],
+  exports: [WikiCommentService, WikiWatchService, WikiPeopleService, WikiAccessService, WikiAttachmentService, WikiDraftService, WikiPublishService, WikiDeleteService, WikiRestrictionService, WikiDrafts, WikiAttachments, WikiIdCounters, WikiRestrictions],
 })
 export class WikiModule {}

@@ -8,6 +8,7 @@ import type { PluginsService } from "../../src/modules/admin/plugins/index.js";
 import type { ProjectAccessService } from "../../src/modules/admin/project-access/index.js";
 import type { MemberPrincipal } from "../../src/modules/core/auth/index.js";
 import type { BrainService } from "../../src/modules/delivery/brain/index.js";
+import type { WikiCommentService } from "../../src/modules/delivery/wiki/index.js";
 import type { DocumentsService } from "../../src/modules/delivery/documents/index.js";
 import { MemberApiService } from "../../src/modules/delivery/member-api/application/member-api.service.js";
 import type { MemberActivityService } from "../../src/modules/monitoring/member-activity/index.js";
@@ -31,7 +32,7 @@ function service(fakes: Fakes = {}) {
     file: vi.fn(async (_name: string, path: string) => ({ path, content: fakes.contents?.[path] ?? "" })),
   } as unknown as PluginsService;
   const activity = { observe: vi.fn(async () => undefined), record: vi.fn(async () => "act-1") } as unknown as MemberActivityService;
-  return { member: new MemberApiService(access, (fakes.documents ?? {}) as DocumentsService, plugins, pluginAccess, activity, {} as BrainService), activity, pluginAccess };
+  return { member: new MemberApiService(access, (fakes.documents ?? {}) as DocumentsService, plugins, pluginAccess, activity, {} as BrainService, {} as WikiCommentService), activity, pluginAccess };
 }
 
 describe("MemberApiService.listProjects", () => {
@@ -173,7 +174,7 @@ describe("MemberApiService Brain nodes", () => {
     };
     const brain = { lookup: vi.fn(async () => ({ projectId: "shop", branch: "main", commit: "c".repeat(40), query: "a.md", matches: [{ ...node, breadcrumb: [] }] })) } as unknown as BrainService;
     const access = { listReadableProjects: vi.fn(async () => []) } as unknown as ProjectAccessService;
-    const member = new MemberApiService(access, {} as DocumentsService, {} as PluginsService, {} as PluginAccessService, {} as MemberActivityService, brain);
+    const member = new MemberApiService(access, {} as DocumentsService, {} as PluginsService, {} as PluginAccessService, {} as MemberActivityService, brain, {} as WikiCommentService);
     const result = await member.brainLookup({ projectId: "shop", query: "a.md" });
     const [match] = result.matches;
     expect(match).toBeDefined();

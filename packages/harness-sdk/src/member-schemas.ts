@@ -286,6 +286,36 @@ export const brainBacklinksSchema = z.object({
   nextOffset: z.number().int().min(0).nullable(),
 }).strict();
 
+export const COMMENTS_ANSWER_MAX = 500;
+
+export const commentsQuerySchema = z.object({
+  schemaVersion: versionSchema,
+  projectId: projectIdSchema,
+  path: pathSchema.min(1),
+  status: z.enum(["open", "all"]).default("open"),
+}).strict();
+
+export const commentsSchema = z.object({
+  schemaVersion: z.literal(MEMBER_SCHEMA_VERSION),
+  projectId: projectIdSchema,
+  page: z.object({ key: z.string(), path: z.string() }).strict(),
+  comments: z.array(z.object({
+    id: z.string(),
+    parentId: z.string().nullable(),
+    author: z.object({ username: z.string(), displayName: z.string() }).strict(),
+    body: z.string(),
+    createdAt: z.string(),
+    editedAt: z.string().nullable(),
+    resolved: z.boolean(),
+    deleted: z.boolean(),
+    node: z.string().nullable(),
+    status: z.enum(["anchored", "moved", "orphaned"]),
+    line: z.number().int().nullable(),
+    quote: z.string().nullable(),
+  }).strict()),
+  truncated: z.boolean(),
+}).strict();
+
 export const brainChangesQuerySchema = z.object({
   schemaVersion: versionSchema,
   projectId: projectIdSchema,

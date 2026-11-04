@@ -13,6 +13,7 @@ import { NativeCredentialStore } from "./credential-store.js";
 import { chooseInTerminal } from "./prompt.js";
 import { registerActivityCommands } from "./commands/activity.js";
 import { registerAuthCommands } from "./commands/auth.js";
+import { registerCommentsCommand } from "./commands/comments.js";
 import { registerDocumentCommands } from "./commands/document.js";
 import { registerDoctorCommand } from "./commands/doctor.js";
 import { registerProjectCommands } from "./commands/project.js";
@@ -232,6 +233,7 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
   registerAuthCommands(program, deps);
   registerProjectCommands(program, deps);
   registerDocumentCommands(program, deps);
+  registerCommentsCommand(program, deps);
   registerActivityCommands(program, deps);
   registerDoctorCommand(program, deps);
   registerMcpCommands(program, deps);
