@@ -4,6 +4,7 @@
 
 import type { BrainNode } from "@kintsugi/domain";
 import { BRAIN_ROOT_ID } from "@kintsugi/domain";
+import { resolveDocumentLink } from "./document-links";
 
 /** The wiki lives under `/wiki/<path of the page in the document repo>`; the project is the `?project=` of the URL. */
 export const WIKI_BASE = "/wiki";
@@ -223,4 +224,28 @@ export function compareSummary(result: { status: "unchanged" | "added" | "delete
   if (result.status === "added") return `The page was added: ${lines(result.added)}`;
   if (result.status === "deleted") return `The page was deleted: ${lines(result.removed)}`;
   return `${lines(result.added)} added, ${result.removed} removed`;
+}
+
+// ---- Images -----------------------------------------------------------------------------------------------------
+// A wiki page may show images that are attachments of the repository (an `_attachments/` folder). The browser never
+// fetches anything else by itself: a remote image would tell its host who reads which page (design-reader-security 11).
+
+const IMAGE_FILE = /\.(png|jpe?g|gif|webp)$/i;
+
+/** What a Markdown image `![alt](src)` of the page at `from` becomes in the reader. */
+export type ImageSource =
+  /** An image attachment of the repository: shown from the API's attachment route. */
+  | { kind: "attachment"; path: string }
+  /** An image on the web: not loaded, shown as a link the reader may follow. */
+  | { kind: "external"; href: string }
+  /** Nothing is loaded: the alt text is shown (a data URL, a file outside `_attachments/`, any other type or scheme). */
+  | { kind: "none" };
+
+/** Decides what an image source is, resolving a relative one against the page it is written in. */
+export function imageSource(src: string | undefined, from: string): ImageSource {
+  if (src === undefined || src.trim() === "") return { kind: "none" };
+  const target = resolveDocumentLink(src, from);
+  if (target.kind === "external") return { kind: "external", href: target.href };
+  if (target.kind === "document" && isAttachmentPath(target.path) && IMAGE_FILE.test(target.path)) return { kind: "attachment", path: target.path };
+  return { kind: "none" };
 }
