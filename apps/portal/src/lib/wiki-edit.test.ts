@@ -12,6 +12,10 @@ import {
   defaultPublishMessage,
   hasConflictMarkers,
   messageProblem,
+  NEW_PAGE_TITLE_MAX,
+  newPageBody,
+  newPageProbe,
+  newPageProblem,
   PUBLISH_MESSAGE_MAX,
   publishModeLine,
   lineDiff,
@@ -493,5 +497,37 @@ describe("saving before publishing", () => {
     saver.change("typed");
     await expect(saver.whenSaved()).rejects.toThrow("The API did not answer");
     expect(saver.current.text).toBe("typed");
+  });
+});
+
+describe("a new page", () => {
+  it("needs a title with a letter or a digit in it, of at most 200 characters", () => {
+    expect(newPageProblem("")).toMatch(/title/);
+    expect(newPageProblem("   ")).toMatch(/title/);
+    expect(newPageProblem("---")).toMatch(/letter or digit/);
+    expect(newPageProblem("Runbook: failover")).toBeUndefined();
+    expect(newPageProblem("日本語 1")).toBeUndefined();
+    expect(newPageProblem("x".repeat(NEW_PAGE_TITLE_MAX + 1))).toMatch(/200/);
+  });
+
+  it("asks what may be written in a folder through a path in it, and never at the root", () => {
+    expect(newPageProbe("20-spaces/eng/runbooks")).toBe("20-spaces/eng/runbooks/new-page.md");
+    expect(newPageProbe("")).toBeUndefined();
+  });
+
+  it("sends the title trimmed and a template only when one is chosen", () => {
+    expect(newPageBody("a/b", "  My page ", "")).toEqual({ folder: "a/b", title: "My page" });
+    expect(newPageBody("a/b", "My page", "01-standards/page-templates/runbook.md")).toEqual({ folder: "a/b", title: "My page", templatePath: "01-standards/page-templates/runbook.md" });
+  });
+
+  it("opens the editor on exactly the draft text the API returned, byte for byte", async () => {
+    // A page made from a template: CRLF endings, no final newline, a front matter the editor must not reorder.
+    const text = "---\r\nid: PAGE-ENG-0042\r\ntitle: New runbook\r\nlabels: [z, a]\r\n---\r\n\r\n# New runbook\r\n\r\nSteps:\r\n- one";
+    const { saver, calls } = harness({ draft: draft({ text, revision: 1, baseCommit: null, baseHash: null }) });
+    expect(saver.current).toEqual({ text, revision: 1 });
+    // Publishing it unchanged saves the very same text.
+    await saver.whenSaved();
+    expect(calls).toEqual([]);
+    expect(textBytes(saver.current.text)).toBe(textBytes(text));
   });
 });
