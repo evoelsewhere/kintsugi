@@ -71,6 +71,11 @@ export interface NewWikiDraft {
   baseHash: string | null;
 }
 
+/** A file attached to a draft as the editor sees it: the name the server gave it and the Markdown that shows it. */
+export interface WikiAttachmentView extends WikiAttachment {
+  markdown: string;
+}
+
 /** A file attached to a draft. */
 export interface WikiAttachment {
   name: string;

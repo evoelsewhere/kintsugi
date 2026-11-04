@@ -5,6 +5,9 @@ import { json } from "express";
 const WIKI_TEXT_BODY_LIMIT = "12mb";
 /** `PUT /api/projects/:id/wiki/draft` and `POST /api/projects/:id/wiki/publish`. */
 const WIKI_TEXT_ROUTE = /^\/api\/projects\/[^/]+\/wiki\/(?:draft|publish)\/?$/;
+/** A file of 5 MiB is a little over 6.6 MiB as base64: `POST /api/projects/:id/wiki/draft/attachments`. */
+const WIKI_ATTACHMENT_BODY_LIMIT = "8mb";
+const WIKI_ATTACHMENT_ROUTE = /^\/api\/projects\/[^/]+\/wiki\/draft\/attachments\/?$/;
 
 /**
  * The API's JSON body limit: agent packages (Agent Builder import, ADR-0026) are larger than the 100 kB default, and
@@ -13,8 +16,10 @@ const WIKI_TEXT_ROUTE = /^\/api\/projects\/[^/]+\/wiki\/(?:draft|publish)\/?$/;
 export function configureApiBodyParser(app: NestExpressApplication): void {
   // A body is parsed once: the larger parser comes first for the page routes and the general one skips what it parsed.
   const wikiText = json({ limit: WIKI_TEXT_BODY_LIMIT });
+  const wikiAttachment = json({ limit: WIKI_ATTACHMENT_BODY_LIMIT });
   app.use((request: { method: string; path: string }, response: never, next: (error?: unknown) => void) => {
     if ((request.method === "PUT" || request.method === "POST") && WIKI_TEXT_ROUTE.test(request.path)) wikiText(request as never, response, next);
+    else if (request.method === "POST" && WIKI_ATTACHMENT_ROUTE.test(request.path)) wikiAttachment(request as never, response, next);
     else next();
   });
   app.useBodyParser("json", { limit: "4mb" });

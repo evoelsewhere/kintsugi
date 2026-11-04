@@ -3,6 +3,7 @@
 export { WikiModule } from "./wiki.module.js";
 export { WikiAccessService } from "./application/wiki-access.service.js";
 export { WikiDraftService } from "./application/wiki-draft.service.js";
+export { WikiAttachmentService } from "./application/wiki-attachment.service.js";
 export { WikiDeleteService } from "./application/wiki-delete.service.js";
 export { WikiPublishService } from "./application/wiki-publish.service.js";
 export { WikiRestrictionService } from "./application/wiki-restriction.service.js";

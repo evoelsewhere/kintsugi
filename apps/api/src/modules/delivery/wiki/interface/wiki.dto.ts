@@ -46,6 +46,16 @@ export const publishSchema = z
   .strict();
 export type PublishBody = z.infer<typeof publishSchema>;
 
+/** `?path&name` of one attachment of a draft. */
+export const attachmentQuerySchema = z.object({ path: z.string().min(1).max(1000), name: z.string().min(1).max(255) });
+export type AttachmentQuery = z.infer<typeof attachmentQuerySchema>;
+
+/** Body of an attachment: the page, the file's name and type as the person's browser has them, and its bytes in base64. */
+export const attachSchema = z
+  .object({ path: z.string().min(1).max(1000), name: z.string().min(1).max(255), contentType: z.string().min(1).max(100), contentBase64: z.string().min(1) })
+  .strict();
+export type AttachBody = z.infer<typeof attachSchema>;
+
 /** Body of a page delete: the page and the message of the write (its first line is the pull request's title). */
 export const deletePageSchema = z.object({ path: z.string().min(1).max(1000), message: z.string().trim().min(1).max(200) }).strict();
 export type DeletePageBody = z.infer<typeof deletePageSchema>;

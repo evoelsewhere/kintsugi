@@ -7,6 +7,7 @@ import { ProjectAccessModule } from "#modules/admin/project-access/index.js";
 import { BrainModule } from "#modules/delivery/brain/index.js";
 import { DocumentsModule } from "#modules/delivery/documents/index.js";
 import { WikiAccessService } from "./application/wiki-access.service.js";
+import { WikiAttachmentService } from "./application/wiki-attachment.service.js";
 import { WikiDeleteService } from "./application/wiki-delete.service.js";
 import { WikiDraftService } from "./application/wiki-draft.service.js";
 import { WikiMoveService } from "./application/wiki-move.service.js";
@@ -21,6 +22,7 @@ import { PgWikiAttachments, PgWikiDrafts } from "./infrastructure/pg-wiki.drafts
 import { PgWikiRestrictions } from "./infrastructure/pg-wiki.restrictions.js";
 import { PgWikiSubjects } from "./infrastructure/pg-wiki.subjects.js";
 import { WikiAccessController } from "./interface/wiki-access.controller.js";
+import { WikiAttachmentController } from "./interface/wiki-attachment.controller.js";
 import { WikiDraftController } from "./interface/wiki-draft.controller.js";
 import { WikiMoveController } from "./interface/wiki-move.controller.js";
 import { WikiPageController } from "./interface/wiki-page.controller.js";
@@ -29,7 +31,7 @@ import { WikiRestrictionController } from "./interface/wiki-restriction.controll
 
 @Module({
   imports: [ProjectAccessModule, DocumentsModule, DocumentWritesModule, BrainModule],
-  controllers: [WikiAccessController, WikiDraftController, WikiMoveController, WikiPageController, WikiPublishController, WikiRestrictionController],
+  controllers: [WikiAccessController, WikiAttachmentController, WikiDraftController, WikiMoveController, WikiPageController, WikiPublishController, WikiRestrictionController],
   providers: [
     WikiAccessService,
     WikiDraftService,
@@ -38,6 +40,7 @@ import { WikiRestrictionController } from "./interface/wiki-restriction.controll
     WikiRestrictionService,
     WikiPublishService,
     WikiDeleteService,
+    WikiAttachmentService,
     { provide: WikiDrafts, useClass: PgWikiDrafts },
     { provide: WikiAttachments, useClass: PgWikiAttachments },
     { provide: WikiIdCounters, useClass: PgWikiIdCounters },
@@ -46,6 +49,6 @@ import { WikiRestrictionController } from "./interface/wiki-restriction.controll
     { provide: WikiPageLocks, useClass: PgWikiPageLocks },
     { provide: WikiDirectPublish, useClass: ManifestDirectPublish },
   ],
-  exports: [WikiAccessService, WikiDraftService, WikiPublishService, WikiDeleteService, WikiRestrictionService, WikiDrafts, WikiAttachments, WikiIdCounters, WikiRestrictions],
+  exports: [WikiAccessService, WikiAttachmentService, WikiDraftService, WikiPublishService, WikiDeleteService, WikiRestrictionService, WikiDrafts, WikiAttachments, WikiIdCounters, WikiRestrictions],
 })
 export class WikiModule {}

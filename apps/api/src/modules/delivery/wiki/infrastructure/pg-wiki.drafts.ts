@@ -103,6 +103,11 @@ export class PgWikiAttachments extends WikiAttachments {
     return result.rows.map((row) => ({ name: row.name, contentType: row.content_type, size: row.size }));
   }
 
+  async readAll(draftId: string): Promise<Array<{ name: string; contentType: string; bytes: Buffer }>> {
+    const result = await getPool().query<{ name: string; content_type: string; bytes: Buffer }>("select name, content_type, bytes from knowledge.wiki_draft_attachment where draft_id = $1 order by name", [draftId]);
+    return result.rows.map((row) => ({ name: row.name, contentType: row.content_type, bytes: row.bytes }));
+  }
+
   async read(draftId: string, name: string): Promise<{ contentType: string; bytes: Buffer } | undefined> {
     const result = await getPool().query<{ content_type: string; bytes: Buffer }>("select content_type, bytes from knowledge.wiki_draft_attachment where draft_id = $1 and name = $2", [draftId, name]);
     const row = result.rows[0];

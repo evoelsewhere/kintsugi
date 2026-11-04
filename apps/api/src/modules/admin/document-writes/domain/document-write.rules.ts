@@ -2,6 +2,7 @@
 // checks them again for a page write, and is the last line: it does not trust the API. Pure: returns what is wrong.
 
 import { isWikiEditablePath } from "@kintsugi/domain";
+import { isBase64Text } from "#common/util/base64.js";
 import type { DocumentWriteFile, NewDocumentWrite } from "./document-write.js";
 
 /** The most entries one write may carry (a delete or a rename counts as one). */
@@ -11,7 +12,6 @@ export const MAX_FILE_BYTES = 5 * 1024 * 1024;
 export const MAX_WRITE_BYTES = 50 * 1024 * 1024;
 
 const SHA256 = /^[0-9a-f]{64}$/;
-const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 // eslint-disable-next-line no-control-regex -- control characters are exactly what is refused
 const CONTROL = /[\u0000-\u001f\u007f]/;
 const WRITER_BRANCH = /^kintsugi\/[A-Za-z0-9._/-]+$/;
@@ -61,7 +61,7 @@ export function documentWriteProblems(write: Pick<NewDocumentWrite, "kind" | "fi
     const bytes = contentBytes(file);
     total += bytes;
     check(bytes <= MAX_FILE_BYTES, `is larger than ${MAX_FILE_BYTES / (1024 * 1024)} MiB`);
-    if (file.encoding === "base64") check(BASE64.test(file.content), "content is not valid base64");
+    if (file.encoding === "base64") check(isBase64Text(file.content), "content is not valid base64");
     if (page && file.encoding !== "base64" && /(^|\/)_attachments\//.test(file.path)) check(false, "an attachment is binary: send it as base64");
 
     if (file.expectedHash !== undefined) check(SHA256.test(file.expectedHash), "expectedHash is not a SHA-256 in hex");
