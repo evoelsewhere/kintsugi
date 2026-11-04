@@ -266,3 +266,8 @@
     background-image: none;
   }
 }
+
+/* The passages of a wiki page that have comments (CSS Custom Highlight API: the rendered page itself is not changed). */
+::highlight(wiki-comments) {
+  background-color: color-mix(in srgb, var(--ds-status-amber, #f5a623) 28%, transparent);
+}
