@@ -54,7 +54,7 @@ The index holds at most 20,000 documents. A document has at most 2,000 headings;
 | A manager builds or turns on the Brain (Brain → Build, `project.brain.manage`) | The branch is checked and a build is queued |
 | A sync moves the default branch | A build is queued for the projects that follow it |
 | Every minute | The worker queues builds whose branch moved, builds lost with a stopped worker, and indexes made by an older builder |
-| Rebuild | A build of the branch's tip, even when it did not move |
+| Rebuild | A build of the branch's tip, even when it did not move; always a whole build |
 | Turn off | Reads are refused and no build runs; the tree is kept |
 
 Builds run on the worker's queue `brain-index`, one per project at a time. A build:
