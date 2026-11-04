@@ -51,6 +51,8 @@ export interface KintsugiManifest {
   applications: ManifestApplication[];
   pipelines: PipelineDefinition[];
   autoCommitPaths: string[];
+  /** Paths a wiki page may be published to directly, without a pull request (ADR-0098 decision 4); empty by default. */
+  directPublishPaths: string[];
   policy: ManifestPolicy;
 }
 
@@ -87,6 +89,15 @@ export function matchesPathGlob(path: string, glob: string): boolean {
 /** Whether kintsugi-bot may commit `path` straight to the default branch (ADR-0019). */
 export function isAutoCommitPath(path: string, autoCommitPaths: readonly string[]): boolean {
   return autoCommitPaths.some((glob) => matchesPathGlob(path, glob));
+}
+
+/**
+ * Whether a wiki page may be published to `path` without a pull request: it matches a glob of `directPublishPaths`.
+ * Independent of `autoCommitPaths`: a path that is auto-committed is not directly publishable because of it, and the
+ * other way round.
+ */
+export function isDirectPublishable(path: string, directPublishPaths: readonly string[]): boolean {
+  return directPublishPaths.some((glob) => matchesPathGlob(path, glob));
 }
 
 export type ManifestResult = { ok: true; manifest: KintsugiManifest } | { ok: false; problems: ValidationProblem[] };
@@ -163,7 +174,7 @@ const join = (path: string, key: string): string => (path === "" ? key : `${path
  */
 export function validateManifest(data: unknown): ManifestResult {
   const read = new Reader();
-  const root = read.object(data, "", ["schemaVersion", "project", "document", "unitKinds", "applications", "pipelines", "autoCommitPaths", "policy"]);
+  const root = read.object(data, "", ["schemaVersion", "project", "document", "unitKinds", "applications", "pipelines", "autoCommitPaths", "directPublishPaths", "policy"]);
   if (root === undefined) return { ok: false, problems: read.problems };
 
   if (root["schemaVersion"] !== MANIFEST_SCHEMA_VERSION) read.problem("schemaVersion", `must be ${MANIFEST_SCHEMA_VERSION}`);
@@ -203,6 +214,13 @@ export function validateManifest(data: unknown): ManifestResult {
 
   const autoCommitPaths = root["autoCommitPaths"] === undefined ? [...DEFAULT_AUTO_COMMIT_PATHS] : read.strings(root["autoCommitPaths"], "autoCommitPaths");
 
+  const directPublishPaths = root["directPublishPaths"] === undefined ? [] : read.strings(root["directPublishPaths"], "directPublishPaths");
+  directPublishPaths?.forEach((glob, index) => {
+    if (glob.trim() === "" || glob.startsWith("/") || glob.includes("\\") || glob.split("/").includes("..")) {
+      read.problems.push({ path: `directPublishPaths[${index}]`, message: "must be a path glob relative to the repository root, without a leading slash, a backslash or .." });
+    }
+  });
+
   let policy: ManifestPolicy = { harnesses: [...MEMBER_HARNESSES], requireCommitTrailer: true };
   if (root["policy"] !== undefined) {
     const policyData = read.object(root["policy"], "policy", ["harnesses", "requireCommitTrailer"]);
@@ -213,12 +231,12 @@ export function validateManifest(data: unknown): ManifestResult {
     }
   }
 
-  if (read.problems.length > 0 || project === undefined || document === undefined || unitKinds === undefined || autoCommitPaths === undefined) {
+  if (read.problems.length > 0 || project === undefined || document === undefined || unitKinds === undefined || autoCommitPaths === undefined || directPublishPaths === undefined) {
     return { ok: false, problems: read.problems };
   }
   return {
     ok: true,
-    manifest: { schemaVersion: MANIFEST_SCHEMA_VERSION, project, document, unitKinds, applications, pipelines, autoCommitPaths, policy },
+    manifest: { schemaVersion: MANIFEST_SCHEMA_VERSION, project, document, unitKinds, applications, pipelines, autoCommitPaths, directPublishPaths, policy },
   };
 }
 
@@ -381,6 +399,7 @@ export interface ManifestSource {
   unitKinds?: string[];
   pipelines?: PipelineDefinition[];
   autoCommitPaths?: string[];
+  directPublishPaths?: string[];
   policy?: ManifestPolicy;
 }
 
@@ -401,6 +420,7 @@ export function manifestFromProject(source: ManifestSource): KintsugiManifest {
     })),
     pipelines: [...(source.pipelines ?? [])],
     autoCommitPaths: [...(source.autoCommitPaths ?? DEFAULT_AUTO_COMMIT_PATHS)],
+    directPublishPaths: [...(source.directPublishPaths ?? [])],
     policy: source.policy ?? { harnesses: [...MEMBER_HARNESSES], requireCommitTrailer: true },
   };
 }
