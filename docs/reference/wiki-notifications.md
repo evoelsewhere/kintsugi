@@ -28,6 +28,8 @@ A person who watches the same page twice, through a folder and the space, is tol
 
 Measured with the real worker and a real git remote (`services/orchestrator/test/wiki-notify-latency.test.ts`, review watch and Brain check every second): the notification exists about **3 seconds** after the review watch records that the pull request was merged (a build of one changed page, then the job). With the default intervals the merge is found by the review watch within a minute of the merge, which brings the sum under two minutes; a change pushed straight to the branch from a clone is found by the Git poll (`KINTSUGI_GIT_POLL_INTERVAL`, 180 seconds by default). Neither interval belongs to the job; lower them to shorten the wait.
 
+A **direct publish** (a page write the worker commits to the default branch itself) does not wait for any of them: after the commit the worker fetches its mirror, sees the branch move and asks for the Brain build at once, which asks for the job. With every timer of the worker set to an hour, five direct publishes reached the watcher 2.8 to 4.3 seconds after the commit (the same test file).
+
 ## Comments and mentions
 
 A comment makes its own notifications when it is saved, not through the job, and they hold ids only like every other: `{ pageKey, commentId, actorId }`.

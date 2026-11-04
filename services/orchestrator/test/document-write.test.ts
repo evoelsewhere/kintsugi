@@ -13,6 +13,7 @@ import { DocumentWriteStore, type DocumentRepoTarget } from "../src/document-wri
 import { watchPullRequests } from "../src/document-write/watch.js";
 import { type WriterDeps, writeDocument } from "../src/document-write/writer.js";
 import { RepositoryStore } from "../src/git-sync/repositories.js";
+import { onDefaultTipMove } from "../src/git-sync/sync.js";
 import type { DocumentWriteRequest } from "../src/queues.js";
 import { startWorker } from "../src/worker.js";
 import { createTestDatabase, hasDatabase, type TestDatabase } from "./support/database.js";
@@ -275,6 +276,25 @@ describe.skipIf(!hasDatabase)("document writer (integration)", () => {
       // One commit, and history follows the move.
       const changes = remote.git("page-docs", "show", "--name-status", "-M", "--format=", "main").trim().split("\n").map((line) => line.replace(/^R\d+/, "R"));
       expect(changes.sort()).toEqual(["A\t20-spaces/eng/_attachments/a.png", "D\t20-spaces/eng/gone.md", "R\t20-spaces/eng/old.md\t20-spaces/eng/new.md"]);
+    });
+
+    it("tells the listeners of the default branch that a direct publish moved it, so the Brain is built at once (P-009)", async () => {
+      const moves: Array<{ repositoryId: string; previous: string; commit: string }> = [];
+      const stop = onDefaultTipMove((move) => void moves.push({ repositoryId: move.repositoryId, previous: move.previous, commit: move.commit }));
+      try {
+        const before = remote.git("page-docs", "rev-parse", "main").trim();
+        const write = pageWrite({ message: "Edit a page directly", directPublish: true, page: { id: "PAGE-HR-0001", path: "20-spaces/eng/new.md", minor: false }, files: [{ path: "20-spaces/eng/new.md", content: page("PAGE-ENG-0001", "Edited again.\n"), expectedHash: sha(page("PAGE-ENG-0001", "Body, edited.\n")) }] });
+        expect(await writeDocument(deps, write)).toMatchObject({ status: "committed" });
+        // Before the write returns, the worker was told: the build does not wait for the periodic sweep.
+        expect(moves).toEqual([{ repositoryId: "page-docs", previous: before, commit: remote.git("page-docs", "rev-parse", "main").trim() }]);
+        // A write to a pull request does not move the default branch, so it tells nobody.
+        moves.length = 0;
+        const review = pageWrite({ message: "Edit a page for review", page: { id: "PAGE-HR-0001", path: "20-spaces/hr/policy.md", minor: false }, files: [{ path: "20-spaces/hr/policy.md", content: page("PAGE-HR-0001", "For review.\n"), expectedHash: sha(page("PAGE-HR-0001")) }] });
+        expect(await writeDocument(deps, review)).toMatchObject({ status: "pr-opened" });
+        expect(moves).toEqual([]);
+      } finally {
+        stop();
+      }
     });
 
     it("never uses autoCommitPaths: a page write that does not ask for direct publish goes to a pull request", async () => {
