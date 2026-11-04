@@ -12,7 +12,7 @@ import { Select } from "@/components/ui/select";
 import { brainApi } from "@/lib/api/brain";
 import { searchProblem } from "@/lib/brain";
 import { useLoader } from "@/lib/use-loader";
-import { highlightParts, hitPaths, searchFacets, searchHits, searchLineLink, type WikiSearch, wikiLink, wikiRead, wikiSearchLink, withDocuments } from "@/lib/wiki";
+import { highlightParts, hitCount, hitPaths, searchFacets, searchHits, searchLineLink, type WikiSearch, wikiLink, wikiRead, wikiSearchLink, withDocuments } from "@/lib/wiki";
 import { documentsOf } from "./hit-documents";
 
 export interface WikiSearchResultsProps {
@@ -72,7 +72,7 @@ function Results({ projectId, commit, search }: WikiSearchResultsProps): React.J
           ) : (
             <>
               <p className="text-[12px] text-text-muted" role="status">
-                {hits.length} {hits.length === 1 ? "page" : "pages"} contain “{search.q}”
+                {hitCount(hits.length, search.q)}
                 {view?.truncated === true ? " · there are more results, narrow the search (a space, a label or more of the text)" : ""}
               </p>
               <ul className="flex flex-col gap-2">

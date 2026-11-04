@@ -330,8 +330,10 @@ export function searchHits(matches: readonly BrainGrepMatch[]): SearchHit[] {
       };
       hits.set(path, hit);
     }
+    // The page still counts when the text is only in its front matter, but those lines are not what a person reads.
+    if (isFrontMatterLine(match.node.kind, match.excerpt)) continue;
     const inHeading = match.node.kind === "section" || match.node.kind === "card";
-    hit.lines.push({ line: match.line, excerpt: match.excerpt, anchor: inHeading ? match.node.anchor : null, section: inHeading ? match.node.title : null });
+    hit.lines.push({ line: match.line, excerpt: readableExcerpt(match.excerpt), anchor: inHeading ? match.node.anchor : null, section: inHeading ? match.node.title : null });
   }
   return [...hits.values()];
 }
@@ -355,6 +357,22 @@ export function withDocuments(hits: readonly SearchHit[], documents: ReadonlyMap
     return [{ ...hit, title: document.title, space: document.space, labels: document.labels }];
   });
 }
+
+/** A line of a page's front matter: `---`, `key: value`, `- item` or an indented continuation. */
+const FRONT_MATTER_LINE = /^(---|\.\.\.|[A-Za-z_][\w -]*:(\s|$)|\s*-(\s|$)|\s+\S)/;
+
+/**
+ * Whether a matched line is in the front matter of its page. The builder attaches a line before the first heading to the
+ * page itself (a section or a card holds the lines under a heading), and in a page of the document repo that is its front
+ * matter; a line of such a shape there is metadata, not text for a reader.
+ */
+export const isFrontMatterLine = (kind: string, excerpt: string): boolean => kind === "document" && FRONT_MATTER_LINE.test(excerpt);
+
+/** An excerpt as a person reads it: a Markdown link `[text](url)` or image `![alt](url)` is its text, still plain text. */
+export const readableExcerpt = (excerpt: string): string => excerpt.replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1");
+
+/** How the result list counts its pages: "1 page contains …", "3 pages contain …". */
+export const hitCount = (pages: number, text: string): string => `${pages} ${pages === 1 ? "page contains" : "pages contain"} “${text}”`;
 
 /** The address of one line of a hit: the page, scrolled to the heading the line is under. */
 export const searchLineLink = (projectId: string, hit: Pick<SearchHit, "path">, line: Pick<SearchLine, "anchor">): string => wikiLink(projectId, hit.path, line.anchor ?? undefined);
