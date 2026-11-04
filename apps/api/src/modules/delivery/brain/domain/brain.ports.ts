@@ -7,6 +7,8 @@ export abstract class BrainIndex {
   abstract configure(projectId: string, input: { branch: string; enabled: boolean; wiki?: boolean | undefined }, actor: string): Promise<BrainSource>;
   /** Sets the wiki flag alone, without queuing a build; undefined when the project has no index. */
   abstract setWiki(projectId: string, wiki: boolean, actor: string): Promise<BrainSource | undefined>;
+  /** The projects whose wiki is on and whose document repository is `repositoryId`, with the branch their Brain follows. */
+  abstract wikiProjectsOf(repositoryId: string): Promise<Array<{ projectId: string; branch: string }>>;
   /** Queues a build of an enabled index; undefined when there is none or it is off. */
   abstract request(projectId: string, actor: string): Promise<BrainSource | undefined>;
   abstract node(projectId: string, id: string): Promise<BrainNode | undefined>;

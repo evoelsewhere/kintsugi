@@ -17,6 +17,7 @@ import {
   repositoryUrlProblem,
 } from "../domain/git.js";
 import { GitRegistry, GitRemote } from "../domain/git.ports.js";
+import { DefaultBranchObservers } from "./default-branch-observers.js";
 
 export interface TestAccessResult {
   ok: boolean;
@@ -72,6 +73,7 @@ export class GitService {
     private readonly registry: GitRegistry,
     private readonly remote: GitRemote,
     private readonly audit: AuditTrail,
+    private readonly branchObservers: DefaultBranchObservers,
   ) {}
 
   // ---- servers ----
@@ -212,6 +214,7 @@ export class GitService {
     await this.audit.recordChange(
       auditRecord(actor, AUDIT_ACTIONS.gitRepositoryUpdate, { subject: id, detail: { serverId: existing.serverId, url: auditUrl(existing.url), from: existing.defaultBranch ?? null, to: branch } }),
     );
+    await this.branchObservers.notify({ repositoryId: id, branch }, actor);
     return updated;
   }
 
