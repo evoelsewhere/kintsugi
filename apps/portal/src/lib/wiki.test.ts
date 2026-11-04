@@ -1,7 +1,7 @@
 import type { BrainGrepMatch, BrainNode } from "@kintsugi/domain";
 import { describe, expect, it } from "vitest";
 import { resolveDocumentLink } from "./document-links";
-import { attachmentUrl, hitCount, isFrontMatterLine, readableExcerpt, imageSource, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiIsOff, wikiLink, wikiRead, hitPaths, withDocuments, highlightParts, normalizeLabel, normalizeSpace, readWikiSearch, searchFacets, searchHits, searchLineLink, wikiSearchLink } from "./wiki";
+import { attachmentUrl, hitCount, isFrontMatterLine, readableExcerpt, imageSource, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiIsOff, wikiLink, wikiRead, hitPaths, withDocuments, highlightParts, normalizeLabel, normalizeSpace, readWikiSearch, searchFacets, searchHits, searchLineLink, wikiSearchLink, labelledPages, wikiLabelLink } from "./wiki";
 
 const node = (over: Partial<BrainNode> & Pick<BrainNode, "id" | "kind" | "path">): BrainNode => ({
   parentId: null,
@@ -404,5 +404,33 @@ describe("the excerpts of a search", () => {
     expect(hitCount(1, "failover")).toBe("1 page contains “failover”");
     expect(hitCount(2, "failover")).toBe("2 pages contain “failover”");
     expect(hitCount(0, "x")).toBe("0 pages contain “x”");
+  });
+});
+
+describe("the page of a label", () => {
+  it("has an address of its own that cannot be the path of a page, and encodes the label", () => {
+    expect(wikiLabelLink("billing", "run-book")).toBe("/wiki/-/label/run-book?project=billing");
+    expect(wikiLabelLink("a b", "x/y")).toBe("/wiki/-/label/x%2Fy?project=a%20b");
+  });
+
+  it("lists the pages that carry the label by title, with their folders, space and status", () => {
+    const crumbs = [
+      { id: "/", kind: "root", title: "Root" },
+      { id: "20-spaces/", kind: "folder", title: "Spaces" },
+      { id: "20-spaces/ops/", kind: "folder", title: "Operations" },
+    ] as const;
+    const withCrumbs = (n: BrainNode): BrainNode & { breadcrumb: typeof crumbs } => ({ ...n, breadcrumb: crumbs });
+    const found = [
+      withCrumbs(page("20-spaces/ops/on-call.md", { title: "On call", space: "OPS", status: "approved", labels: ["runbook"] })),
+      withCrumbs(page("20-spaces/ops/cache.md", { title: "Cache purge", space: "OPS", labels: ["runbook", "cache"] })),
+      withCrumbs(page("20-spaces/ops/old.md", { title: "Old", status: "archived", labels: ["runbook"] })),
+      withCrumbs(page("20-spaces/ops/new-page.md", { title: "Template", template: true, labels: ["runbook"] })),
+      withCrumbs(node({ id: "20-spaces/ops/cache.md#steps", kind: "section", path: "20-spaces/ops/cache.md", title: "Steps" })),
+    ];
+    expect(labelledPages(found)).toEqual([
+      { path: "20-spaces/ops/cache.md", title: "Cache purge", breadcrumb: ["Spaces", "Operations"], space: "OPS", status: null, labels: ["runbook", "cache"] },
+      { path: "20-spaces/ops/on-call.md", title: "On call", breadcrumb: ["Spaces", "Operations"], space: "OPS", status: "approved", labels: ["runbook"] },
+    ]);
+    expect(labelledPages([])).toEqual([]);
   });
 });
