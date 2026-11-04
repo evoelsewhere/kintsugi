@@ -2,7 +2,7 @@
 // property test over random texts. The merge is pure, so nothing here needs Git or a database.
 
 import { describe, expect, it } from "vitest";
-import { type MergeResult, mergeText, textLines } from "../src/text-merge.js";
+import { type MergeResult, mergeText, mergeWithMarkers, textLines } from "../src/text-merge.js";
 
 const lines = (...values: string[]): string => values.map((value) => `${value}\n`).join("");
 const merged = (result: MergeResult): string => {
@@ -195,5 +195,63 @@ describe("mergeText property test", () => {
     }
     // The fourth law was really exercised, in most rounds.
     expect(disjoint).toBeGreaterThan(ROUNDS / 3);
+  });
+});
+
+describe("mergeWithMarkers (P2-054)", () => {
+  const base = lines("# Title", "", "First.", "", "Second.", "", "Third.");
+
+  it("is the merged text with no conflict when the merge is clean", () => {
+    const ours = base.replace("First.", "First, ours.");
+    const theirs = base.replace("Third.", "Third, theirs.");
+    expect(mergeWithMarkers(base, ours, theirs)).toEqual({ text: merged(mergeText(base, ours, theirs)), conflicts: 0 });
+    expect(mergeWithMarkers(base, base, base)).toEqual({ text: base, conflicts: 0 });
+    expect(mergeWithMarkers(base, ours, ours)).toEqual({ text: ours, conflicts: 0 });
+  });
+
+  it("writes each region as Git does, around the lines of both sides, and merges the rest", () => {
+    const ours = base.replace("Second.", "Second, ours.").replace("First.", "First, ours.");
+    const theirs = base.replace("Second.", "Second, theirs.").replace("Third.", "Third, theirs.");
+    expect(mergeWithMarkers(base, ours, theirs)).toEqual({
+      text: lines("# Title", "", "First, ours.", "", "<<<<<<< yours", "Second, ours.", "=======", "Second, theirs.", ">>>>>>> theirs", "", "Third, theirs."),
+      conflicts: 1,
+    });
+  });
+
+  it("has as many conflicts as mergeText has regions, in the same places", () => {
+    const text = lines("a", "x1", "b", "c", "x2", "d");
+    const ours = lines("a", "o1", "b", "c", "o2", "d");
+    const theirs = lines("a", "t1", "b", "c", "t2", "d");
+    const result = mergeText(text, ours, theirs);
+    expect(result.clean).toBe(false);
+    const marked = mergeWithMarkers(text, ours, theirs);
+    expect(marked.conflicts).toBe(result.clean ? 0 : result.regions.length);
+    expect(marked.text).toBe(lines("a", "<<<<<<< yours", "o1", "=======", "t1", ">>>>>>> theirs", "b", "c", "<<<<<<< yours", "o2", "=======", "t2", ">>>>>>> theirs", "d"));
+  });
+
+  it("keeps the line endings of the region for its markers, and ends a last line that had no ending", () => {
+    expect(mergeWithMarkers("one\r\ntwo\r\n", "one\r\nOURS\r\n", "one\r\nTHEIRS\r\n").text).toBe("one\r\n<<<<<<< yours\r\nOURS\r\n=======\r\nTHEIRS\r\n>>>>>>> theirs\r\n");
+    expect(mergeWithMarkers("a\nb", "a\nours", "a\ntheirs").text).toBe("a\n<<<<<<< yours\nours\n=======\ntheirs\n>>>>>>> theirs\n");
+  });
+
+  it("shows an empty side as nothing between the markers: a deletion against an edit", () => {
+    expect(mergeWithMarkers(lines("a", "b", "c"), lines("a", "c"), lines("a", "B", "c")).text).toBe(lines("a", "<<<<<<< yours", "=======", "B", ">>>>>>> theirs", "c"));
+  });
+
+  it("agrees with mergeText on a seeded set of random texts: same count, and the text without conflicts when clean", () => {
+    for (let seed = 1; seed <= 100; seed += 1) {
+      const rng = random(seed);
+      const size = 2 + Math.floor(rng() * 12);
+      const baseLines = Array.from({ length: size }, (_, n) => `line ${n}`);
+      const edit = (tag: string): string => baseLines.map((line) => (rng() < 0.25 ? `${line} ${tag}${Math.floor(rng() * 9)}` : line)).filter(() => rng() > 0.05).map((line) => `${line}\n`).join("");
+      const text = baseLines.map((line) => `${line}\n`).join("");
+      const ours = edit("ours");
+      const theirs = edit("theirs");
+      const result = mergeText(text, ours, theirs);
+      const marked = mergeWithMarkers(text, ours, theirs);
+      expect(marked.conflicts, `seed ${seed}`).toBe(result.clean ? 0 : result.regions.length);
+      if (result.clean) expect(marked.text, `seed ${seed}`).toBe(result.merged);
+      else expect(marked.text.split("<<<<<<< yours").length - 1, `seed ${seed}`).toBe(marked.conflicts);
+    }
   });
 });
