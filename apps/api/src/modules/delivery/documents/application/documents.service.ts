@@ -11,7 +11,7 @@ import { DocumentWritesService } from "#modules/admin/document-writes/index.js";
 import { InstallationSettingsService } from "#modules/admin/settings/index.js";
 import { type ProjectDetail, ProjectsService } from "#modules/admin/projects/index.js";
 import { JobRunsService, type JobRunView } from "#modules/delivery/runtime-jobs/index.js";
-import { ATTACHMENT_MEDIA_TYPES, type DocumentAttachment, type DocumentDiff, type DocumentFile, type DocumentHistory, type DocumentRef, type DocumentRefs, type DocumentRepo, type DocumentTree, type FileVersion, type GrepLine, type HistoryEntry, MAX_ATTACHMENT_BYTES, MAX_DOCUMENT_BYTES, type MirrorBranch, diffFileWithin } from "../domain/document.js";
+import { ATTACHMENT_MEDIA_TYPES, type DocumentAttachment, type DocumentDiff, type DocumentFile, type DocumentHistory, type DocumentRecent, type DocumentRef, type DocumentRefs, type DocumentRepo, type DocumentTree, type FileVersion, type GrepLine, type HistoryEntry, MAX_ATTACHMENT_BYTES, MAX_DOCUMENT_BYTES, type MirrorBranch, type RecentEntry, diffFileWithin } from "../domain/document.js";
 import { DocumentRepoReader } from "../domain/document.ports.js";
 import { parseUnifiedDiff } from "../domain/unified-diff.js";
 import type { DocumentCompare } from "../domain/document.js";
@@ -33,6 +33,8 @@ const COMMIT_ID = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
 const BRANCH_REF = /^refs\/heads\/([A-Za-z0-9._/-]+)$/;
 /** How many recent runs and writes the ref list looks at. */
 const RECENT = 50;
+/** The most files of one commit the recent changes list. */
+const RECENT_FILES = 100;
 
 /** The branch of `refs/heads/<branch>`, or undefined when the text is not a valid branch ref. */
 export function branchOfRef(ref: string): string | undefined {
@@ -253,6 +255,40 @@ export class DocumentsService {
       path: dir,
       entries: entries.filter((entry) => isServable(entry.path)).sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "dir" ? -1 : 1)),
     };
+  }
+
+  /**
+   * The newest commits of a ref that changed Markdown files the reader may see, newest first, each with its files (a
+   * file moved out of sight is gone, one moved in is new, and the other path is never named). A commit that changed only
+   * files out of sight is left out. `before` (a commit of the mirror) continues after it; the actor and the minor flag are
+   * believed only for a commit Kintsugi made, as in the history of a file.
+   */
+  async recent(projectId: string, ref: string | undefined, limit: number, before: string | undefined): Promise<DocumentRecent> {
+    const context = await this.context(projectId);
+    const resolved = await this.resolve(context, ref);
+    if (before !== undefined && !(await this.reader.hasCommit(context.repo, before))) throw new NotFoundException(`Commit ${before} is not in the document repo mirror`);
+    const identity = await this.settings.commitIdentity();
+    const kintsugi = (version: FileVersion): boolean => version.authorName === identity.name && version.authorEmail.toLowerCase() === identity.email.toLowerCase();
+    const seen: RecentEntry[] = [];
+    for (const commit of await this.reader.recent(context.repo, resolved.commit)) {
+      const files = commit.files.flatMap((file) => diffFileWithin(file, isServable) ?? []);
+      if (files.length === 0) continue;
+      seen.push({
+        sha: commit.sha,
+        date: commit.date,
+        subject: commit.subject,
+        actor: kintsugi(commit) ? (commit.trailerActor ?? commit.authorName) : commit.authorName,
+        minor: kintsugi(commit) && commit.trailerMinor,
+        files: files.slice(0, RECENT_FILES).map((file) => ({ path: file.path, previousPath: file.previousPath, status: file.status })),
+        moreFiles: files.length > RECENT_FILES,
+      });
+    }
+    // The page starts after `before` when it is given (none when `before` is not a listed commit).
+    const from = before === undefined ? 0 : seen.findIndex((entry) => entry.sha === before) + 1;
+    if (before !== undefined && from === 0) return { ...resolved, entries: [], next: null };
+    const entries = seen.slice(from, from + limit);
+    const last = entries[entries.length - 1];
+    return { ...resolved, entries, next: seen.length > from + limit && last !== undefined ? last.sha : null };
   }
 
   /**
