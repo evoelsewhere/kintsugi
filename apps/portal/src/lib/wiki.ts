@@ -548,3 +548,21 @@ export function spacePages(matches: ReadonlyArray<Pick<BrainNode, "kind" | "path
     .map((match) => ({ path: match.path, title: match.title }))
     .sort((a, b) => a.title.localeCompare(b.title) || a.path.localeCompare(b.path));
 }
+
+// ---- Scrolling to a heading -------------------------------------------------------------------------------------
+// A page grows after it is first drawn (the renderer is lazy, diagrams and images arrive), so one scroll to a heading
+// can land short of it. The reader keeps putting the heading at the top of the page while the page settles, and stops
+// the moment the reader scrolls by hand.
+
+/** How long the reader keeps the heading in place after the page opens, and how often it checks. */
+export const SCROLL_SETTLE_MS = 2500;
+export const SCROLL_POLL_MS = 100;
+
+/** How far (in pixels) a heading may be from the top of the page before it is moved again. */
+const SCROLL_TOLERANCE = 2;
+
+/** Whether a heading is off its place: `offset` is its distance from the top of the page; null when it is not drawn yet (wait). */
+export const headingOffPlace = (offset: number | null): boolean => offset !== null && Math.abs(offset) > SCROLL_TOLERANCE;
+
+/** Whether the reader is done holding the heading: the page has settled, or the person has scrolled by hand. */
+export const scrollSettled = (elapsedMs: number, scrolledByHand: boolean): boolean => scrolledByHand || elapsedMs >= SCROLL_SETTLE_MS;

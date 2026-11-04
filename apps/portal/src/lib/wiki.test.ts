@@ -1,7 +1,7 @@
 import type { BrainGrepMatch, BrainNode } from "@kintsugi/domain";
 import { describe, expect, it } from "vitest";
 import { resolveDocumentLink } from "./document-links";
-import { attachmentUrl, hitCount, isFrontMatterLine, readableExcerpt, imageSource, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiLink, wikiRead, hitPaths, withDocuments, highlightParts, normalizeLabel, normalizeSpace, readWikiSearch, searchFacets, searchHits, searchLineLink, wikiSearchLink, labelledPages, wikiLabelLink, wikiPhase, hiddenPaths, groupBacklinks, tocOf, spacePages, spaceHomePath, wikiSpaceLink } from "./wiki";
+import { attachmentUrl, headingOffPlace, SCROLL_SETTLE_MS, scrollSettled, hitCount, isFrontMatterLine, readableExcerpt, imageSource, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiLink, wikiRead, hitPaths, withDocuments, highlightParts, normalizeLabel, normalizeSpace, readWikiSearch, searchFacets, searchHits, searchLineLink, wikiSearchLink, labelledPages, wikiLabelLink, wikiPhase, hiddenPaths, groupBacklinks, tocOf, spacePages, spaceHomePath, wikiSpaceLink } from "./wiki";
 
 const node = (over: Partial<BrainNode> & Pick<BrainNode, "id" | "kind" | "path">): BrainNode => ({
   parentId: null,
@@ -553,5 +553,22 @@ describe("the pages of a space without a home page", () => {
       { path: "20-spaces/eng/a.md", title: "Alpha" },
       { path: "20-spaces/eng/b.md", title: "Beta" },
     ]);
+  });
+});
+
+describe("holding a heading in place while the page settles", () => {
+  it("moves a heading that is not at the top of the page, and waits for one that is not drawn yet", () => {
+    expect(headingOffPlace(499)).toBe(true);
+    expect(headingOffPlace(-120)).toBe(true);
+    expect(headingOffPlace(0)).toBe(false);
+    expect(headingOffPlace(1.5)).toBe(false);
+    expect(headingOffPlace(null)).toBe(false);
+  });
+
+  it("stops after the settle time, or as soon as the person scrolls", () => {
+    expect(scrollSettled(0, false)).toBe(false);
+    expect(scrollSettled(SCROLL_SETTLE_MS - 1, false)).toBe(false);
+    expect(scrollSettled(SCROLL_SETTLE_MS, false)).toBe(true);
+    expect(scrollSettled(100, true)).toBe(true);
   });
 });
