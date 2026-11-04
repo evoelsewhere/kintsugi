@@ -9,6 +9,8 @@ const query = (params: Record<string, string | number | boolean | undefined>): s
   return text === "" ? "" : `?${text}`;
 };
 
+const nonEmpty = (value: string | undefined): string | undefined => (value === undefined || value === "" ? undefined : value);
+
 /** The Brain of a project (ADR-0091): its index state, and the reads an agent reasons with. */
 export const brainApi = {
   status: (projectId: string) => apiGet<BrainStatusView>(path(projectId)),
@@ -17,6 +19,8 @@ export const brainApi = {
   tree: (projectId: string, node: string | undefined, offset = 0, limit = 100) => apiGet<BrainTreeView>(`${path(projectId)}/tree${query({ node, offset, limit })}`),
   node: (projectId: string, node: string, fromLine?: number) => apiGet<BrainReadView>(`${path(projectId)}/node${query({ node, fromLine })}`),
   lookup: (projectId: string, q: string) => apiGet<BrainLookupView>(`${path(projectId)}/lookup${query({ q })}`),
-  grep: (projectId: string, text: string, under?: string) => apiGet<BrainGrepView>(`${path(projectId)}/grep${query({ text, under })}`),
+  /** `space` and `label` narrow the search to the pages of that space or with that label (the wiki's search box). */
+  grep: (projectId: string, text: string, under?: string, filter: { space?: string; label?: string } = {}) =>
+    apiGet<BrainGrepView>(`${path(projectId)}/grep${query({ text, under, space: nonEmpty(filter.space), label: nonEmpty(filter.label) })}`),
   changes: (projectId: string, since: string, under?: string) => apiGet<BrainChangesView>(`${path(projectId)}/changes${query({ since, under })}`),
 };

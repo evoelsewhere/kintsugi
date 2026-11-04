@@ -4,7 +4,7 @@
 
 import { BookText, FolderKanban, ListTree, TriangleAlert } from "lucide-react";
 import { useMemo } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Loaded } from "@/components/loaded";
 import { ProjectNotFound, ProjectSelector } from "@/components/project-selector";
@@ -15,13 +15,15 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { WikiFolderView } from "@/components/wiki/wiki-folder-view";
 import { WikiPageView } from "@/components/wiki/wiki-page-view";
+import { WikiSearchBox } from "@/components/wiki/wiki-search-box";
+import { WikiSearchResults } from "@/components/wiki/wiki-search-results";
 import { WikiTree } from "@/components/wiki/wiki-tree";
 import { brainApi } from "@/lib/api/brain";
 import { projectsApi } from "@/lib/api/projects";
 import { projectLink } from "@/lib/links";
 import { useProjectSelection } from "@/lib/project-selection";
 import { useLoader } from "@/lib/use-loader";
-import { isPagePath, pathOfSplat, wikiIsOff, type WikiProjectFlag, wikiLink, wikiRead } from "@/lib/wiki";
+import { isPagePath, pathOfSplat, readWikiSearch, wikiIsOff, type WikiProjectFlag, wikiLink, wikiRead } from "@/lib/wiki";
 
 export function WikiPage(): React.JSX.Element {
   const projects = useLoader("projects", projectsApi.list);
@@ -140,15 +142,21 @@ function WikiProject({ projectId, projectName, path }: { projectId: string; proj
 function WikiReader({ projectId, commit, path }: { projectId: string; commit: string; path: string }): React.JSX.Element {
   // Where the attachments of the pages are served from (the commit the Brain indexed).
   const images = useMemo(() => ({ projectId, commit }), [projectId, commit]);
+  // A search is in the address (`?q=`); while there is one, its results are shown in place of the page.
+  const [params] = useSearchParams();
+  const search = readWikiSearch(params);
+  const { q, space, label } = search;
   // The page changes with the address: a key resets what the view of the previous page held.
   const view = useMemo(
     () =>
-      isPagePath(path) ? (
+      q !== "" ? (
+        <WikiSearchResults projectId={projectId} commit={commit} search={{ q, space, label }} />
+      ) : isPagePath(path) ? (
         <WikiPageView key={path} projectId={projectId} commit={commit} path={path} />
       ) : (
         <WikiFolderView key={path} projectId={projectId} commit={commit} path={path} />
       ),
-    [projectId, commit, path],
+    [projectId, commit, path, q, space, label],
   );
   return (
     <div className="flex min-h-[560px] flex-col overflow-hidden rounded-xl bg-surface shadow-border-medium lg:h-[calc(100vh-var(--page-header-height,0px)-8rem)] lg:flex-row">
@@ -156,6 +164,9 @@ function WikiReader({ projectId, commit, path }: { projectId: string; commit: st
         className="flex max-h-[45vh] shrink-0 flex-col [box-shadow:0_1px_0_rgba(0,0,0,0.08)] lg:max-h-none lg:w-72 lg:[box-shadow:1px_0_0_rgba(0,0,0,0.08)] xl:w-80"
         aria-label="Pages"
       >
+        <div className="p-2 pb-0">
+          <WikiSearchBox key={search.q} projectId={projectId} search={search} />
+        </div>
         <div className="min-h-0 flex-1 overflow-auto p-2">
           <WikiTree projectId={projectId} selectedPath={path} />
         </div>

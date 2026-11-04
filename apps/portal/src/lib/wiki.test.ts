@@ -1,7 +1,7 @@
-import type { BrainNode } from "@kintsugi/domain";
+import type { BrainGrepMatch, BrainNode } from "@kintsugi/domain";
 import { describe, expect, it } from "vitest";
 import { resolveDocumentLink } from "./document-links";
-import { attachmentUrl, imageSource, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiIsOff, wikiLink, wikiRead } from "./wiki";
+import { attachmentUrl, imageSource, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiIsOff, wikiLink, wikiRead, hitPaths, withDocuments, highlightParts, normalizeLabel, normalizeSpace, readWikiSearch, searchFacets, searchHits, searchLineLink, wikiSearchLink } from "./wiki";
 
 const node = (over: Partial<BrainNode> & Pick<BrainNode, "id" | "kind" | "path">): BrainNode => ({
   parentId: null,
@@ -269,5 +269,100 @@ describe("the images of a page", () => {
     expect(imageSource("//example.com/a.png", from)).toEqual({ kind: "none" });
     expect(imageSource("", from)).toEqual({ kind: "none" });
     expect(imageSource(undefined, from)).toEqual({ kind: "none" });
+  });
+});
+
+describe("the search of the wiki", () => {
+  it("is read back from the address: the text, one space in capitals and one label as the Brain writes it", () => {
+    expect(readWikiSearch(new URLSearchParams("project=p&q=%20rollback%20&space=eng&label=Run-Book"))).toEqual({ q: "rollback", space: "ENG", label: "run-book" });
+    expect(readWikiSearch(new URLSearchParams("project=p"))).toEqual({ q: "", space: "", label: "" });
+    // Nothing that the API would refuse is sent: a space that is not a key, a label with nothing left.
+    expect(readWikiSearch(new URLSearchParams("q=x&space=1&label=%21%21"))).toEqual({ q: "x", space: "", label: "" });
+    expect(normalizeSpace(" ops ")).toBe("OPS");
+    expect(normalizeLabel("On Call")).toBe("oncall");
+  });
+
+  it("builds the address of a search and reads the same search back", () => {
+    const search = { q: "cache purge", space: "OPS", label: "runbook" };
+    const link = wikiSearchLink("my project", search);
+    expect(link).toBe("/wiki?project=my+project&q=cache+purge&space=OPS&label=runbook");
+    expect(readWikiSearch(new URLSearchParams(link.split("?")[1]))).toEqual(search);
+    expect(wikiSearchLink("p", { q: "x", space: "", label: "" })).toBe("/wiki?project=p&q=x");
+  });
+
+  const crumbs = [
+    { id: "/", kind: "root", title: "Root" },
+    { id: "20-spaces/", kind: "folder", title: "Spaces" },
+    { id: "20-spaces/ops/", kind: "folder", title: "Operations" },
+    { id: "20-spaces/ops/cache-purge.md", kind: "document", title: "Purging the cache" },
+  ] as const;
+  const match = (over: Partial<BrainGrepMatch> & { node: BrainNode }): BrainGrepMatch => ({ breadcrumb: [...crumbs], line: 1, excerpt: "x", ...over });
+  const purge = page("20-spaces/ops/cache-purge.md", { title: "Purging the cache", space: "OPS", labels: ["runbook", "cache"] });
+  const section = (anchor: string, title: string): BrainNode => node({ id: `${purge.path}#${anchor}`, kind: "section", path: purge.path, anchor, title, space: "OPS", labels: purge.labels });
+
+  it("groups the matches by page, with the heading each line is under", () => {
+    const hits = searchHits([
+      match({ node: section("rollback", "Rollback"), line: 12, excerpt: "run the rollback now" }),
+      match({ node: purge, line: 3, excerpt: "a rollback is" }),
+      match({ node: section("rollback", "Rollback"), line: 14, excerpt: "rollback again" }),
+      match({ node: page("20-spaces/hr/leave.md", { title: "Leave", space: "HR" }), breadcrumb: [], line: 2, excerpt: "rollback of leave" }),
+    ]);
+    expect(hits.map((hit) => [hit.path, hit.title, hit.lines.length])).toEqual([
+      [purge.path, "Purging the cache", 3],
+      ["20-spaces/hr/leave.md", "Leave", 1],
+    ]);
+    expect(hits[0]?.breadcrumb).toEqual(["Spaces", "Operations"]);
+    expect(hits[0]?.lines.map((line) => [line.line, line.anchor, line.section])).toEqual([
+      [12, "rollback", "Rollback"],
+      [3, null, null],
+      [14, "rollback", "Rollback"],
+    ]);
+  });
+
+  it("opens a line at its heading and leaves out archived pages and templates", () => {
+    const [hit] = searchHits([match({ node: section("rollback", "Rollback") })]);
+    expect(hit && searchLineLink("p", hit, hit.lines[0] ?? { anchor: null })).toBe("/wiki/20-spaces/ops/cache-purge.md?project=p#rollback");
+    expect(hit && searchLineLink("p", hit, { anchor: null })).toBe("/wiki/20-spaces/ops/cache-purge.md?project=p");
+    expect(searchHits([match({ node: page("old.md", { status: "archived" }) }), match({ node: page("t.md", { template: true }) })])).toEqual([]);
+  });
+
+  it("takes a page's space and labels from its document, as a match is the section whose node holds none", () => {
+    // What the Brain builds: only the document node has the attributes, its sections have none (labels [], space null).
+    const bare = node({ id: `${purge.path}#rollback`, kind: "section", path: purge.path, anchor: "rollback", title: "Rollback" });
+    const hits = searchHits([match({ node: bare, line: 12 })]);
+    expect(hits[0]?.space).toBeNull();
+    expect(hits[0]?.labels).toEqual([]);
+    expect(searchFacets(hits)).toEqual({ spaces: [], labels: [] });
+    const resolved = withDocuments(hits, new Map([[purge.path, purge]]));
+    expect(resolved[0]).toMatchObject({ title: "Purging the cache", space: "OPS", labels: ["runbook", "cache"] });
+    expect(searchFacets(resolved)).toEqual({ spaces: ["OPS"], labels: ["cache", "runbook"] });
+    // A page that is archived or a template once its document is known is not a result; one not looked up stays.
+    expect(withDocuments(hits, new Map([[purge.path, { ...purge, status: "archived" }]]))).toEqual([]);
+    expect(withDocuments(hits, new Map([[purge.path, { ...purge, template: true }]]))).toEqual([]);
+    expect(withDocuments(hits, new Map())).toEqual(hits);
+  });
+
+  it("looks up at most thirty pages, each once, in the order of the results", () => {
+    const many = Array.from({ length: 45 }, (_, index) => ({ path: `p${index}.md` }));
+    expect(hitPaths(many)).toHaveLength(30);
+    expect(hitPaths(many)[0]).toBe("p0.md");
+    expect(hitPaths([{ path: "a.md" }, { path: "b.md" }, { path: "a.md" }])).toEqual(["a.md", "b.md"]);
+  });
+
+  it("offers the spaces and labels of the hits as filters, each once", () => {
+    const hits = searchHits([match({ node: purge }), match({ node: page("20-spaces/hr/leave.md", { space: "hr", labels: ["policy", "cache"] }), breadcrumb: [] })]);
+    expect(searchFacets(hits)).toEqual({ spaces: ["HR", "OPS"], labels: ["cache", "policy", "runbook"] });
+  });
+
+  it("cuts an excerpt into the parts to mark, whatever the case, and never loses a character", () => {
+    expect(highlightParts("Run the Rollback, then rollback", "rollback")).toEqual([
+      { text: "Run the ", match: false },
+      { text: "Rollback", match: true },
+      { text: ", then ", match: false },
+      { text: "rollback", match: true },
+    ]);
+    expect(highlightParts("nothing here", "zzz")).toEqual([{ text: "nothing here", match: false }]);
+    expect(highlightParts("abc", "")).toEqual([{ text: "abc", match: false }]);
+    expect(highlightParts("<b>x</b>", "x").map((part) => part.text).join("")).toBe("<b>x</b>");
   });
 });
