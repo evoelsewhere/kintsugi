@@ -1,13 +1,16 @@
 import { Controller, Get, Req, Res } from "@nestjs/common";
 import { ApiOperation, ApiProduces, ApiTags } from "@nestjs/swagger";
 import type { Request, Response } from "express";
+import { type Actor, CurrentActor } from "#common/auth/decorators.js";
 import { openEventStream } from "#common/interface/sse.js";
 import { type Change, ChangeFeed } from "#common/realtime/change-feed.js";
 
 /** Changes that come in a burst leave as one event this long after the first. */
 const FLUSH_MS = 400;
 /** Topics the portal follows. `job-events` (one per log line) is not one of them: a run's own stream carries those. */
-const TOPICS: ReadonlySet<string> = new Set(["job-runs", "document-writes", "repositories", "workers", "gates", "audit", "telemetry", "brain"]);
+const TOPICS: ReadonlySet<string> = new Set(["job-runs", "document-writes", "repositories", "workers", "gates", "audit", "telemetry", "brain", "notifications"]);
+/** Topics whose scope is a person (their id): only that person's stream is told. */
+const PERSONAL_TOPICS: ReadonlySet<string> = new Set(["notifications"]);
 
 @ApiTags("system")
 @Controller("events")
@@ -23,7 +26,7 @@ export class EventsController {
       "deduplicated; `scope` is a project id, or empty), `resync` (the connection to the database was lost and restored: read everything again). " +
       "Carries topic names and ids only, never data. Needs a session.",
   })
-  events(@Req() request: Request, @Res() response: Response): void {
+  events(@Req() request: Request, @Res() response: Response, @CurrentActor() actor: Actor): void {
     const stream = openEventStream(request, response);
     const pending = new Map<string, Change>();
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -39,6 +42,8 @@ export class EventsController {
         return;
       }
       if (!TOPICS.has(change.topic)) return;
+      // A person's own topic goes to that person's streams only: nobody learns that someone else has a notification.
+      if (PERSONAL_TOPICS.has(change.topic) && change.scope !== actor.id) return;
       pending.set(`${change.topic}\u0000${change.scope}`, change);
       timer ??= setTimeout(flush, FLUSH_MS);
     });
