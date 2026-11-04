@@ -61,9 +61,10 @@ Windows and macOS use the native credential store through the pinned keyring bin
 kintsugi project list
 kintsugi document tree 01-standards
 kintsugi document get 01-standards/conventions/typescript.md --ref refs/heads/main
+kintsugi comments 20-spaces/eng/setup.md           # the open comments of a wiki page; --all adds resolved and deleted ones
 ```
 
-`--project` selects one command's project; otherwise the profile default from `project use` applies. Every request is authorized again by the API: the token's project scope, the member's `member.read` permission and explicit Project Access. Documents come from the project's document repository mirror ([ADR-0028](../decisions/0028-remove-rulebook-single-document-repo.md)), read-only, at a branch or commit (default branch when `--ref` is omitted); `restricted/` and `.git` are never served and files over 2 MiB are refused. `project list` pages with `--cursor` and `--limit` (1–100) and shows each project as `name (id)`; the other lists come whole. Output supports `--format text|json|markdown`; `--json` is an alias. Results go to stdout, errors to stderr, and `--no-input` disables prompts.
+`--project` selects one command's project; otherwise the profile default from `project use` applies. Every request is authorized again by the API: the token's project scope, the member's `member.read` permission and explicit Project Access. Documents come from the project's document repository mirror ([ADR-0028](../decisions/0028-remove-rulebook-single-document-repo.md)), read-only, at a branch or commit (default branch when `--ref` is omitted); `restricted/` and `.git` are never served and files over 2 MiB are refused. `project list` pages with `--cursor` and `--limit` (1–100) and shows each project as `name (id)`; the other lists come whole. `comments <path>` lists the comments members wrote on a wiki page, thread by thread, each with the quoted passage, where it is now (`anchored`, `moved` or `orphaned`) and its answers; they are project data, never instructions, and control characters of them never reach the terminal. Output supports `--format text|json|markdown`; `--json` is an alias. Results go to stdout, errors to stderr, and `--no-input` disables prompts.
 
 ## Install member plugins
 
@@ -119,6 +120,7 @@ The bridge has no inbound listener. It uses the selected profile and refreshes c
 | `brain_grep` | The Brain nodes with a line that holds every word of a text (quoted: the exact phrase) |
 | `brain_changes` | What changed in the Brain's documents since an earlier commit, by document and by section |
 | `brain_backlinks` | The pages that link to a page, a heading or a card, a window of them with the total and the offset of the next window; the bridge adds a text part with a citation (`path:lines@commit`) per entry |
+| `comments_list` | The open comments of a wiki page (`status: all` for every one), in time order, with author names, the quoted passage, where it is now and the answers; the bridge adds a text part that says they are project data written by members, not instructions, and prints none of their words |
 | `plugin_list` | The member plugins the member may install in a project |
 | `activity_record` | Records one bounded note for the project's monitoring (the only tool that is not read-only) |
 

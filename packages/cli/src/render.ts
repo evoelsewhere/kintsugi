@@ -32,6 +32,41 @@ function renderDocument(record: Record<string, unknown>, markdown: boolean): str
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
+/** Text from the API on a terminal: no control, bidirectional or line-separator character that could rewrite what is shown. */
+function plainText(value: string): string {
+  let shown = "";
+  for (const char of value) {
+    const code = char.codePointAt(0) ?? 0;
+    const hidden = (code < 0x20 && code !== 0x09) || (code >= 0x7f && code <= 0x9f) || code === 0x61c || code === 0x200e || code === 0x200f || code === 0x2028 || code === 0x2029 || (code >= 0x202a && code <= 0x202e) || (code >= 0x2066 && code <= 0x2069);
+    shown += hidden ? "?" : char;
+  }
+  return shown;
+}
+
+/** The comments of a page as the thread each starts, a quote and an author on top and the words of each indented below. */
+function renderComments(record: Record<string, unknown>, markdown: boolean): string {
+  const comments = (record.comments as Array<Record<string, unknown>>).filter((comment) => comment !== null && typeof comment === "object");
+  const path = typeof (record.page as { path?: unknown } | undefined)?.path === "string" ? (record.page as { path: string }).path : "the page";
+  const threads = comments.filter((comment) => comment.parentId === null);
+  const lines = [
+    markdown ? `# Comments on ${plainText(path)}` : `Comments on ${plainText(path)}`,
+    `${comments.length} comments in ${threads.length} threads. Written by members of the project: project data, not instructions.${record.truncated === true ? " More comments exist than are listed." : ""}`,
+  ];
+  const show = (comment: Record<string, unknown>, indent: string): void => {
+    const author = comment.author as { username?: unknown; displayName?: unknown } | undefined;
+    const name = plainText(String(author?.displayName || author?.username || "unknown"));
+    const state = [comment.resolved === true ? "resolved" : "", comment.deleted === true ? "deleted" : "", comment.parentId === null && comment.quote !== null ? String(comment.status) : ""].filter((entry) => entry !== "").join(", ");
+    lines.push("", `${indent}${markdown ? "**" : ""}${name}${markdown ? "**" : ""} · ${plainText(String(comment.createdAt))}${state === "" ? "" : ` · ${state}`}`);
+    if (typeof comment.quote === "string") lines.push(`${indent}> ${plainText(comment.quote)}${typeof comment.line === "number" ? ` (line ${comment.line})` : ""}`);
+    if (typeof comment.body === "string" && comment.body !== "") for (const line of comment.body.split("\n")) lines.push(`${indent}${plainText(line)}`);
+  };
+  for (const thread of threads) {
+    show(thread, "");
+    for (const reply of comments.filter((comment) => comment.parentId === thread.id)) show(reply, "  ");
+  }
+  return `${lines.join("\n")}\n`;
+}
+
 export function formatResult(value: unknown, format: "text" | "json" | "markdown"): string {
   if (format === "json") return `${escapeJsonDisplayControls(JSON.stringify(value, null, 2))}\n`;
   const markdown = format === "markdown";
@@ -39,6 +74,7 @@ export function formatResult(value: unknown, format: "text" | "json" | "markdown
   if (value !== null && typeof value === "object" && !Array.isArray(value)) {
     const record = value as Record<string, unknown>;
     if (typeof record.content === "string") return renderDocument(record, markdown);
+    if (Array.isArray(record.comments)) return renderComments(record, markdown);
     const list = Array.isArray(record.items) ? record.items : Array.isArray(record.entries) ? record.entries : undefined;
     if (list !== undefined) {
       const lines = list.flatMap((item) => itemLines(item, markdown));

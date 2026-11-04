@@ -64,6 +64,17 @@ describe("typed member HTTP client", () => {
     expect(() => client.brainBacklinks({ projectId: "shop", node: "b.md", limit: 101 })).toThrow();
   });
 
+  it("asks for the open comments of a page and parses them (P3-013)", async () => {
+    const comment = { id: "c1", parentId: null, author: { username: "ada", displayName: "Ada" }, body: "Is this still right?", createdAt: "2026-11-05T01:00:00.000Z", editedAt: null, resolved: false, deleted: false, node: "setup", status: "moved", line: 12, quote: "Start here" };
+    const fetcher = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      expect(String(input)).toBe("https://kintsugi.example/api/member/v1/comments?projectId=shop&path=20-spaces%2Feng%2Fsetup.md&status=open");
+      return json({ schemaVersion: "1", projectId: "shop", page: { key: "PAGE-ENG-0001", path: "20-spaces/eng/setup.md" }, comments: [comment], truncated: false });
+    });
+    const client = createMemberClient({ baseUrl: "https://kintsugi.example", tokenProvider: async () => "secret-credential-value", fetch: fetcher });
+    await expect(client.comments({ projectId: "shop", path: "20-spaces/eng/setup.md" })).resolves.toMatchObject({ comments: [{ id: "c1", status: "moved", quote: "Start here" }], truncated: false });
+    expect(() => client.comments({ projectId: "shop", path: "" })).toThrow();
+  });
+
   it("creates a fresh request timeout for every operation", async () => {
     const fetcher = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => json({ schemaVersion: "1", items: [], limit: 25 }));
     const signals: AbortSignal[] = [];

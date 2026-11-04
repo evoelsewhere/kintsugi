@@ -16,6 +16,7 @@ import type { PluginAccessService } from "../../src/modules/admin/plugin-access/
 import type { PluginsService } from "../../src/modules/admin/plugins/index.js";
 import type { ProjectAccessService } from "../../src/modules/admin/project-access/index.js";
 import type { BrainService } from "../../src/modules/delivery/brain/index.js";
+import type { WikiCommentService } from "../../src/modules/delivery/wiki/index.js";
 import type { DocumentsService } from "../../src/modules/delivery/documents/index.js";
 import { MemberApiService } from "../../src/modules/delivery/member-api/application/member-api.service.js";
 import type { MemberActivityService } from "../../src/modules/monitoring/member-activity/index.js";
@@ -61,7 +62,7 @@ function memberWithBrain() {
   } as unknown as BrainService;
   const access = { listReadableProjects: vi.fn(async () => []) } as unknown as ProjectAccessService;
   const activity = { observe: vi.fn(async () => undefined) } as unknown as MemberActivityService;
-  return new MemberApiService(access, {} as DocumentsService, {} as PluginsService, {} as PluginAccessService, activity, brain);
+  return new MemberApiService(access, {} as DocumentsService, {} as PluginsService, {} as PluginAccessService, activity, brain, {} as WikiCommentService);
 }
 
 /** Every Brain node in a response, wherever it is: an object with an `id`, a `kind` and a `path`. */

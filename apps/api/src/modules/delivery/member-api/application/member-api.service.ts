@@ -23,7 +23,10 @@ import {
   type BrainReadQuery,
   type BrainTree,
   type BrainTreeQuery,
+  COMMENTS_ANSWER_MAX,
+  type CommentsQuery,
   type MemberBrainNode,
+  type PageComments,
   type DocumentFile,
   type DocumentTree,
   type ListResult,
@@ -38,6 +41,7 @@ import { ProjectAccessService } from "#modules/admin/project-access/index.js";
 import type { MemberPrincipal } from "#modules/core/auth/index.js";
 import { BrainService } from "#modules/delivery/brain/index.js";
 import { DocumentsService } from "#modules/delivery/documents/index.js";
+import { WikiCommentService } from "#modules/delivery/wiki/index.js";
 import { isKintsugiActivityKind, MemberActivityService } from "#modules/monitoring/member-activity/index.js";
 
 const MAX_PROJECTS_PER_TOKEN = 100;
@@ -81,6 +85,7 @@ export class MemberApiService {
     private readonly pluginAccess: PluginAccessService,
     private readonly activity: MemberActivityService,
     private readonly brain: BrainService,
+    private readonly wikiComments: WikiCommentService,
   ) {}
 
   async listProjects(principal: MemberPrincipal, query: { limit?: number; cursor?: string }): Promise<ListResult<ProjectSummary>> {
@@ -167,6 +172,50 @@ export class MemberApiService {
       node: memberNode(view.node, features),
       items: view.items.map((item) => ({ node: memberNode(item.node, features), target: memberNode(item.target, features), linkKind: item.linkKind })),
     };
+  }
+
+  /**
+   * The comments of a wiki page, in time order: those of the threads that are open (the default) with their answers, or all.
+   * A comment is a row of the wiki, never a line of a document, so it is given here and nowhere in the Brain; what the
+   * people wrote is project data. At most `COMMENTS_ANSWER_MAX` are given and `truncated` says when there are more.
+   */
+  async comments(query: CommentsQuery): Promise<PageComments> {
+    const status = query.status ?? "open";
+    const kept: PageComments["comments"] = [];
+    const open = new Set<string>();
+    let page: { key: string; path: string } | undefined;
+    let after: string | undefined;
+    let truncated = false;
+    for (;;) {
+      const window = await this.wikiComments.list(query.projectId, query.path, 100, after);
+      page = window.page;
+      for (const comment of window.comments) {
+        const wanted = status === "all" || (comment.parentId === null ? !comment.resolved && !comment.deleted : open.has(comment.parentId));
+        if (comment.parentId === null && wanted) open.add(comment.id);
+        if (!wanted) continue;
+        if (kept.length >= COMMENTS_ANSWER_MAX) {
+          truncated = true;
+          break;
+        }
+        kept.push({
+          id: comment.id,
+          parentId: comment.parentId,
+          author: { username: comment.author.username, displayName: comment.author.displayName },
+          body: comment.body,
+          createdAt: comment.createdAt,
+          editedAt: comment.editedAt,
+          resolved: comment.resolved,
+          deleted: comment.deleted,
+          node: comment.node,
+          status: comment.status,
+          line: comment.line,
+          quote: comment.quote,
+        });
+      }
+      if (truncated || window.next === null) break;
+      after = window.next;
+    }
+    return { schemaVersion: MEMBER_SCHEMA_VERSION, projectId: query.projectId, page: page ?? { key: "", path: query.path }, comments: kept, truncated };
   }
 
   /** What changed in the Brain's documents since an earlier commit. */

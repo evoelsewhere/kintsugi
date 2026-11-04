@@ -7,13 +7,14 @@ import { ProjectAccessModule } from "#modules/admin/project-access/index.js";
 import { AuthModule } from "#modules/core/auth/index.js";
 import { BrainModule } from "#modules/delivery/brain/index.js";
 import { DocumentsModule } from "#modules/delivery/documents/index.js";
+import { WikiModule } from "#modules/delivery/wiki/index.js";
 import { MemberActivityModule } from "#modules/monitoring/member-activity/index.js";
 import { MemberApiService } from "./application/member-api.service.js";
 import { MemberApiController } from "./interface/member-api.controller.js";
 
 /** delivery · member API: the base contract plugins extend (ADR-0069). */
 @Module({
-  imports: [AuthModule, BrainModule, DocumentsModule, MemberActivityModule, PluginAccessModule, PluginsModule, ProjectAccessModule],
+  imports: [AuthModule, BrainModule, DocumentsModule, MemberActivityModule, PluginAccessModule, PluginsModule, ProjectAccessModule, WikiModule],
   controllers: [MemberApiController],
   providers: [MemberApiService],
 })

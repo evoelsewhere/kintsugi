@@ -75,6 +75,12 @@ const member = {
       items: [{ node: node("a.md"), target: node(query.node), linkKind: "link" }], total: 1, offset: 0, nextOffset: null,
     };
   },
+  async comments(query) {
+    return {
+      schemaVersion: "1", projectId: query.projectId, page: { key: "PAGE-ENG-0001", path: query.path }, truncated: false,
+      comments: [{ id: "c1", parentId: null, author: { username: "ada", displayName: "Ada" }, body: "Is this still right?", createdAt: "2026-11-05T01:00:00.000Z", editedAt: null, resolved: false, deleted: false, node: "setup", status: "moved", line: 12, quote: "Start here" }],
+    };
+  },
   async brainChanges(query) {
     return { schemaVersion: "1", projectId: query.projectId, branch: "main", commit: sha("a"), since: sha("b"), files: [], linesKnown: true, truncated: false };
   },
