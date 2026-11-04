@@ -13,6 +13,11 @@ export abstract class WikiDrafts {
    * write it was published with carried, so `writeId` is cleared; the same text keeps it.
    */
   abstract update(id: string, baseRevision: number, text: string): Promise<WikiDraft | undefined>;
+  /**
+   * Gives the draft another page id: its text (which carries it) and `pageId`, and a new revision so a client that still
+   * holds the old text is told; undefined when the revision has moved on. The write it was published with is let go.
+   */
+  abstract reissueId(id: string, baseRevision: number, text: string, pageId: string): Promise<WikiDraft | undefined>;
   /** Sets or clears the write that published the draft. */
   abstract setWrite(id: string, writeId: string | null): Promise<void>;
   abstract remove(id: string): Promise<boolean>;

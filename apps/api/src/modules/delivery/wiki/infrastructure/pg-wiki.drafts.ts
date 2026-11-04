@@ -60,6 +60,14 @@ export class PgWikiDrafts extends WikiDrafts {
     return result.rows[0] === undefined ? undefined : toDraft(result.rows[0]);
   }
 
+  async reissueId(id: string, baseRevision: number, text: string, pageId: string): Promise<WikiDraft | undefined> {
+    const result = await getPool().query<DraftRow>(
+      `update knowledge.wiki_draft set text = $3, page_id = $4, write_id = null, revision = revision + 1, touched_at = now() where id = $1 and revision = $2 returning ${COLUMNS}`,
+      [id, baseRevision, text, pageId],
+    );
+    return result.rows[0] === undefined ? undefined : toDraft(result.rows[0]);
+  }
+
   async setWrite(id: string, writeId: string | null): Promise<void> {
     await getPool().query("update knowledge.wiki_draft set write_id = $2 where id = $1", [id, writeId]);
   }

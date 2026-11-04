@@ -125,6 +125,14 @@ export class PgDocumentWriteStore extends DocumentWriteStore {
     return { items: rows.rows.map(toRecord), total: count.rows[0]?.total ?? 0 };
   }
 
+  async openPageWriteOfId(projectId: string, pageId: string, exceptPath: string): Promise<DocumentWriteRecord | undefined> {
+    const result = await this.#pool.query<WriteRow>(
+      `select ${COLUMNS} from workflow.document_write where project_id = $1 and page_id = $2 and page_path <> $3 and ${OPEN_PAGE} order by created_at limit 1`,
+      [projectId, pageId, exceptPath],
+    );
+    return result.rows[0] === undefined ? undefined : toRecord(result.rows[0]);
+  }
+
   async find(id: string): Promise<DocumentWriteRecord | undefined> {
     const result = await this.#pool.query<WriteRow>(`select ${COLUMNS} from workflow.document_write where id = $1`, [id]);
     return result.rows[0] === undefined ? undefined : toRecord(result.rows[0]);

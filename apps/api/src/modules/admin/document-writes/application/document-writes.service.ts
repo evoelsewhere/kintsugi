@@ -138,6 +138,11 @@ export class DocumentWritesService {
     return toPage(items, total, query);
   }
 
+  /** The open page write that carries a page id, other than the one of the page at `exceptPath`: the page that is about to hold the id. */
+  openPageWriteOfId(projectId: string, pageId: string, exceptPath: string): Promise<DocumentWriteRecord | undefined> {
+    return this.store.openPageWriteOfId(projectId, pageId, exceptPath);
+  }
+
   /** One write of the project by id, or undefined (a write of another project is not found). */
   async find(projectId: string, id: string): Promise<DocumentWriteRecord | undefined> {
     const write = await this.store.find(id);
