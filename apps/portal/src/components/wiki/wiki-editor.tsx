@@ -22,7 +22,7 @@ import { nameOf, wikiPageLink, wikiRead } from "@/lib/wiki";
 import { useAttachments } from "./use-attachments";
 import { LabelChips } from "./wiki-label-chips";
 import { PublishFlow } from "./wiki-publish";
-import { type AccessView, draftImageUrl, DraftSaver, type DraftView, lineSeparatorOf, restoreMessage, SAVE_STATUS_LABEL, type SaverState, setStatus, statusChangeMessage, type StatusChange, statusOf } from "@/lib/wiki-edit";
+import { type AccessView, attachmentInsertion, draftImageUrl, DraftSaver, type DraftView, lineSeparatorOf, restoreMessage, SAVE_STATUS_LABEL, type SaverState, setStatus, type TextChange, statusChangeMessage, type StatusChange, statusOf } from "@/lib/wiki-edit";
 
 /** A page's title for its default publish message: the `title` of its front matter, else its file name. */
 function pageTitle(text: string, path: string): string {
@@ -150,14 +150,15 @@ function Surface({
   // A text taken from the server remounts the editor with it.
   const [generation, setGeneration] = useState(0);
   const engine = useRef<DraftSaver | null>(null);
-  const insertAtCursor = useRef<(text: string) => void>(() => undefined);
-  const register = useCallback((insert: (text: string) => void) => {
-    insertAtCursor.current = insert;
+  const applyChange = useRef<(plan: (text: string, cursor: number) => TextChange) => void>(() => undefined);
+  const register = useCallback((apply: (plan: (text: string, cursor: number) => TextChange) => void) => {
+    applyChange.current = apply;
   }, []);
   const attachments = useAttachments(
     projectId,
     path,
-    (markdown) => insertAtCursor.current(markdown),
+    // The Markdown goes on a line of its own at the cursor, never into or in front of the front matter.
+    (markdown) => applyChange.current((current, cursor) => attachmentInsertion(current, cursor, markdown)),
     () => engine.current?.whenSaved() ?? Promise.resolve(),
   );
   const fileInput = useRef<HTMLInputElement>(null);
