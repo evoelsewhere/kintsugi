@@ -12,6 +12,7 @@ import { Markdown } from "@/components/results/lazy-markdown";
 import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
 import { documentsApi } from "@/lib/api/documents";
+import { shortSha } from "@/lib/format";
 import { draftApiOf, wikiEditApi } from "@/lib/api/wiki-edit";
 import { splitFrontMatter } from "@/lib/front-matter";
 import { useLoader } from "@/lib/use-loader";
@@ -19,7 +20,7 @@ import { cn } from "@/lib/utils";
 import { nameOf, wikiPageLink, wikiRead } from "@/lib/wiki";
 import { LabelChips } from "./wiki-label-chips";
 import { PublishFlow } from "./wiki-publish";
-import { type AccessView, DraftSaver, type DraftView, lineSeparatorOf, SAVE_STATUS_LABEL, type SaverState } from "@/lib/wiki-edit";
+import { type AccessView, DraftSaver, type DraftView, lineSeparatorOf, restoreMessage, SAVE_STATUS_LABEL, type SaverState } from "@/lib/wiki-edit";
 
 /** A page's title for its default publish message: the `title` of its front matter, else its file name. */
 function pageTitle(text: string, path: string): string {
@@ -35,13 +36,15 @@ export interface WikiEditorProps {
   /** The commit the Brain indexed: where the text is read from when the person has no draft yet. */
   commit: string;
   path: string;
+  /** An older version (a commit id) whose text the person restores: it becomes the draft's text. */
+  restore?: string | undefined;
 }
 
-export function WikiEditor({ projectId, commit, path }: WikiEditorProps): React.JSX.Element {
+export function WikiEditor({ projectId, commit, path, restore }: WikiEditorProps): React.JSX.Element {
   const access = useLoader(`wiki/${projectId}/access/${path}`, () => wikiRead(() => wikiEditApi.access(projectId, path)));
   return (
     <Loaded loader={access} rows={4}>
-      {(view) => (view.canWrite ? <OpenedEditor key={path} projectId={projectId} commit={commit} path={path} access={view} /> : <Refused path={path} projectId={projectId} access={view} />)}
+      {(view) => (view.canWrite ? <OpenedEditor key={`${path}:${restore ?? ""}`} projectId={projectId} commit={commit} path={path} restore={restore} access={view} /> : <Refused path={path} projectId={projectId} access={view} />)}
     </Loaded>
   );
 }
@@ -62,28 +65,76 @@ function Refused({ projectId, path, access }: { projectId: string; path: string;
   );
 }
 
-/** What the editor starts from: the person's draft, or the page as the Brain indexed it (and the commit that is). */
-function OpenedEditor({ projectId, commit, path, access }: WikiEditorProps & { access: AccessView }): React.JSX.Element {
-  const start = useLoader(`wiki/${projectId}/${commit}/edit-start/${path}`, () =>
+/**
+ * What the editor starts from: the person's draft, or the page as the Brain indexed it (and the commit that is). Restoring an
+ * older version starts from that version's text instead, but the base stays the page as it is now: the restore is a new
+ * change on top of the current page, never a return to the old commit. A draft that exists is replaced only on the person's word.
+ */
+function OpenedEditor({ projectId, commit, path, restore, access }: WikiEditorProps & { access: AccessView }): React.JSX.Element {
+  const start = useLoader(`wiki/${projectId}/${commit}/edit-start/${path}/${restore ?? ""}`, () =>
     wikiRead(async () => {
       const draft = await wikiEditApi.draft(projectId, path);
-      // The draft holds its own base; the file is read only when there is no draft to continue.
-      const file = draft === null ? await documentsApi.file(projectId, path, commit) : null;
-      return { draft, file };
+      // The draft holds its own base; the page is read when there is no draft to continue, and for a restore (its base).
+      const current = draft === null || restore !== undefined ? await documentsApi.file(projectId, path, commit) : null;
+      const old = restore === undefined ? null : await documentsApi.file(projectId, path, restore);
+      return { draft, current, old };
     }),
   );
+  const [replace, setReplace] = useState(false);
   return (
     <Loaded loader={start} rows={8}>
-      {({ draft, file }) => <Surface projectId={projectId} path={path} direct={access.direct} draft={draft} startText={file?.content ?? ""} startCommit={file?.commit ?? null} />}
+      {({ draft, current, old }) =>
+        restore !== undefined && old !== null && draft !== null && !replace ? (
+          <div role="alert" className="flex flex-col gap-2 rounded-lg bg-recessed p-4 text-[13px] text-text-secondary">
+            <p className="text-text">You have a draft of this page</p>
+            <p>Restoring version {shortSha(restore)} replaces the text of your draft with that version. Your draft text is lost.</p>
+            <div className="flex flex-wrap gap-2">
+              <Button size="small" variant="solid" onClick={() => setReplace(true)}>
+                Replace my draft with version {shortSha(restore)}
+              </Button>
+              <Link to={wikiPageLink(projectId, path, { mode: "edit" })} className="self-center text-accent hover:underline">
+                Keep my draft
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <Surface
+            projectId={projectId}
+            path={path}
+            direct={access.direct}
+            draft={draft}
+            startText={old?.content ?? current?.content ?? ""}
+            startCommit={current?.commit ?? null}
+            restoredFrom={restore !== undefined && old !== null ? restore : null}
+          />
+        )
+      }
     </Loaded>
   );
 }
 
-function Surface({ projectId, path, direct, draft, startText, startCommit }: { projectId: string; path: string; direct: boolean; draft: DraftView | null; startText: string; startCommit: string | null }): React.JSX.Element {
-  const initial = draft?.text ?? startText;
+function Surface({
+  projectId,
+  path,
+  direct,
+  draft,
+  startText,
+  startCommit,
+  restoredFrom,
+}: {
+  projectId: string;
+  path: string;
+  direct: boolean;
+  draft: DraftView | null;
+  startText: string;
+  startCommit: string | null;
+  restoredFrom: string | null;
+}): React.JSX.Element {
+  // A restore puts the old version's text in the editor, over the draft when there is one.
+  const initial = restoredFrom !== null ? startText : (draft?.text ?? startText);
   const [text, setText] = useState(initial);
   const [preview, setPreview] = useState(initial);
-  const [saver, setSaver] = useState<SaverState>({ status: "saved", revision: draft?.revision ?? null, others: draft?.others ?? [], message: null });
+  const [saver, setSaver] = useState<SaverState>({ status: restoredFrom !== null && draft !== null ? "unsaved" : "saved", revision: draft?.revision ?? null, others: draft?.others ?? [], message: null });
   const [conflict, setConflict] = useState<DraftView | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [pane, setPane] = useState<"source" | "preview">("source");
@@ -99,6 +150,7 @@ function Surface({ projectId, path, direct, draft, startText, startCommit }: { p
       draft,
       startText,
       startCommit,
+      replaceWith: restoredFrom !== null && draft !== null ? startText : undefined,
       onChange: setSaver,
       onRevisionConflict: setConflict,
     });
@@ -112,7 +164,7 @@ function Surface({ projectId, path, direct, draft, startText, startCommit }: { p
       made.dispose();
       engine.current = null;
     };
-  }, [projectId, path, draft, startText, startCommit]);
+  }, [projectId, path, draft, startText, startCommit, restoredFrom]);
 
   useEffect(() => {
     const timer = setTimeout(() => setPreview(text), PREVIEW_DELAY_MS);
@@ -143,6 +195,11 @@ function Surface({ projectId, path, direct, draft, startText, startCommit }: { p
           Publish
         </Button>
       </div>
+      {restoredFrom === null ? null : (
+        <p role="status" className="rounded-lg bg-recessed px-3 py-2 text-[12px] text-text-secondary">
+          This text comes from version <span className="font-mono">{shortSha(restoredFrom)}</span>. Publishing it makes it the current version of the page.
+        </p>
+      )}
       {saver.message === null ? null : (
         <p role="alert" className="text-[12px] text-[var(--ds-status-red)]">
           {saver.message}
@@ -187,6 +244,7 @@ function Surface({ projectId, path, direct, draft, startText, startCommit }: { p
         projectId={projectId}
         path={path}
         title={pageTitle(text, path)}
+        {...(restoredFrom === null ? {} : { initialMessage: restoreMessage(restoredFrom, pageTitle(text, path)) })}
         direct={direct}
         open={publishing}
         saveDraft={async () => {

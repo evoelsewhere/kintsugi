@@ -147,6 +147,11 @@ export interface DraftSaverOptions {
   /** The text the editor started from, and the commit it was read from: the base of a draft that is created. */
   startText: string;
   startCommit: string | null;
+  /**
+   * A text that stands in for the draft's (restoring an older version): it is unsaved from the start, so the next save
+   * replaces the server's draft text with it, against the revision the server holds.
+   */
+  replaceWith?: string | undefined;
   /** The saver reports each change of what it knows. */
   onChange: (state: SaverState) => void;
   /** The server holds another revision (a second tab): the person chooses which text to keep. */
@@ -193,6 +198,13 @@ export class DraftSaver {
     this.revision = options.draft?.revision ?? null;
     this.others = options.draft?.others ?? [];
     this.baseCommit = options.startCommit;
+    if (options.replaceWith !== undefined && options.replaceWith !== this.text) {
+      this.text = options.replaceWith;
+      this.dirtySince = this.now();
+      this.lastChange = this.dirtySince;
+      this.status = "unsaved";
+      this.schedule();
+    }
   }
 
   private now(): number {
@@ -779,6 +791,9 @@ export interface DeleteResult {
   write: WriteSummary;
   brokenLinks: number;
 }
+
+/** The message a restore starts with: `Restore version <short sha> of <title>`. */
+export const restoreMessage = (sha: string, title: string): string => `Restore version ${sha.slice(0, 7)} of ${title}`.slice(0, PUBLISH_MESSAGE_MAX);
 
 /** The message a delete starts with. */
 export const defaultDeleteMessage = (path: string): string => `Delete ${path}`.slice(0, PUBLISH_MESSAGE_MAX);

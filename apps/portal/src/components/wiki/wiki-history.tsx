@@ -8,6 +8,7 @@ import { Loaded } from "@/components/loaded";
 import { Button } from "@/components/ui/button";
 import { CheckMark } from "@/components/ui/checkbox";
 import { documentsApi, type HistoryEntry } from "@/lib/api/documents";
+import { wikiEditApi } from "@/lib/api/wiki-edit";
 import { errorText, formatDateTime, shortSha } from "@/lib/format";
 import { useLoader } from "@/lib/use-loader";
 import { cn } from "@/lib/utils";
@@ -22,14 +23,17 @@ export interface WikiHistoryProps {
 
 export function WikiHistory({ projectId, commit, path }: WikiHistoryProps): React.JSX.Element {
   const first = useLoader(`wiki/${projectId}/${commit}/history/${path}`, () => wikiRead(() => documentsApi.history(projectId, path, { ref: commit })));
+  // Restore is offered where the person may write the page; without the answer (or the rights) the history is read-only.
+  const access = useLoader(`wiki/${projectId}/access/${path}`, () => wikiRead(() => wikiEditApi.access(projectId, path)));
+  const canRestore = access.data?.canWrite === true;
   return (
     <Loaded loader={first} rows={5}>
-      {(history) => <Versions key={history.commit} projectId={projectId} commit={commit} path={path} first={history.entries} firstNext={history.next} />}
+      {(history) => <Versions key={history.commit} projectId={projectId} commit={commit} path={path} first={history.entries} firstNext={history.next} canRestore={canRestore} />}
     </Loaded>
   );
 }
 
-function Versions({ projectId, commit, path, first, firstNext }: WikiHistoryProps & { first: HistoryEntry[]; firstNext: string | null }): React.JSX.Element {
+function Versions({ projectId, commit, path, first, firstNext, canRestore }: WikiHistoryProps & { first: HistoryEntry[]; firstNext: string | null; canRestore: boolean }): React.JSX.Element {
   const navigate = useNavigate();
   const [older, setOlder] = useState<{ entries: HistoryEntry[]; next: string | null }>({ entries: [], next: firstNext });
   const [loading, setLoading] = useState(false);
@@ -97,6 +101,11 @@ function Versions({ projectId, commit, path, first, firstNext }: WikiHistoryProp
                   <span className="font-mono">{shortSha(entry.sha)}</span>
                   {index === 0 ? <span className="rounded-full bg-recessed px-1.5 py-px text-text-secondary">current</span> : null}
                   {entry.minor ? <span className="rounded-full bg-recessed px-1.5 py-px text-text-secondary">minor edit</span> : null}
+                  {canRestore && index > 0 ? (
+                    <Link to={wikiPageLink(projectId, path, { mode: "edit", restore: entry.sha })} className="text-accent hover:underline">
+                      Restore this version
+                    </Link>
+                  ) : null}
                 </p>
               </div>
             </li>

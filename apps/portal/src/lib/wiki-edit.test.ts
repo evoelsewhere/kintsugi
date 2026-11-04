@@ -21,6 +21,7 @@ import {
   defaultDeleteMessage,
   deleteWarning,
   messageProblem,
+  restoreMessage,
   setLabels,
   MOVE_REWRITE_LIMIT,
   moveKind,
@@ -663,5 +664,56 @@ describe("deleting a page", () => {
   it("starts the message with Delete <path>, within the limit", () => {
     expect(defaultDeleteMessage("a/b.md")).toBe("Delete a/b.md");
     expect(defaultDeleteMessage(`a/${"b".repeat(400)}.md`)).toHaveLength(PUBLISH_MESSAGE_MAX);
+  });
+});
+
+describe("restoring an older version", () => {
+  it("starts the message with Restore version <short sha> of <title>", () => {
+    expect(restoreMessage("a1b2c3d4e5f6".padEnd(40, "0"), "Database failover")).toBe("Restore version a1b2c3d of Database failover");
+    expect(restoreMessage("a".repeat(40), "x".repeat(400))).toHaveLength(PUBLISH_MESSAGE_MAX);
+  });
+
+  it("has no draft yet: the old text is the editor's, and the first save carries the commit of the page as it is now", async () => {
+    const current = "c".repeat(40);
+    const { saver, calls } = harness({ startText: "the old version's text", startCommit: current });
+    expect(saver.current).toEqual({ text: "the old version's text", revision: null });
+    await saver.whenSaved();
+    expect(calls).toEqual([{ path: "a/page.md", text: "the old version's text", baseRevision: null, baseCommit: current }]);
+  });
+
+  it("replaces the text of a draft that exists, saving it against the revision the server holds, once the person said so", async () => {
+    let clock = 0;
+    const calls: DraftSaveBody[] = [];
+    const timers: Array<() => void> = [];
+    const saver = new DraftSaver({
+      path: "a/page.md",
+      api: {
+        save: async (body) => {
+          calls.push(body);
+          return draft({ text: body.text, revision: 6 });
+        },
+        load: async () => null,
+      },
+      draft: draft({ text: "my unfinished draft", revision: 5 }),
+      startText: "",
+      startCommit: null,
+      replaceWith: "the old version's text",
+      onChange: () => undefined,
+      onRevisionConflict: () => undefined,
+      now: () => clock,
+      setTimer: (run) => timers.push(run),
+      clearTimer: () => undefined,
+    });
+    clock = 2000;
+    expect(saver.current).toEqual({ text: "the old version's text", revision: 5 });
+    await expect(saver.whenSaved()).resolves.toBe(6);
+    expect(calls).toEqual([{ path: "a/page.md", text: "the old version's text", baseRevision: 5 }]);
+    expect(timers.length).toBeGreaterThan(0);
+  });
+
+  it("changes nothing when the text to restore is the draft's own", async () => {
+    const { saver, calls } = harness({ draft: draft({ text: "same", revision: 2 }) });
+    expect(saver.current.text).toBe("same");
+    expect(calls).toEqual([]);
   });
 });

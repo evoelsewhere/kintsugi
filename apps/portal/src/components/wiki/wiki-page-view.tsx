@@ -48,7 +48,7 @@ export function WikiPageView({ projectId, commit, path }: WikiPageViewProps): Re
       {mode.mode === "edit" ? null : <PageTabs projectId={projectId} path={path} mode={mode} />}
       {mode.mode === "page" ? <EditEntry projectId={projectId} path={path} /> : null}
       {mode.mode === "edit" ? (
-        <WikiEditor projectId={projectId} commit={commit} path={path} />
+        <WikiEditor projectId={projectId} commit={commit} path={path} restore={mode.restore} />
       ) : mode.mode === "page" ? (
         <PageText projectId={projectId} commit={commit} path={path} />
       ) : mode.mode === "version" ? (

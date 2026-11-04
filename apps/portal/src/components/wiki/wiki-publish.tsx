@@ -37,6 +37,8 @@ export interface PublishFlowProps {
   path: string;
   /** The page's title, for the default message. */
   title: string;
+  /** A message to start with instead of `Update <title>` (a restore says which version). */
+  initialMessage?: string | undefined;
   /** Whether the result is a commit to the default branch rather than a pull request (`GET wiki/access` `direct`). */
   direct: boolean;
   /** Saves what is typed and gives the revision of the draft to publish. */
@@ -52,8 +54,8 @@ type Stage =
   | { kind: "done"; write: WriteSummary }
   | { kind: "unchanged" };
 
-export function PublishFlow({ projectId, path, title, direct, saveDraft, open, onClose }: PublishFlowProps): React.JSX.Element | null {
-  const [message, setMessage] = useState(() => defaultPublishMessage(title));
+export function PublishFlow({ projectId, path, title, initialMessage, direct, saveDraft, open, onClose }: PublishFlowProps): React.JSX.Element | null {
+  const [message, setMessage] = useState(() => initialMessage ?? defaultPublishMessage(title));
   const [minor, setMinor] = useState(false);
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState<Stage>({ kind: "form" });
