@@ -66,6 +66,28 @@ export type WatchQuery = z.infer<typeof watchQuerySchema>;
 export const watchesQuerySchema = z.object({ path: z.string().min(1).max(1000).optional() });
 export type WatchesQuery = z.infer<typeof watchesQuerySchema>;
 
+/** `?path&limit&after` of a page's comments: `after` is the `next` of the previous page. */
+export const commentsQuerySchema = z.object({
+  path: z.string().min(1).max(1000),
+  limit: z.coerce.number().int().min(1).max(100).default(100),
+  after: z.string().uuid().optional(),
+});
+export type CommentsQuery = z.infer<typeof commentsQuerySchema>;
+
+/** Body of a comment: on the page, or on a passage of it (`anchor`), or an answer (`parentId`). */
+export const postCommentSchema = z
+  .object({
+    path: z.string().min(1).max(1000),
+    body: z.string().max(8000),
+    anchor: z
+      .object({ node: z.string().min(1).max(1000), exact: z.string().min(1).max(500), prefix: z.string().max(64).optional(), suffix: z.string().max(64).optional() })
+      .strict()
+      .optional(),
+    parentId: z.string().uuid().optional(),
+  })
+  .strict();
+export type PostCommentBody = z.infer<typeof postCommentSchema>;
+
 /** Body of a page delete: the page and the message of the write (its first line is the pull request's title). */
 export const deletePageSchema = z.object({ path: z.string().min(1).max(1000), message: z.string().trim().min(1).max(200) }).strict();
 export type DeletePageBody = z.infer<typeof deletePageSchema>;
