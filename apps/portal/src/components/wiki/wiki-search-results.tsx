@@ -1,19 +1,22 @@
-// What a search of the wiki found: the pages that contain the text, each with the lines that do, the text marked, and
-// the heading each line is under; a click opens the page scrolled to that heading. The space and the label narrow the
+// What a search of the wiki found: the pages best first (the Brain's ranked search), each with its summary and the line
+// that matched, the words marked, and the heading it is under; an API without the ranked search gives the pages that
+// contain the exact text, as before; a click opens the page scrolled to that heading. The space and the label narrow the
 // search on the server (before its limit cuts the list), and the choices they offer are the spaces and labels of the
 // pages the text is in. Excerpts are shown as text, never as HTML.
 
 import type { BrainNode } from "@kintsugi/domain";
-import { SearchX, Tag } from "lucide-react";
-import { Fragment } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { SearchX } from "lucide-react";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Loaded } from "@/components/loaded";
 import { Select } from "@/components/ui/select";
 import { brainApi } from "@/lib/api/brain";
 import { searchProblem } from "@/lib/brain";
+import { leftOutNote, outcomeHits, runSearch, SEARCH_LIMIT } from "@/lib/brain-search";
 import { useLoader } from "@/lib/use-loader";
-import { highlightParts, hitCount, hitPaths, searchFacets, searchHits, searchLineLink, type WikiSearch, wikiLink, wikiRead, wikiSearchLink, wikiSpaceLink, withDocuments } from "@/lib/wiki";
+import { hitCount, hitPaths, rankedCount, searchFacets, type WikiSearch, wikiRead, wikiSearchLink, withDocuments } from "@/lib/wiki";
 import { documentsOf } from "./hit-documents";
+import { SearchHitCard } from "./search-hit-card";
 
 export interface WikiSearchResultsProps {
   projectId: string;
@@ -40,91 +43,75 @@ export function WikiSearchResults({ projectId, commit, search }: WikiSearchResul
 
 function Results({ projectId, commit, search }: WikiSearchResultsProps): React.JSX.Element {
   const narrowed = search.space !== "" || search.label !== "";
+  // Archived pages and templates are left out of a ranked search unless the person asks for them; the choice is the
+  // person's for this list only (nothing is stored in the browser).
+  const [archived, setArchived] = useState(false);
   const base = `wiki/${projectId}/${commit}/search/${search.q}`;
+  // The ranked search; an API without the route, or a Brain that is not built, is answered by the exact text search.
+  const ask = (filter: { space?: string; label?: string }) =>
+    wikiRead(() =>
+      runSearch({
+        search: () => brainApi.search(projectId, search.q, { ...filter, archived, limit: SEARCH_LIMIT }),
+        grep: () => brainApi.grep(projectId, search.q, undefined, filter),
+      }),
+    );
   // The text alone gives the spaces and labels to choose from; a search with a filter is a request of its own.
-  const everything = useLoader(base, () => wikiRead(() => brainApi.grep(projectId, search.q)));
-  const filtered = useLoader(`${base}/${search.space}/${search.label}`, () =>
-    narrowed ? wikiRead(() => brainApi.grep(projectId, search.q, undefined, { space: search.space, label: search.label })) : Promise.resolve(null),
-  );
+  const everything = useLoader(`${base}/${archived}`, () => ask({}));
+  const filtered = useLoader(`${base}/${search.space}/${search.label}/${archived}`, () => (narrowed ? ask({ space: search.space, label: search.label }) : Promise.resolve(null)));
   const shown = narrowed ? filtered : everything;
   // The pages of both lists: their document nodes hold the space and the labels the results and the filters show.
-  const everyHit = searchHits(everything.data?.matches ?? []);
-  const shownHit = searchHits(shown.data?.matches ?? []);
+  const include = { includeHidden: archived };
+  const everyHit = outcomeHits(everything.data, include);
+  const shownHit = outcomeHits(shown.data, include);
   const paths = hitPaths([...shownHit, ...everyHit]);
   const documents = useLoader(`${base}/documents/${paths.join("|")}`, () => documentsOf(projectId, commit, paths));
   const known = documents.data ?? new Map<string, BrainNode>();
-  const facets = searchFacets(withDocuments(everyHit, known));
+  const facets = searchFacets(withDocuments(everyHit, known, include));
   return (
     <>
       <Filters projectId={projectId} search={search} spaces={facets.spaces} labels={facets.labels} />
       <Loaded loader={shown} rows={5}>
-        {(view) => {
-          const hits = withDocuments(searchHits(view?.matches ?? []), known);
+        {(outcome) => {
+          const hits = withDocuments(outcomeHits(outcome, include), known, include);
+          const ranked = outcome?.kind === "ranked";
+          const note = outcome?.kind === "ranked" ? leftOutNote(outcome.view.leftOut) : "";
+          const leftOut = note === "" ? null : (
+            <p className="flex flex-wrap items-center gap-x-2 text-[12px] text-text-muted" role="status">
+              {note}
+              <button type="button" className="text-accent hover:underline" onClick={() => setArchived(true)}>
+                Include them
+              </button>
+            </p>
+          );
           return hits.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-10 text-center">
               <SearchX className="size-5 text-text-muted" strokeWidth={1.5} />
               <p className="text-[13px] text-text">No page found</p>
               <p className="max-w-md text-[12px] text-text-muted">
-                No page of the wiki contains “{search.q}”{search.space === "" ? "" : ` in the space ${search.space}`}
-                {search.label === "" ? "" : ` with the label ${search.label}`}. The search finds the exact text, not similar words.
+                No page of the wiki {ranked ? "matches" : "contains"} “{search.q}”{search.space === "" ? "" : ` in the space ${search.space}`}
+                {search.label === "" ? "" : ` with the label ${search.label}`}.
+                {ranked ? " The search looks for the words, best match first." : " The search finds the exact text, not similar words."}
               </p>
+              {leftOut}
             </div>
           ) : (
             <>
               <p className="text-[12px] text-text-muted" role="status">
-                {hitCount(hits.length, search.q)}
-                {view?.truncated === true ? " · there are more results, narrow the search (a space, a label or more of the text)" : ""}
+                {ranked ? rankedCount(hits.length, search.q) : hitCount(hits.length, search.q)}
+                {outcome?.kind === "exact" && outcome.view.truncated ? " · there are more results, narrow the search (a space, a label or more of the text)" : ""}
               </p>
+              {leftOut}
+              {archived ? (
+                <p className="text-[12px] text-text-muted">
+                  Archived pages and templates are included.{" "}
+                  <button type="button" className="text-accent hover:underline" onClick={() => setArchived(false)}>
+                    Leave them out
+                  </button>
+                </p>
+              ) : null}
               <ul className="flex flex-col gap-2">
                 {hits.map((hit) => (
-                  <li key={hit.path} className="flex flex-col gap-1.5 rounded-[var(--geist-radius)] p-3 shadow-border">
-                    <Link to={wikiLink(projectId, hit.path)} className="text-[14px] font-medium text-text hover:underline focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]">
-                      {hit.title}
-                    </Link>
-                    <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-text-muted">
-                      {hit.space === null ? null : (
-                        <Link to={wikiSpaceLink(projectId, hit.space)} title={`The home page of the space ${hit.space}`} className="font-mono hover:text-text hover:underline">
-                          {hit.space}
-                        </Link>
-                      )}
-                      {hit.breadcrumb.map((name, index) => (
-                        <Fragment key={`${index}:${name}`}>
-                          {index === 0 && hit.space === null ? null : <span aria-hidden="true">/</span>}
-                          <span>{name}</span>
-                        </Fragment>
-                      ))}
-                      {hit.labels.map((label) => (
-                        <span key={label} className="ml-1 flex items-center gap-1 rounded-full bg-recessed px-1.5 py-px text-text-secondary">
-                          <Tag className="size-2.5" strokeWidth={1.75} aria-hidden="true" />
-                          {label}
-                        </span>
-                      ))}
-                    </p>
-                    <ul className="flex flex-col gap-px">
-                      {hit.lines.map((line) => (
-                        <li key={line.line}>
-                          <Link
-                            to={searchLineLink(projectId, hit, line)}
-                            className="flex min-w-0 items-baseline gap-2 rounded-sm px-1 py-0.5 text-[12px] text-text-secondary hover:bg-hover focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
-                          >
-                            <span className="w-8 shrink-0 text-right font-mono text-[11px] text-text-muted tabular-nums">{line.line}</span>
-                            <span className="min-w-0 break-words">
-                              {line.section === null ? null : <span className="mr-1.5 text-text-muted">{line.section} ·</span>}
-                              {highlightParts(line.excerpt, search.q).map((part, index) =>
-                                part.match ? (
-                                  <mark key={index} className="rounded-sm bg-hover px-0.5 text-text underline decoration-text-muted underline-offset-2">
-                                    {part.text}
-                                  </mark>
-                                ) : (
-                                  <Fragment key={index}>{part.text}</Fragment>
-                                ),
-                              )}
-                            </span>
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  </li>
+                  <SearchHitCard key={hit.path} projectId={projectId} hit={hit} query={search.q} ranked={ranked} />
                 ))}
               </ul>
             </>
