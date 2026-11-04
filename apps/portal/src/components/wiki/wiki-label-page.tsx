@@ -8,10 +8,7 @@ import { Loaded } from "@/components/loaded";
 import { EmptyState } from "@/components/ui/empty-state";
 import { brainApi } from "@/lib/api/brain";
 import { useLoader } from "@/lib/use-loader";
-import { labelledPages, wikiLabelLink, wikiLink, wikiRead } from "@/lib/wiki";
-
-/** The most pages the Brain's lookup returns in one answer. */
-const LOOKUP_LIMIT = 20;
+import { pagesWithLabel, wikiLabelLink, wikiLink, wikiRead } from "@/lib/wiki";
 
 export interface WikiLabelPageProps {
   projectId: string;
@@ -21,7 +18,10 @@ export interface WikiLabelPageProps {
 }
 
 export function WikiLabelPage({ projectId, commit, label }: WikiLabelPageProps): React.JSX.Element {
-  const found = useLoader(`wiki/${projectId}/${commit}/label/${label}`, () => wikiRead(() => brainApi.lookup(projectId, `label:${label}`)));
+  // The lookup stops at twenty pages: the page walks the Brain's tree instead and keeps every page with the label.
+  const found = useLoader(`wiki/${projectId}/${commit}/label/${label}`, () =>
+    wikiRead(() => pagesWithLabel(async (folder, offset) => brainApi.tree(projectId, folder, offset, 100), label)),
+  );
   return (
     <section aria-label={`Pages with the label ${label}`} className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
@@ -35,14 +35,14 @@ export function WikiLabelPage({ projectId, commit, label }: WikiLabelPageProps):
       </div>
       <Loaded loader={found} rows={4}>
         {(view) => {
-          const pages = labelledPages(view.matches);
+          const pages = view.pages;
           return pages.length === 0 ? (
             <EmptyState icon={Tag} title="No page has this label" description={`No page of the wiki carries the label “${label}”.`} />
           ) : (
             <>
               <p role="status" className="text-[12px] text-text-muted">
                 {pages.length} {pages.length === 1 ? "page" : "pages"}
-                {view.matches.length >= LOOKUP_LIMIT ? ` · the first ${LOOKUP_LIMIT} are shown` : ""}
+                {view.incomplete ? " · the wiki is too large to read all of it: this list may be incomplete" : ""}
               </p>
               <ul className="flex flex-col gap-1.5">
                 {pages.map((page) => (
