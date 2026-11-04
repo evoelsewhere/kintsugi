@@ -1,6 +1,7 @@
 import type { BrainNode } from "@kintsugi/domain";
 import { describe, expect, it } from "vitest";
-import { foldersAbove, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiIsOff, wikiLink, wikiRead } from "./wiki";
+import { resolveDocumentLink } from "./document-links";
+import { attachmentUrl, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiIsOff, wikiLink, wikiRead } from "./wiki";
 
 const node = (over: Partial<BrainNode> & Pick<BrainNode, "id" | "kind" | "path">): BrainNode => ({
   parentId: null,
@@ -134,5 +135,58 @@ describe("a refused read", () => {
     const missing = Object.assign(new Error("No such page"), { status: 404 });
     await expect(wikiRead(() => Promise.reject(missing))).rejects.toThrow("No such page");
     await expect(wikiRead(() => Promise.resolve(3))).resolves.toBe(3);
+  });
+});
+
+describe("following a link inside a page", () => {
+  // The target is what resolveDocumentLink makes of the href, written in the page at `from`.
+  const from = "20-spaces/ENG/guide/start.md";
+
+  it("opens a Markdown page in the reader, with its heading", () => {
+    expect(wikiLinkAction({ path: "20-spaces/ENG/ops/page.md", anchor: "install" })).toEqual({ kind: "page", path: "20-spaces/ENG/ops/page.md", anchor: "install" });
+    expect(wikiLinkAction({ path: from })).toEqual({ kind: "page", path: from });
+    expect(wikiLinkAction({ path: from, anchor: "" })).toEqual({ kind: "page", path: from });
+  });
+
+  it("resolves a relative link against the page's folder and lands on the reader's address", () => {
+    const target = resolveDocumentLink("../ops/page.md#install", from);
+    expect(target.kind).toBe("document");
+    if (target.kind !== "document") return;
+    const action = wikiLinkAction(target);
+    expect(action).toEqual({ kind: "page", path: "20-spaces/ENG/ops/page.md", anchor: "install" });
+    if (action.kind !== "page") return;
+    expect(wikiLink("p", action.path, action.anchor)).toBe("/wiki/20-spaces/ENG/ops/page.md?project=p#install");
+  });
+
+  it("keeps a heading link of the same page on that page", () => {
+    const target = resolveDocumentLink("#set-up", from);
+    expect(target.kind === "document" && wikiLinkAction(target)).toEqual({ kind: "page", path: from, anchor: "set-up" });
+  });
+
+  it("leaves a link to the web alone and never follows a link that leaves the repository", () => {
+    expect(resolveDocumentLink("https://example.com/a.md", from).kind).toBe("external");
+    expect(resolveDocumentLink("../../../../x.md", from).kind).toBe("blocked");
+    expect(resolveDocumentLink("javascript:alert(1)", from).kind).toBe("blocked");
+  });
+
+  it("sends a file of an _attachments folder through the attachment route", () => {
+    expect(isAttachmentPath("20-spaces/ENG/_attachments/diagram.png")).toBe(true);
+    expect(isAttachmentPath("_attachments/spec.pdf")).toBe(true);
+    expect(isAttachmentPath("20-spaces/ENG/diagram.png")).toBe(false);
+    expect(isAttachmentPath("20-spaces/ENG/_attachments/notes.md")).toBe(false);
+    const target = resolveDocumentLink("../_attachments/spec v2.pdf", "20-spaces/ENG/guide/start.md");
+    expect(target.kind === "document" && wikiLinkAction(target)).toEqual({ kind: "attachment", path: "20-spaces/ENG/_attachments/spec v2.pdf" });
+    expect(attachmentUrl("a b", "20-spaces/ENG/_attachments/spec v2.pdf", "abc123")).toBe("/api/projects/a%20b/documents/attachment?ref=abc123&path=20-spaces%2FENG%2F_attachments%2Fspec+v2.pdf");
+  });
+
+  it("treats any other file as something for the document drawer", () => {
+    expect(wikiLinkAction({ path: "20-spaces/ENG/src/app.ts" })).toEqual({ kind: "other", path: "20-spaces/ENG/src/app.ts" });
+  });
+
+  it("reads the heading id out of the address fragment", () => {
+    expect(headingIdOfHash("#install")).toBe("install");
+    expect(headingIdOfHash("#d%C3%A9ploiement")).toBe("déploiement");
+    expect(headingIdOfHash("")).toBe("");
+    expect(headingIdOfHash("#100%")).toBe("100%");
   });
 });
