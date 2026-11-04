@@ -3,7 +3,7 @@
 // The reader is read-only (ADR-0096, ADR-0097): everything comes from the Brain's tree and the documents routes.
 
 import type { BrainGrepMatch, BrainNode } from "@kintsugi/domain";
-import { BRAIN_ROOT_ID, brainLabels } from "@kintsugi/domain";
+import { BRAIN_ROOT_ID, brainLabels, buildBrainDocument } from "@kintsugi/domain";
 import { resolveDocumentLink } from "./document-links";
 
 /** The wiki lives under `/wiki/<path of the page in the document repo>`; the project is the `?project=` of the URL. */
@@ -495,3 +495,29 @@ export function groupBacklinks(
 
 /** The paths among `documents` that are not shown in the wiki: archived pages and templates. */
 export const hiddenPaths = (documents: ReadonlyMap<string, Pick<BrainNode, "status" | "template">>): Set<string> => new Set([...documents].filter(([, document]) => isHiddenPage(document)).map(([path]) => path));
+
+// ---- Table of contents ------------------------------------------------------------------------------------------
+
+/** One heading of a page in its table of contents. */
+export interface TocEntry {
+  /** The id of the heading in the rendered page: what an address `#anchor` scrolls to. */
+  anchor: string;
+  title: string;
+  /** 0 for a heading right under the page's title, one more for each level below. */
+  indent: number;
+}
+
+/** A page with fewer headings than this has no table of contents: it is short enough to read from the top. */
+export const TOC_MIN_HEADINGS = 3;
+
+/**
+ * The headings of a page, in order, as the Brain's builder reads them (so each anchor is the id the renderer gave the
+ * heading, repeats numbered the same way, and a heading inside a code fence is not one). A page with fewer than
+ * `TOC_MIN_HEADINGS` has none.
+ */
+export function tocOf(path: string, text: string): TocEntry[] {
+  const entries = buildBrainDocument(path, text)
+    .nodes.filter((entry) => entry.kind === "section" && entry.anchor !== null)
+    .map((entry) => ({ anchor: entry.anchor ?? "", title: entry.title, indent: Math.max(0, entry.depth - 1) }));
+  return entries.length < TOC_MIN_HEADINGS ? [] : entries;
+}

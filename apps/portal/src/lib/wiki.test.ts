@@ -1,7 +1,7 @@
 import type { BrainGrepMatch, BrainNode } from "@kintsugi/domain";
 import { describe, expect, it } from "vitest";
 import { resolveDocumentLink } from "./document-links";
-import { attachmentUrl, hitCount, isFrontMatterLine, readableExcerpt, imageSource, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiLink, wikiRead, hitPaths, withDocuments, highlightParts, normalizeLabel, normalizeSpace, readWikiSearch, searchFacets, searchHits, searchLineLink, wikiSearchLink, labelledPages, wikiLabelLink, wikiPhase, hiddenPaths, groupBacklinks } from "./wiki";
+import { attachmentUrl, hitCount, isFrontMatterLine, readableExcerpt, imageSource, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiLink, wikiRead, hitPaths, withDocuments, highlightParts, normalizeLabel, normalizeSpace, readWikiSearch, searchFacets, searchHits, searchLineLink, wikiSearchLink, labelledPages, wikiLabelLink, wikiPhase, hiddenPaths, groupBacklinks, tocOf } from "./wiki";
 
 const node = (over: Partial<BrainNode> & Pick<BrainNode, "id" | "kind" | "path">): BrainNode => ({
   parentId: null,
@@ -487,5 +487,29 @@ describe("the backlinks of a page", () => {
 
   it("is empty for no backlinks", () => {
     expect(groupBacklinks([], new Map())).toEqual([]);
+  });
+});
+
+describe("the table of contents of a page", () => {
+  const text = ["---", "title: Runbook", "---", "", "# Database failover", "", "intro", "", "## Symptoms", "", "text", "", "### Writes fail", "", "## Recovery", "", "```md", "## not a heading", "```", "", "## Symptoms", ""].join("\n");
+
+  it("lists the headings in order with their level, the page's own title left out", () => {
+    expect(tocOf("a/failover.md", text)).toEqual([
+      { anchor: "symptoms", title: "Symptoms", indent: 0 },
+      { anchor: "writes-fail", title: "Writes fail", indent: 1 },
+      { anchor: "recovery", title: "Recovery", indent: 0 },
+      { anchor: "symptoms-1", title: "Symptoms", indent: 0 },
+    ]);
+  });
+
+  it("gives the anchors the rendered headings carry, repeats included, and skips a heading in a code fence", () => {
+    const anchors = tocOf("a/failover.md", text).map((entry) => entry.anchor);
+    expect(anchors).not.toContain("not-a-heading");
+    expect(new Set(anchors).size).toBe(anchors.length);
+  });
+
+  it("has none for a short page", () => {
+    expect(tocOf("a/short.md", "# Title\n\n## One\n\n## Two\n")).toEqual([]);
+    expect(tocOf("a/empty.md", "")).toEqual([]);
   });
 });

@@ -13,11 +13,12 @@ import { documentsApi } from "@/lib/api/documents";
 import { formatRelative, shortSha } from "@/lib/format";
 import { splitFrontMatter } from "@/lib/front-matter";
 import { useLoader } from "@/lib/use-loader";
-import { type PageMode, pathTrail, readPageMode, wikiLabelLink, wikiLink, wikiPageLink, wikiRead } from "@/lib/wiki";
+import { type PageMode, pathTrail, readPageMode, wikiLabelLink, wikiLink, wikiPageLink, wikiRead, tocOf } from "@/lib/wiki";
 import { useScrollToHeading, useWikiLinks } from "./use-wiki-links";
 import { ExportMarkdownButton } from "./export-markdown-button";
 import { WikiBacklinks } from "./wiki-backlinks";
 import { WikiCompare } from "./wiki-compare";
+import { WikiToc } from "./wiki-toc";
 import { WikiHistory } from "./wiki-history";
 
 export interface WikiPageViewProps {
@@ -82,6 +83,7 @@ function PageText({ projectId, commit, path }: WikiPageViewProps): React.JSX.Ele
           <div className="flex justify-end">
             <ExportMarkdownButton path={path} text={loaded.content} />
           </div>
+          <WikiToc projectId={projectId} path={path} entries={tocOf(path, loaded.content)} />
           <Markdown text={splitFrontMatter(loaded.content).body} path={path} />
           <WikiBacklinks projectId={projectId} commit={commit} path={path} />
         </>
