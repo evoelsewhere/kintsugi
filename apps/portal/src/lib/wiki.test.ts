@@ -1,7 +1,7 @@
 import type { BrainGrepMatch, BrainNode } from "@kintsugi/domain";
 import { describe, expect, it } from "vitest";
 import { resolveDocumentLink } from "./document-links";
-import { attachmentUrl, wikiDraftsLink, LABEL_WALK_MAX_FOLDERS, pagesWithLabel, headingOffPlace, SCROLL_SETTLE_MS, scrollSettled, hitCount, isFrontMatterLine, readableExcerpt, imageSource, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiLink, wikiRead, hitPaths, withDocuments, highlightParts, normalizeLabel, normalizeSpace, readWikiSearch, searchFacets, searchHits, searchLineLink, wikiSearchLink, labelledPages, wikiLabelLink, wikiPhase, hiddenPaths, groupBacklinks, tocOf, spacePages, spaceHomePath, wikiSpaceLink, CHANGE_LABEL, changedFileTarget, wikiRecentLink } from "./wiki";
+import { archivedPages, attachmentUrl, wikiDraftsLink, LABEL_WALK_MAX_FOLDERS, pagesWithLabel, headingOffPlace, SCROLL_SETTLE_MS, scrollSettled, hitCount, isFrontMatterLine, readableExcerpt, imageSource, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiLink, wikiRead, hitPaths, withDocuments, highlightParts, normalizeLabel, normalizeSpace, readWikiSearch, searchFacets, searchHits, searchLineLink, wikiSearchLink, labelledPages, wikiLabelLink, wikiPhase, hiddenPaths, groupBacklinks, tocOf, spacePages, spaceHomePath, wikiSpaceLink, CHANGE_LABEL, changedFileTarget, wikiRecentLink } from "./wiki";
 
 const node = (over: Partial<BrainNode> & Pick<BrainNode, "id" | "kind" | "path">): BrainNode => ({
   parentId: null,
@@ -670,5 +670,29 @@ describe("the address of the drafts", () => {
   it("is a route of its own with the project", () => {
     expect(wikiDraftsLink("billing")).toBe("/wiki/-/drafts?project=billing");
     expect(wikiDraftsLink("a b")).toBe("/wiki/-/drafts?project=a%20b");
+  });
+});
+
+describe("the archived pages", () => {
+  const tree = (): Map<string, BrainNode[]> =>
+    new Map([
+      ["/", [folder("a", { ordinal: 0 }), folder("old", { status: "archived" }), page("README.md", { status: "archived", title: "Root old" })]],
+      ["a/", [page("a/live.md", { title: "Live" }), page("a/gone.md", { title: "Gone", status: "archived" }), page("a/new-page.md", { status: "archived", template: true })]],
+      ["old/", [page("old/x.md", { title: "Old x", status: "archived" }), page("old/y.md", { title: "Old y" })]],
+    ]);
+  const read = async (id: string, offset: number) => {
+    const all = tree().get(id) ?? [];
+    return { children: all.slice(offset, offset + 2), total: all.length };
+  };
+
+  it("finds every page whose status is archived, also inside a folder whose home page is archived, but not a template", async () => {
+    const walk = await archivedPages(read, 2);
+    expect(walk.pages.map((entry) => entry.path)).toEqual(["a/gone.md", "old/x.md", "README.md"]);
+    expect(walk.pages[0]).toMatchObject({ title: "Gone", breadcrumb: ["a"], status: "archived" });
+    expect(walk.incomplete).toBe(false);
+  });
+
+  it("fails when the root cannot be read", async () => {
+    await expect(archivedPages(async () => Promise.reject(new Error("down")))).rejects.toThrow("down");
   });
 });

@@ -64,6 +64,7 @@ export function App(): React.JSX.Element {
             <Route path="wiki/-/broken" element={<WikiPage />} />
             <Route path="wiki/-/recent" element={<WikiPage />} />
             <Route path="wiki/-/drafts" element={<WikiPage />} />
+            <Route path="wiki/-/archived" element={<WikiPage />} />
             <Route path="wiki/-/label/:label" element={<WikiPage />} />
 
             <Route path="wiki/-/space/:space" element={<WikiPage />} />

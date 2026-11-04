@@ -28,6 +28,9 @@ import {
   draftStateLabel,
   type DraftSummary,
   messageProblem,
+  setStatus,
+  statusChangeMessage,
+  statusOf,
   sortDrafts,
   toBase64,
   restoreMessage,
@@ -800,5 +803,42 @@ describe("the person's drafts", () => {
   it("says whether a draft is still being written or its publish waits for review", () => {
     expect(draftStateLabel(entry("a.md", "x"))).toBe("Not published");
     expect(draftStateLabel(entry("a.md", "x", "w1"))).toBe("Waiting for review");
+  });
+});
+
+describe("archiving a page: its status line", () => {
+  it("changes only the status line, whatever it was", () => {
+    expect(setStatus("---\ntitle: x\nstatus: draft\nowner: me\n---\nbody\n", "archived")).toBe("---\ntitle: x\nstatus: archived\nowner: me\n---\nbody\n");
+    expect(setStatus('---\nstatus:   "Approved"  # ok\n---\n', "archived")).toBe("---\nstatus: archived\n---\n");
+    expect(setStatus("---\nstatus: archived\n---\nbody", "archived")).toBe("---\nstatus: archived\n---\nbody");
+  });
+
+  it("adds the line at the end of the front matter, or makes a front matter, when there is none", () => {
+    expect(setStatus("---\ntitle: x\n---\nbody\n", "archived")).toBe("---\ntitle: x\nstatus: archived\n---\nbody\n");
+    expect(setStatus("just text\n", "archived")).toBe("---\nstatus: archived\n---\njust text\n");
+  });
+
+  it("removes the line to unarchive, and leaves a page without one as it is", () => {
+    expect(setStatus("---\ntitle: x\nstatus: archived\nowner: me\n---\nbody\n", null)).toBe("---\ntitle: x\nowner: me\n---\nbody\n");
+    expect(setStatus("---\ntitle: x\n---\nbody\n", null)).toBe("---\ntitle: x\n---\nbody\n");
+    expect(setStatus("no front matter\n", null)).toBe("no front matter\n");
+  });
+
+  it("keeps CRLF, a missing final newline and a `status:` line of the body", () => {
+    expect(setStatus("---\r\ntitle: x\r\nstatus: draft\r\n---\r\nbody", "archived")).toBe("---\r\ntitle: x\r\nstatus: archived\r\n---\r\nbody");
+    expect(setStatus("---\r\ntitle: x\r\n---\r\nbody", "archived")).toBe("---\r\ntitle: x\r\nstatus: archived\r\n---\r\nbody");
+    expect(setStatus("---\ntitle: x\n---\nstatus: in the body\n", "archived")).toBe("---\ntitle: x\nstatus: archived\n---\nstatus: in the body\n");
+  });
+
+  it("round trips: archive then unarchive gives back a page that had no status", () => {
+    const text = "---\r\ntitle: x\r\nlabels: [a]\r\n---\r\n\r\nbody  \r\n";
+    expect(setStatus(setStatus(text, "archived"), null)).toBe(text);
+  });
+
+  it("names the change in the publish message and in the status it sets", () => {
+    expect(statusChangeMessage("archive", "Old plan")).toBe("Archive Old plan");
+    expect(statusChangeMessage("unarchive", "Old plan")).toBe("Unarchive Old plan");
+    expect(statusOf("archive")).toBe("archived");
+    expect(statusOf("unarchive")).toBeNull();
   });
 });

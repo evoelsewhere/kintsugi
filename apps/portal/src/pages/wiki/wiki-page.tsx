@@ -2,7 +2,7 @@
 // page, or the folder, named by the address on the right: `/wiki/<path in the document repo>?project=<id>`. It reads
 // the Brain's tree and the documents of the commit the Brain indexed, so it needs the Brain on; nothing is written here.
 
-import { FolderKanban, ListTree, History, PencilLine, TriangleAlert, Unlink } from "lucide-react";
+import { FolderKanban, ListTree, Archive, History, PencilLine, TriangleAlert, Unlink } from "lucide-react";
 import { useMemo } from "react";
 import { Link, useMatch, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Breadcrumbs } from "@/components/breadcrumbs";
@@ -17,6 +17,7 @@ import { BrokenLinksPanel } from "@/components/wiki/broken-links-panel";
 import { WikiLabelPage } from "@/components/wiki/wiki-label-page";
 import { WikiOff } from "@/components/wiki/wiki-off";
 import { WikiSpaceHome } from "@/components/wiki/wiki-space-home";
+import { WikiArchived } from "@/components/wiki/wiki-archived";
 import { WikiDrafts } from "@/components/wiki/wiki-drafts";
 import { WikiRecent } from "@/components/wiki/wiki-recent";
 import { WikiFolderView } from "@/components/wiki/wiki-folder-view";
@@ -29,7 +30,7 @@ import { projectsApi } from "@/lib/api/projects";
 import { projectLink } from "@/lib/links";
 import { useProjectSelection } from "@/lib/project-selection";
 import { useLoader } from "@/lib/use-loader";
-import { isPagePath, pathOfSplat, readWikiSearch, WIKI_BASE, wikiLink, wikiRead, wikiPhase, wikiDraftsLink, wikiRecentLink } from "@/lib/wiki";
+import { isPagePath, pathOfSplat, readWikiSearch, WIKI_BASE, wikiLink, wikiRead, wikiPhase, wikiArchivedLink, wikiDraftsLink, wikiRecentLink } from "@/lib/wiki";
 
 export function WikiPage(): React.JSX.Element {
   const projects = useLoader("projects", projectsApi.list);
@@ -145,6 +146,7 @@ function WikiReader({ projectId, commit, path, label }: { projectId: string; com
   const broken = useMatch(`${WIKI_BASE}/-/broken`) !== null;
   const recent = useMatch(`${WIKI_BASE}/-/recent`) !== null;
   const drafts = useMatch(`${WIKI_BASE}/-/drafts`) !== null;
+  const archived = useMatch(`${WIKI_BASE}/-/archived`) !== null;
   // `/wiki/-/space/<KEY>` opens the home page of a space.
   const spaceKey = useParams()["space"];
   // The page changes with the address: a key resets what the view of the previous page held.
@@ -154,6 +156,8 @@ function WikiReader({ projectId, commit, path, label }: { projectId: string; com
         <WikiLabelPage key={label} projectId={projectId} commit={commit} label={label} />
       ) : spaceKey !== undefined ? (
         <WikiSpaceHome key={spaceKey} projectId={projectId} commit={commit} space={spaceKey} />
+      ) : archived ? (
+        <WikiArchived projectId={projectId} commit={commit} />
       ) : drafts ? (
         <WikiDrafts projectId={projectId} />
       ) : recent ? (
@@ -167,7 +171,7 @@ function WikiReader({ projectId, commit, path, label }: { projectId: string; com
       ) : (
         <WikiFolderView key={path} projectId={projectId} commit={commit} path={path} />
       ),
-    [projectId, commit, path, label, broken, recent, drafts, spaceKey, q, space, searchLabel],
+    [projectId, commit, path, label, broken, recent, drafts, archived, spaceKey, q, space, searchLabel],
   );
   return (
     <div className="flex min-h-[560px] flex-col overflow-hidden rounded-xl bg-surface shadow-border-medium lg:h-[calc(100vh-var(--page-header-height,0px)-8rem)] lg:flex-row">
@@ -193,6 +197,10 @@ function WikiReader({ projectId, commit, path, label }: { projectId: string; com
           <Link to={wikiDraftsLink(projectId)} className="flex items-center gap-1.5 rounded-sm px-1.5 py-1 text-text-muted hover:text-text hover:underline focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]">
             <PencilLine className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
             My drafts
+          </Link>
+          <Link to={wikiArchivedLink(projectId)} className="flex items-center gap-1.5 rounded-sm px-1.5 py-1 text-text-muted hover:text-text hover:underline focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]">
+            <Archive className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
+            Archived pages
           </Link>
         </div>
       </aside>

@@ -901,3 +901,39 @@ export function draftImageUrl(projectId: string, pagePath: string, resolvedPath:
   const name = resolvedPath.slice(folder.length);
   return name !== "" && !name.includes("/") && held.includes(name) ? draftAttachmentUrl(projectId, pagePath, name) : undefined;
 }
+
+// ---- Archiving a page --------------------------------------------------------------------------------------------
+// An archived page is a page whose front matter says `status: archived`: the tree, the search and the label pages leave
+// it out, and it is listed apart. Archiving is an edit of that one line, published like any other edit.
+
+/**
+ * The text with its `status:` line set to `status`, or removed when `status` is null; the front matter is made when the page
+ * has none (and a status is set). Every other byte is kept, line endings included; the same status gives the text back.
+ */
+export function setStatus(text: string, status: string | null): string {
+  const lines = linesOf(text);
+  const end = frontMatterEnd(lines);
+  const eol = text.includes("\r\n") ? "\r\n" : "\n";
+  if (end < 0) return status === null ? text : `---${eol}status: ${status}${eol}---${eol}${text}`;
+  let at = -1;
+  for (let index = 1; index < end; index += 1) {
+    if (/^status[ \t]*:/.test(bare(lines[index] as string))) {
+      at = index;
+      break;
+    }
+  }
+  if (at < 0) return status === null ? text : [...lines.slice(0, end), `status: ${status}${eol}`, ...lines.slice(end)].join("");
+  if (status === null) return [...lines.slice(0, at), ...lines.slice(at + 1)].join("");
+  const current = unquote(withoutComment(bare(lines[at] as string).replace(/^status[ \t]*:/, "")));
+  if (current === status) return text;
+  return [...lines.slice(0, at), `status: ${status}${eolOf(lines[at] as string)}`, ...lines.slice(at + 1)].join("");
+}
+
+/** What archiving or unarchiving a page does, for the editor's address and the publish message. */
+export type StatusChange = "archive" | "unarchive";
+
+/** The status a change sets: `archived`, or none. */
+export const statusOf = (change: StatusChange): string | null => (change === "archive" ? "archived" : null);
+
+/** The message of a publish that archives or unarchives: `Archive <title>`. */
+export const statusChangeMessage = (change: StatusChange, title: string): string => `${change === "archive" ? "Archive" : "Unarchive"} ${title}`.slice(0, PUBLISH_MESSAGE_MAX);
