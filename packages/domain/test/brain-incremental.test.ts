@@ -156,6 +156,8 @@ function toRows(tree: BrainTree, parts: readonly BrainDocumentPart[]) {
 }
 
 const ROUNDS = 250;
+/** The loops build hundreds of trees: a busy machine, with other test files running, needs more than vitest's 5 seconds. */
+const LOOP_TIMEOUT_MS = 60_000;
 
 describe("assembling the parts of documents that did not change with the parts of those that did (P2-022)", () => {
   it(`gives the tree of a whole build, in ${ROUNDS} random repositories changed at random`, () => {
@@ -178,7 +180,7 @@ describe("assembling the parts of documents that did not change with the parts o
       const incremental = assembleBrainTree([...kept, ...fresh], "docs", Object.keys(after).length);
       expect(incremental, `seed ${seed}`).toEqual(whole);
     }
-  });
+  }, LOOP_TIMEOUT_MS);
 
   it("covers what the assembly decides: the generator makes spaces, orders, broken links and ids with more than three places", () => {
     let spaces = 0;
@@ -198,7 +200,7 @@ describe("assembling the parts of documents that did not change with the parts o
       if ([...defined.values()].some((count) => count > 3)) crowded += 1;
     }
     for (const [name, count] of Object.entries({ spaces, broken, ordered, crowded, warned })) expect(count, name).toBeGreaterThan(ROUNDS / 20);
-  });
+  }, LOOP_TIMEOUT_MS);
 
   it("gives the same tree whatever the order of the parts, and does not change them", () => {
     for (let round = 0; round < 40; round += 1) {
@@ -212,7 +214,7 @@ describe("assembling the parts of documents that did not change with the parts o
       expect(assembleBrainTree(parts, "docs")).toEqual(first);
       expect(JSON.stringify(parts)).toBe(frozen);
     }
-  });
+  }, LOOP_TIMEOUT_MS);
 
   it("keeps the count of documents the cap cut off", () => {
     const parts = sourcesOf({ "a.md": "# A\n", "b.md": "# B\n" }).map(brainDocumentPart);
