@@ -22,6 +22,7 @@ export {
   type RemoteInfo,
   type RemoteOptions,
 } from "./repository.js";
+export { findPageIdOwners } from "./page-ids.js";
 export { CheckoutStorage, dataDirFromEnv, stepFolder, type JobPaths, type StepPaths } from "./storage.js";
 export {
   BOT_NAME,
