@@ -338,6 +338,31 @@ export function isPageId(id: string): boolean {
   return PAGE_ID_PATTERN.test(id);
 }
 
+/** The shape of a page id as a whole string: `PAGE-<KEY>-<nnnn>`, the key of 2 to 10 letters or digits, at least four digits. */
+export const PAGE_ID: RegExp = PAGE_ID_PATTERN;
+
+/** The most lines of a front matter block that are read. */
+const FRONT_MATTER_MAX_LINES = 400;
+
+/**
+ * The page id a Markdown document gives itself: `id: PAGE-<KEY>-<nnnn>` in its front matter, which is the block between
+ * a first line `---` and the next line `---`. Only the front matter is read: an `id:` line in the text, in a code fence
+ * or in a front matter that is not closed is not the page's id. Quotes around the value are allowed.
+ */
+export function pageIdOf(markdown: string): string | undefined {
+  const lines = markdown.split("\n");
+  if ((lines[0] ?? "").trim() !== "---") return undefined;
+  for (let index = 1; index < lines.length && index <= FRONT_MATTER_MAX_LINES; index += 1) {
+    const line = (lines[index] ?? "").replace(/\r$/, "");
+    if (line.trim() === "---") return undefined;
+    const match = /^id:[ \t]*(.*)$/.exec(line);
+    if (match?.[1] === undefined) continue;
+    const value = match[1].trim().replace(/^(["'])(.*)\1$/, "$2").trim();
+    return isPageId(value) ? value : undefined;
+  }
+  return undefined;
+}
+
 /** The key and number of a page id, or undefined for anything else. */
 export function parsePageId(id: string): { key: string; number: number } | undefined {
   const match = PAGE_ID_PATTERN.exec(id);

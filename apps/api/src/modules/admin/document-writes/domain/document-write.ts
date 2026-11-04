@@ -23,7 +23,8 @@ export interface DocumentWriteCorrection {
 }
 
 /** What produced the files. */
-export type DocumentWriteKind = "manifest" | "job-output" | "state-change";
+/** `page` is a wiki page (or its attachment) published by a person (ADR-0098); the rest come from Kintsugi itself. */
+export type DocumentWriteKind = "manifest" | "job-output" | "state-change" | "page";
 
 export interface DocumentWriteRecord {
   id: string;
@@ -45,6 +46,10 @@ export interface DocumentWriteRecord {
   agent?: string;
   /** Set on a gap answer: the specification and gap it answers. */
   correction?: DocumentWriteCorrection;
+  /** Set on a page write: the page it publishes. */
+  page?: { path: string; id: string | null };
+  /** The commit that brought the pull request into the default branch, once it is merged. */
+  mergeCommit?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -52,7 +57,14 @@ export interface DocumentWriteRecord {
 export interface DocumentWriteFile {
   /** Path relative to the document repo root, forward slashes. */
   path: string;
+  /** The text, or the base64 of the bytes when `encoding` says so; empty for a delete. */
   content: string;
+  /** How `content` is written: text (the default) or base64 for a binary file. */
+  encoding?: "utf8" | "base64";
+  /** Remove the file; `expectedHash` (the file as the person saw it) is then required. */
+  delete?: true;
+  /** Move the file from this path to `path` in the same commit; `expectedHash` is then that of the old file. */
+  renameFrom?: string;
   /** Written only when the default branch does not have the file yet. */
   createOnly?: boolean;
   /** SHA-256 of the document the person edited, checked by the writer before committing. */
@@ -74,11 +86,21 @@ export interface NewDocumentWrite {
   /** Markdown for the pull request description, between the message and the file list. */
   description?: string;
   correction?: DocumentWriteCorrection;
+  /** Kind `page`: publish straight to the default branch when the manifest allows it for every path. */
+  directPublish?: boolean;
+  /** Kind `page`: the open `kintsugi/*` branch of the same person's earlier write of the page, which this one continues. */
+  continues?: string;
+  /** Kind `page`: the page this write publishes. */
+  page?: { id: string | null; path: string; minor: boolean };
 }
 
 /** A correction is open until its pull request is merged or closed: queued, or on its review branch. */
 export const isOpenCorrection = (write: Pick<DocumentWriteRecord, "status" | "branch" | "correction">): boolean =>
   write.correction !== undefined && (write.status === "queued" || (write.branch !== undefined && (write.status === "committed" || write.status === "pr-opened")));
+
+/** A page write is open until its pull request is merged or closed: queued, or on its review branch (the SQL twin is in the store). */
+export const isOpenPageWrite = (write: Pick<DocumentWriteRecord, "status" | "branch" | "page">): boolean =>
+  write.page !== undefined && (write.status === "queued" || (write.branch !== undefined && (write.status === "committed" || write.status === "pr-opened")));
 
 /** The number of a pull request (or merge request) from its web URL, when the URL carries one. */
 export function pullRequestNumber(url: string | undefined): number | undefined {

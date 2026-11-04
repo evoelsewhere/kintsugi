@@ -2,7 +2,7 @@
 // records a write and enqueues it for the worker's writer. First caller: publishing the
 // project's kintsugi.yaml, which is not an auto-commit path and so becomes a pull request.
 
-import { ConflictException, Injectable } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable } from "@nestjs/common";
 import type { Page, PageQuery } from "#common/application/pagination.js";
 import { toPage } from "#common/application/pagination.js";
 import { AUDIT_ACTIONS, AuditTrail, auditRecord } from "#common/audit/audit-trail.js";
@@ -10,6 +10,7 @@ import type { Actor } from "#common/auth/decorators.js";
 import { newId } from "#common/domain/ids.js";
 import { ProjectsService } from "#modules/admin/projects/index.js";
 import { type DocumentWriteCorrection, type DocumentWriteFile, type DocumentWriteFilter, type DocumentWriteRecord, type NewDocumentWrite, pullRequestNumber } from "../domain/document-write.js";
+import { documentWriteProblems } from "../domain/document-write.rules.js";
 import { DocumentRepoSkeleton, DocumentWriteQueue, DocumentWriteStore } from "../domain/document-write.ports.js";
 
 @Injectable()
@@ -91,6 +92,40 @@ export class DocumentWritesService {
     return write;
   }
 
+  /**
+   * Records a page write (ADR-0098) and queues it for the writer: the files are a page's text, its attachments, and
+   * deletes and renames of them. It goes to a pull request unless `directPublish` is set and the writer finds every path
+   * allowed; `continues` names the open `kintsugi/*` branch of the same person's earlier write of the page. The caller
+   * has checked who may write and records the audit entry; the rules of the contract are checked here and again by the
+   * writer.
+   */
+  async proposePage(
+    projectId: string,
+    input: { message: string; files: DocumentWriteFile[]; page: { id: string | null; path: string; minor: boolean }; directPublish?: boolean; continues?: string; description?: string },
+    actor: Actor,
+  ): Promise<DocumentWriteRecord> {
+    const project = await this.projects.getProject(projectId);
+    if (project.documentRepository === null) throw new ConflictException(`Project ${projectId} has no document repository`);
+    return this.#enqueue({
+      id: newId(),
+      projectId,
+      documentRepositoryId: project.documentRepository.repositoryId,
+      kind: "page",
+      message: input.message,
+      files: input.files,
+      actor: actor.username ?? actor.id,
+      page: input.page,
+      ...(input.directPublish === true ? { directPublish: true } : {}),
+      ...(input.continues === undefined ? {} : { continues: input.continues }),
+      ...(input.description === undefined ? {} : { description: input.description }),
+    });
+  }
+
+  /** The write of the page that is queued or waits on its review branch, which a new write of the page must continue or wait for. */
+  openPageWrite(projectId: string, pagePath: string): Promise<DocumentWriteRecord | undefined> {
+    return this.store.openPageWrite(projectId, pagePath);
+  }
+
   async list(projectId: string, query: PageQuery): Promise<Page<DocumentWriteRecord>> {
     await this.projects.getProject(projectId); // 404 for an unknown project
     const { items, total } = await this.store.listForProject(projectId, query.limit, query.offset);
@@ -116,6 +151,8 @@ export class DocumentWritesService {
 
   /** Records first, so the write is visible even when the queue is down; a failed enqueue is recorded too. */
   async #enqueue(write: NewDocumentWrite, create = (): Promise<DocumentWriteRecord> => this.store.create(write)): Promise<DocumentWriteRecord> {
+    const problems = documentWriteProblems(write);
+    if (problems.length > 0) throw new BadRequestException(problems.slice(0, 5).join("; "));
     const record = await create();
     try {
       await this.queue.enqueue(write);

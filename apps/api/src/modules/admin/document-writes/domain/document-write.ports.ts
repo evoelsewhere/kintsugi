@@ -22,6 +22,8 @@ export abstract class DocumentWriteStore {
   abstract openCorrections(projectId: string): Promise<DocumentWriteRecord[]>;
   /** One write by id; undefined when there is none. */
   abstract find(id: string): Promise<DocumentWriteRecord | undefined>;
+  /** The write of the page that is queued, or committed or pull-request-opened on a review branch; undefined when there is none. */
+  abstract openPageWrite(projectId: string, pagePath: string): Promise<DocumentWriteRecord | undefined>;
   /** Marks a write failed before it reached the worker. */
   abstract markFailed(id: string, error: string): Promise<void>;
 }

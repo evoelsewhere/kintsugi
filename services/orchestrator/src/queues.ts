@@ -88,6 +88,10 @@ export interface DocumentWriteFile {
   createOnly?: boolean;
   /** SHA-256 of the document the person edited, checked by the writer before committing. */
   expectedHash?: string;
+  /** Remove the file (`content` is empty); `expectedHash` is then required. */
+  delete?: true;
+  /** Move the file from this path to `path` in the same commit; `expectedHash` is then that of the old file. */
+  renameFrom?: string;
 }
 
 /**
@@ -117,6 +121,12 @@ export interface DocumentWriteRequest {
   reviewAll?: boolean;
   /** Markdown a stage wrote for the pull request description, shown between the message and the file list (ADR-0054). */
   description?: string;
+  /** Kind `page` only: publish straight to the default branch when every path allows it, instead of a pull request. */
+  directPublish?: boolean;
+  /** Kind `page` only: the open `kintsugi/*` branch this write continues instead of starting a new one (ADR-0098 decision 3). */
+  continues?: string;
+  /** Kind `page` only: the page the write publishes (trailers Kintsugi-Page, Kintsugi-Minor). */
+  page?: { id: string | null; path: string; minor: boolean };
 }
 
 /** Creates the queue if missing; safe on every start, from any process. */

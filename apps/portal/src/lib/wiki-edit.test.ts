@@ -11,7 +11,18 @@ import {
   classifyPublishFailure,
   defaultPublishMessage,
   hasConflictMarkers,
+  classifyMoveFailure,
+  defaultMoveMessage,
+  folderOfPath,
   messageProblem,
+  MOVE_REWRITE_LIMIT,
+  moveKind,
+  moveTargetProblem,
+  previewIsCurrent,
+  NEW_PAGE_TITLE_MAX,
+  newPageBody,
+  newPageProbe,
+  newPageProblem,
   PUBLISH_MESSAGE_MAX,
   publishModeLine,
   lineDiff,
@@ -493,5 +504,82 @@ describe("saving before publishing", () => {
     saver.change("typed");
     await expect(saver.whenSaved()).rejects.toThrow("The API did not answer");
     expect(saver.current.text).toBe("typed");
+  });
+});
+
+describe("a new page", () => {
+  it("needs a title with a letter or a digit in it, of at most 200 characters", () => {
+    expect(newPageProblem("")).toMatch(/title/);
+    expect(newPageProblem("   ")).toMatch(/title/);
+    expect(newPageProblem("---")).toMatch(/letter or digit/);
+    expect(newPageProblem("Runbook: failover")).toBeUndefined();
+    expect(newPageProblem("日本語 1")).toBeUndefined();
+    expect(newPageProblem("x".repeat(NEW_PAGE_TITLE_MAX + 1))).toMatch(/200/);
+  });
+
+  it("asks what may be written in a folder through a path in it, and never at the root", () => {
+    expect(newPageProbe("20-spaces/eng/runbooks")).toBe("20-spaces/eng/runbooks/new-page.md");
+    expect(newPageProbe("")).toBeUndefined();
+  });
+
+  it("sends the title trimmed and a template only when one is chosen", () => {
+    expect(newPageBody("a/b", "  My page ", "")).toEqual({ folder: "a/b", title: "My page" });
+    expect(newPageBody("a/b", "My page", "01-standards/page-templates/runbook.md")).toEqual({ folder: "a/b", title: "My page", templatePath: "01-standards/page-templates/runbook.md" });
+  });
+
+  it("opens the editor on exactly the draft text the API returned, byte for byte", async () => {
+    // A page made from a template: CRLF endings, no final newline, a front matter the editor must not reorder.
+    const text = "---\r\nid: PAGE-ENG-0042\r\ntitle: New runbook\r\nlabels: [z, a]\r\n---\r\n\r\n# New runbook\r\n\r\nSteps:\r\n- one";
+    const { saver, calls } = harness({ draft: draft({ text, revision: 1, baseCommit: null, baseHash: null }) });
+    expect(saver.current).toEqual({ text, revision: 1 });
+    // Publishing it unchanged saves the very same text.
+    await saver.whenSaved();
+    expect(calls).toEqual([]);
+    expect(textBytes(saver.current.text)).toBe(textBytes(text));
+  });
+});
+
+describe("moving and renaming a page", () => {
+  const from = "20-spaces/eng/runbooks/db-failover.md";
+
+  it("checks the target before asking the API about it", () => {
+    expect(moveTargetProblem(from, "")).toMatch(/new path/);
+    expect(moveTargetProblem(from, "/a/b.md")).toMatch(/slash/);
+    expect(moveTargetProblem(from, "a/b/")).toMatch(/slash/);
+    expect(moveTargetProblem(from, "a/b.txt")).toMatch(/\.md/);
+    expect(moveTargetProblem(from, "a/../b.md")).toMatch(/\.\./);
+    expect(moveTargetProblem(from, "a//b.md")).toMatch(/empty/);
+    expect(moveTargetProblem(from, "b.md")).toMatch(/folder/);
+    expect(moveTargetProblem(from, from)).toMatch(/already/);
+    expect(moveTargetProblem(from, " 20-spaces/eng/runbooks/failover.md ")).toBeUndefined();
+    expect(moveTargetProblem(from, "20-spaces/ops/db-failover.md")).toBeUndefined();
+  });
+
+  it("tells a rename in place from a move to another folder, for the default message", () => {
+    expect(moveKind(from, "20-spaces/eng/runbooks/failover.md")).toBe("rename");
+    expect(moveKind(from, "20-spaces/ops/db-failover.md")).toBe("move");
+    expect(defaultMoveMessage(from, "20-spaces/eng/runbooks/failover.md")).toBe(`Rename ${from} to 20-spaces/eng/runbooks/failover.md`);
+    expect(defaultMoveMessage(from, "20-spaces/ops/db-failover.md").startsWith("Move ")).toBe(true);
+    expect(defaultMoveMessage("a/b.md", `x/${"y".repeat(400)}.md`)).toHaveLength(PUBLISH_MESSAGE_MAX);
+    expect(folderOfPath("a/b/c.md")).toBe("a/b");
+    expect(folderOfPath("c.md")).toBe("");
+  });
+
+  it("opens Confirm only for a preview of the target as it is typed now", () => {
+    expect(previewIsCurrent(null, "a/b.md")).toBe(false);
+    expect(previewIsCurrent("a/b.md", "a/b.md")).toBe(true);
+    expect(previewIsCurrent("a/b.md", " a/b.md ")).toBe(true);
+    expect(previewIsCurrent("a/b.md", "a/c.md")).toBe(false);
+    expect(previewIsCurrent("a/b.md", "")).toBe(false);
+  });
+
+  const refused = (status: number, details: Record<string, unknown>, message = "refused"): Error => Object.assign(new Error(message), { status, body: { details } });
+
+  it("words a refusal for too many linking pages with the count and the limit, and shows any other verbatim", () => {
+    expect(classifyMoveFailure(refused(409, { code: "too-many", count: 612, limit: 500 }, "x"))).toEqual({ kind: "too-many", count: 612, limit: 500, message: "Too many pages link here (612, the limit is 500)" });
+    expect(classifyMoveFailure(refused(409, { code: "too-many" }, "x"))).toMatchObject({ kind: "too-many", limit: MOVE_REWRITE_LIMIT });
+    expect(classifyMoveFailure(refused(409, { code: "target-exists" }, "A page already exists at that path"))).toEqual({ kind: "message", status: 409, message: "A page already exists at that path" });
+    expect(classifyMoveFailure(refused(409, { code: "open-write", write: { author: "Kim", prUrl: "https://git.example/pr/9" } }, "A pull request is open"))).toMatchObject({ kind: "open-write", author: "Kim", prUrl: "https://git.example/pr/9" });
+    expect(classifyMoveFailure(refused(403, {}, "Editing is restricted to the docs team"))).toEqual({ kind: "message", status: 403, message: "Editing is restricted to the docs team" });
   });
 });

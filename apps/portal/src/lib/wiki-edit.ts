@@ -558,3 +558,99 @@ export function classifyPublishFailure(error: unknown): PublishFailure {
   if (status === 409 && detail["code"] === "draft-revision") return { kind: "draft-revision", message };
   return { kind: "message", status: typeof status === "number" ? status : undefined, message };
 }
+
+// ---- A new page --------------------------------------------------------------------------------------------------
+
+/** A template a new page can start from: `GET wiki/templates?folder=`. */
+export interface TemplateOption {
+  path: string;
+  title: string;
+  summary: string;
+}
+
+/** `POST wiki/pages`: the answer is the draft of the new page (nothing is written to the repository yet). */
+export interface NewPageBody {
+  folder: string;
+  title: string;
+  templatePath?: string;
+}
+
+/** The longest title a new page takes. */
+export const NEW_PAGE_TITLE_MAX = 200;
+
+/** Why a title cannot start a page, in a person's words; undefined when it can. */
+export function newPageProblem(title: string): string | undefined {
+  const text = title.trim();
+  if (text === "") return "Give the page a title.";
+  if (text.length > NEW_PAGE_TITLE_MAX) return `Keep the title to ${NEW_PAGE_TITLE_MAX} characters or fewer.`;
+  if (!/[A-Za-z0-9]/.test(text)) return "The title needs at least one letter or digit: the page's file name is made from it.";
+  return undefined;
+}
+
+/**
+ * A path the access answer can be asked about before a page exists in `folder`: whether the person may write new pages
+ * there. A page lives in a folder, never at the root of the repository (`folder` "" gives undefined).
+ */
+export const newPageProbe = (folder: string): string | undefined => (folder === "" ? undefined : `${folder}/new-page.md`);
+
+/** The body to send: a template only when one is chosen, the title as typed but trimmed. */
+export const newPageBody = (folder: string, title: string, templatePath: string): NewPageBody => ({ folder, title: title.trim(), ...(templatePath === "" ? {} : { templatePath }) });
+
+// ---- Moving and renaming a page ----------------------------------------------------------------------------------
+
+/** `POST wiki/move/preview` and `POST wiki/move`: where the page goes. */
+export interface MoveBody {
+  from: string;
+  to: string;
+  message: string;
+}
+
+/** What a move would change: the page itself and every page whose links to it are rewritten. */
+export interface MovePreview {
+  entries: Array<{ path: string; renameFrom?: string; kind: "moved" | "rewritten" }>;
+  rewrittenLinks: number;
+}
+
+/** The most pages a move may rewrite (the API refuses more with `too-many`). */
+export const MOVE_REWRITE_LIMIT = 500;
+
+/** Why a target path cannot be asked about, in a person's words; undefined when it can. */
+export function moveTargetProblem(from: string, to: string): string | undefined {
+  const target = to.trim();
+  if (target === "") return "Give the new path of the page.";
+  if (target.startsWith("/") || target.endsWith("/")) return "The path is relative to the repository: no slash at the start or the end.";
+  if (!/\.md$/i.test(target)) return "A page's file name ends in .md.";
+  const segments = target.split("/");
+  if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) return "The path cannot have empty, . or .. parts.";
+  if (segments.length < 2) return "A page lives in a folder, not at the root of the repository.";
+  if (target === from) return "That is where the page is already.";
+  return undefined;
+}
+
+/** The folder part of a path ("" for none). */
+export const folderOfPath = (path: string): string => (path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "");
+
+/** What the page's move becomes in the dialog's words: renamed in place, or moved to another folder. */
+export const moveKind = (from: string, to: string): "rename" | "move" => (folderOfPath(from) === folderOfPath(to) ? "rename" : "move");
+
+/** The default message of a move: `Move <from> to <to>`, cut to what a message may hold. */
+export const defaultMoveMessage = (from: string, to: string): string => `${moveKind(from, to) === "rename" ? "Rename" : "Move"} ${from} to ${to}`.slice(0, PUBLISH_MESSAGE_MAX);
+
+/** Whether a shown preview is of the target now typed: the Confirm button opens only then. */
+export const previewIsCurrent = (previewed: string | null, typed: string): boolean => previewed !== null && previewed === typed.trim();
+
+/** What a refused move is: too many pages to rewrite (with the count), or one of the publish refusals. */
+export type MoveFailure = { kind: "too-many"; count: number; limit: number; message: string } | Exclude<PublishFailure, { kind: "conflict" }>;
+
+/** Sorts a refused move or preview: `too-many` gets the sentence the API words it with, any other refusal is shown verbatim. */
+export function classifyMoveFailure(error: unknown): MoveFailure {
+  const detail = detailOf(error);
+  if ((error as { status?: unknown }).status === 409 && detail["code"] === "too-many") {
+    const count = typeof detail["count"] === "number" ? detail["count"] : 0;
+    const limit = typeof detail["limit"] === "number" ? detail["limit"] : MOVE_REWRITE_LIMIT;
+    return { kind: "too-many", count, limit, message: `Too many pages link here (${count}, the limit is ${limit})` };
+  }
+  const failure = classifyPublishFailure(error);
+  // A move has no three-way merge: a conflict answer would still be the API's own words.
+  return failure.kind === "conflict" ? { kind: "message", status: 409, message: error instanceof Error ? error.message : "The page could not be moved." } : failure;
+}
