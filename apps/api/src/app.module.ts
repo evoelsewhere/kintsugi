@@ -18,6 +18,7 @@ import { CatalogModule } from "./modules/delivery/catalog/catalog.module.js";
 import { BuildModule } from "./modules/delivery/build/build.module.js";
 import { DesignModule } from "./modules/delivery/design/design.module.js";
 import { BrainModule } from "./modules/delivery/brain/index.js";
+import { WikiModule } from "./modules/delivery/wiki/index.js";
 import { DocumentsModule } from "./modules/delivery/documents/documents.module.js";
 import { MemberApiModule } from "./modules/delivery/member-api/index.js";
 import { RuntimeJobsModule } from "./modules/delivery/runtime-jobs/runtime-jobs.module.js";
@@ -69,6 +70,7 @@ import { ReleasesModule } from "./modules/system/releases/index.js";
     RuntimeJobsModule,
     DocumentsModule,
     BrainModule,
+    WikiModule,
     MemberApiModule,
     CatalogModule,
     DesignModule,
