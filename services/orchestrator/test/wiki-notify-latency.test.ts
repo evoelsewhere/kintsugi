@@ -21,17 +21,19 @@ describe.skipIf(!hasDatabase)("wiki-notify latency (integration)", () => {
   let remote: GitHttpServer;
   let dataDir: string;
   let worker: Worker;
+  let storage: CheckoutStorage;
 
   beforeAll(async () => {
     process.env["KINTSUGI_SECRET_KEY"] ??= randomBytes(32).toString("base64");
     db = await createTestDatabase();
     remote = await startGitHttpServer();
     dataDir = await mkdtemp(join(tmpdir(), "kintsugi-wiki-latency-"));
-    const storage = new CheckoutStorage(dataDir);
+    storage = new CheckoutStorage(dataDir);
     await remote.createRepository("wiki-docs");
     await remote.commitFiles("wiki-docs", [
       { path: "20-spaces/eng/README.md", content: "---\nkey: ENG\n---\n\n# Engineering\n" },
       { path: "20-spaces/eng/setup.md", content: SETUP },
+      { path: "kintsugi.yaml", content: ["schemaVersion: 1", "project: {id: wiki, name: Wiki}", "document: {server: internal, path: wiki-docs}", "unitKinds: [screen]", "applications: []", "directPublishPaths: [20-spaces/eng/**]", ""].join("\n") },
     ]);
     await db.pool.query("insert into admin.git_server (id, kind, name, base_url, auth_type) values ('internal', 'plain-git', 'Internal', $1, 'none')", [remote.baseUrl]);
     await db.pool.query("insert into admin.git_repository (id, server_id, url, default_branch) values ('wiki-docs', 'internal', $1, 'main')", [`${remote.baseUrl}/wiki-docs.git`]);
@@ -106,4 +108,41 @@ describe.skipIf(!hasDatabase)("wiki-notify latency (integration)", () => {
     expect(notified.subject).toMatchObject({ pageKey: "PAGE-ENG-0001", actorId: "bob" });
     expect(latencyMs).toBeLessThan(60_000);
   }, 180_000);
+
+  it("notifies the watcher within 30 seconds of each of five direct publishes, with no sweep to wait for (P-009)", async () => {
+    // The first worker stops. The second one checks nothing on a timer for an hour: only what a write asks for happens.
+    await worker.stop();
+    worker = await startWorker({ databaseUrl: db.url, pool: db.pool, storage, pollIntervalSeconds: 3600, pendingScanSeconds: 3600, reviewWatchSeconds: 3600, brainCheckSeconds: 3600, log: () => undefined });
+    const count = async (): Promise<number> => Number((await db.pool.query<{ n: string }>("select count(*) as n from core.notification where user_id = 'alice' and subject ->> 'pageKey' = 'PAGE-ENG-0001'")).rows[0]?.n ?? 0);
+    const base = await count();
+    const latencies: number[] = [];
+    let text = remote.git("wiki-docs", "show", "main:20-spaces/eng/setup.md");
+    for (let round = 1; round <= 5; round += 1) {
+      const next = `${text}\nEdit ${round}.\n`;
+      const writeId = randomUUID();
+      await db.pool.query("insert into workflow.document_write (id, project_id, kind, status, message, actor, page_path, page_id) values ($1, 'wiki', 'page', 'queued', 'Edit setup', 'bob', '20-spaces/eng/setup.md', 'PAGE-ENG-0001')", [writeId]);
+      const before = Date.now();
+      await worker.requestWrite("wiki-docs", {
+        writeId,
+        projectId: "wiki",
+        kind: "page",
+        message: `Edit setup ${round}`,
+        actor: "bob",
+        directPublish: true,
+        files: [{ path: "20-spaces/eng/setup.md", content: next, expectedHash: sha256(text) }],
+        page: { id: "PAGE-ENG-0001", path: "20-spaces/eng/setup.md", minor: false },
+      });
+      // The write is committed to the default branch (a clone of the worktree comes first and depends on the machine); from then
+      // on the watcher must hear within 30 seconds, with no timer of the worker to wait for.
+      while ((await db.pool.query("select 1 from workflow.document_write where id = $1 and status = 'committed'", [writeId])).rowCount === 0 && Date.now() < before + 90_000) await new Promise((resolve) => setTimeout(resolve, 100));
+      const committed = Date.now();
+      const until = committed + 30_000;
+      while ((await count()) < base + round && Date.now() < until) await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(await count(), `the notification of publish ${round} did not come within 30 s of the commit`).toBe(base + round);
+      latencies.push(Date.now() - committed);
+      text = next;
+    }
+    process.stdout.write(`direct publish committed -> notification row, five rounds: ${latencies.join(", ")} ms\n`);
+    for (const latency of latencies) expect(latency).toBeLessThan(30_000);
+  }, 240_000);
 });

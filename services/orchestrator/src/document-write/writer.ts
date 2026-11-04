@@ -16,7 +16,6 @@ import {
   type RemoteOptions,
   type Trailer,
   WRITER_BRANCH_PREFIX,
-  fetchMirror,
   findPageIdOwners,
   hasBranch,
   isAncestor,
@@ -28,7 +27,7 @@ import {
 } from "@kintsugi/git";
 import { MANIFEST_FILE, parseKintsugiYaml } from "@kintsugi/manifest";
 import type { RepositoryStore } from "../git-sync/repositories.js";
-import { EmptyRepositoryError, remoteOptions, syncRepository, withMirrorLock } from "../git-sync/sync.js";
+import { EmptyRepositoryError, remoteOptions, syncRepository } from "../git-sync/sync.js";
 import type { DocumentWriteRequest } from "../queues.js";
 import { OutputRuleError, decodeFiles, isDeleteEntry, isRenameEntry, pathsOfEntry, readOutputDir, splitByAutoCommit, validateOutputs } from "./outputs.js";
 import { assertNoDuplicatePageIds } from "./page-ids.js";
@@ -259,7 +258,9 @@ export async function writeDocument(deps: WriterDeps, request: DocumentWriteRequ
       if (result.changed) {
         outcome.status = "committed";
         outcome.commit = result.commit;
-        await withMirrorLock(repository.id, () => fetchMirror(mirror, options)); // the review branch starts after this commit
+        // The mirror takes the commit now, and a sync that sees the default branch move tells the worker, which asks for a
+        // build of the Brain at once (and so, for a wiki, for the notifications of its watchers) instead of at the next sweep (P-009).
+        await sync(); // the review branch starts after this commit
       }
     }
 
