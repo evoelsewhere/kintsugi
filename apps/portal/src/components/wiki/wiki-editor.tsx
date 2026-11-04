@@ -275,6 +275,15 @@ function Surface({
           if (saved === null) throw new Error("The editor is not ready.");
           return saved.whenSaved();
         }}
+        refreshDraft={async () => {
+          const server = await wikiEditApi.draft(projectId, path);
+          if (server === null) throw new Error("The draft could not be read again.");
+          engine.current?.adopt(server);
+          setText(server.text);
+          setPreview(server.text);
+          setGeneration((value) => value + 1);
+          return server.revision;
+        }}
         onClose={() => setPublishing(false)}
       />
       <LabelChips

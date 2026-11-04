@@ -517,6 +517,9 @@ describe("publishing", () => {
     });
     expect(classifyPublishFailure(refused(409, { code: "open-write", write: {} })).kind).toBe("open-write");
     expect(classifyPublishFailure(refused(409, { code: "draft-revision", revision: 3 }, "The draft changed"))).toEqual({ kind: "draft-revision", message: "The draft changed" });
+    expect(classifyPublishFailure(refused(409, { code: "id-taken", path: "a/other.md", pageId: "PAGE-ENG-0099", revision: 4 }, "The page id is taken"))).toEqual({ kind: "id-taken", message: "The page id is taken", renewed: true });
+    // A page that exists is not given a new id: the API says so without a pageId, and the draft is unchanged.
+    expect(classifyPublishFailure(refused(409, { code: "id-taken", path: "a/other.md" }, "Page id PAGE-ENG-0012 is already defined by a/other.md"))).toEqual({ kind: "id-taken", message: "Page id PAGE-ENG-0012 is already defined by a/other.md", renewed: false });
     expect(classifyPublishFailure(refused(403, {}, "Publishing is restricted to the docs team"))).toEqual({ kind: "message", status: 403, message: "Publishing is restricted to the docs team" });
     expect(classifyPublishFailure(refused(400, {}, "Not an editable path"))).toEqual({ kind: "message", status: 400, message: "Not an editable path" });
     expect(classifyPublishFailure(new Error("boom"))).toEqual({ kind: "message", status: undefined, message: "boom" });

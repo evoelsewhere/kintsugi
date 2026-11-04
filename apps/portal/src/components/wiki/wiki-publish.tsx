@@ -43,6 +43,8 @@ export interface PublishFlowProps {
   direct: boolean;
   /** Saves what is typed and gives the revision of the draft to publish. */
   saveDraft: () => Promise<number>;
+  /** Reads the server's draft again into the editor and gives its revision (the server changed it: a new page id). */
+  refreshDraft: () => Promise<number>;
   open: boolean;
   onClose: () => void;
 }
@@ -54,16 +56,17 @@ type Stage =
   | { kind: "done"; write: WriteSummary }
   | { kind: "unchanged" };
 
-export function PublishFlow({ projectId, path, title, initialMessage, direct, saveDraft, open, onClose }: PublishFlowProps): React.JSX.Element | null {
+export function PublishFlow({ projectId, path, title, initialMessage, direct, saveDraft, refreshDraft, open, onClose }: PublishFlowProps): React.JSX.Element | null {
   const [message, setMessage] = useState(() => initialMessage ?? defaultPublishMessage(title));
   const [minor, setMinor] = useState(false);
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState<Stage>({ kind: "form" });
   const [revision, setRevision] = useState<number | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   if (!open) return null;
 
-  const send = async (extra: Pick<PublishRequest, "mergedFrom" | "resolvedText"> = {}): Promise<void> => {
+  const send = async (extra: Pick<PublishRequest, "mergedFrom" | "resolvedText"> = {}, again = false): Promise<void> => {
     setBusy(true);
     try {
       // The server publishes the revision it holds: what is typed is saved first, and the page waits for it.
@@ -75,6 +78,20 @@ export function PublishFlow({ projectId, path, title, initialMessage, direct, sa
       else setStage({ kind: "preview", merged: result.merged, head: result.head });
     } catch (error) {
       const failure = classifyPublishFailure(error);
+      if (failure.kind === "id-taken" && failure.renewed && !again) {
+        // The server gave the new page another id: the editor takes that draft, and the publish goes on once more.
+        try {
+          setRevision(await refreshDraft());
+          setNotice("The page id was taken: the page was given a new one.");
+          await send(extra, true);
+          return;
+        } catch (retry) {
+          const second = classifyPublishFailure(retry);
+          if (second.kind === "conflict") setStage({ kind: "conflict", body: second.body });
+          else setStage({ kind: "form", failure: second });
+          return;
+        }
+      }
       if (failure.kind === "conflict") setStage({ kind: "conflict", body: failure.body });
       else setStage({ kind: "form", failure });
     } finally {
@@ -103,6 +120,11 @@ export function PublishFlow({ projectId, path, title, initialMessage, direct, sa
         ) : undefined
       }
     >
+      {notice === null ? null : (
+        <p role="status" className="mb-2 rounded-lg bg-recessed px-3 py-2 text-[12px] text-text-secondary">
+          {notice}
+        </p>
+      )}
       {stage.kind === "form" ? (
         <div className="flex flex-col gap-3 text-[13px]">
           <label className="flex flex-col gap-1">
