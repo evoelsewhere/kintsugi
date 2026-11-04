@@ -8,12 +8,13 @@ import { type RefObject, useState } from "react";
 import { Loaded } from "@/components/loaded";
 import { Markdown } from "@/components/results/lazy-markdown";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { wikiCommentsApi } from "@/lib/api/wiki-comments";
 import { errorText, formatRelative } from "@/lib/format";
 import { useLoader } from "@/lib/use-loader";
 import { wikiRead } from "@/lib/wiki";
 import { commentProblem, type CommentView, threadsOf, type Thread } from "@/lib/wiki-comments";
+import { MentionDirectory } from "./mention-directory";
+import { MentionTextarea } from "./mention-textarea";
 import { showPassage, type SelectedPassage, useCommentHighlights, useSelectedPassage } from "./use-comment-anchors";
 
 export interface WikiCommentsProps {
@@ -39,6 +40,7 @@ export function WikiComments({ projectId, commit, path, page }: WikiCommentsProp
   const grouped = threadsOf(comments);
   if (list.data === null) return <></>;
   return (
+    <MentionDirectory projectId={projectId} texts={comments.map((comment) => comment.body)}>
     <aside aria-label="Comments" className="flex flex-col gap-3 text-[13px]">
       <h2 className="flex items-center gap-1.5 text-[13px] font-medium text-text">
         <MessageSquareText className="size-3.5 text-text-muted" strokeWidth={1.75} aria-hidden="true" />
@@ -69,6 +71,7 @@ export function WikiComments({ projectId, commit, path, page }: WikiCommentsProp
         )}
       </Loaded>
     </aside>
+    </MentionDirectory>
   );
 }
 
@@ -102,7 +105,7 @@ function Composer({ projectId, path, selected, onPosted }: { projectId: string; 
           </button>
         </p>
       )}
-      <Textarea value={body} onChange={(event) => setBody(event.target.value)} placeholder={passage === null ? "Comment on this page" : "Comment on the passage"} aria-label="Write a comment" className="min-h-16 text-[13px]" />
+      <MentionTextarea projectId={projectId} value={body} onChange={setBody} placeholder={passage === null ? "Comment on this page" : "Comment on the passage"} label="Write a comment" className="min-h-16 text-[13px]" />
       {failure === null ? null : (
         <p role="alert" className="text-[12px] text-[var(--ds-status-red)]">
           {failure}
@@ -178,7 +181,7 @@ function ThreadView({ projectId, path, thread, page, onPosted }: { projectId: st
       ))}
       {comment.deleted ? null : replying ? (
         <div className="flex flex-col gap-1.5">
-          <Textarea value={body} onChange={(event) => setBody(event.target.value)} aria-label="Write a reply" className="min-h-14 text-[13px]" autoFocus />
+          <MentionTextarea projectId={projectId} value={body} onChange={setBody} label="Write a reply" className="min-h-14 text-[13px]" autoFocus />
           {failure === null ? null : (
             <p role="alert" className="text-[12px] text-[var(--ds-status-red)]">
               {failure}

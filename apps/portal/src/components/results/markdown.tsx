@@ -10,6 +10,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { DocumentLink } from "./document-links";
 import { MarkdownImage } from "./markdown-image";
+import { MentionChip } from "./mention-chip";
 import { MermaidDiagram } from "./mermaid-diagram";
 import { type HastNode, textOf, wikiMarkdown } from "./markdown-wiki";
 
@@ -86,6 +87,10 @@ export default function Markdown({ text, path }: { text: string; path?: string |
           {children}
         </DocumentLink>
       ),
+      span: ({ node: _node, children, ...props }) => {
+        const mention = (props as Record<string, unknown>)["data-mention"];
+        return typeof mention === "string" ? <MentionChip username={mention}>{children}</MentionChip> : <span {...props}>{children}</span>;
+      },
       img: ({ src, alt }) => <MarkdownImage src={typeof src === "string" ? src : undefined} alt={alt} basePath={path} />,
     }),
     [path],
