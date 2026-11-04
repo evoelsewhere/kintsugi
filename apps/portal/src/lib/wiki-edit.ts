@@ -287,8 +287,31 @@ export class DraftSaver {
     this.timer = undefined;
   }
 
-  private async save(): Promise<void> {
-    if (this.inFlight || this.status === "locked" || this.text === this.savedText) return;
+  private running: Promise<void> | null = null;
+
+  private save(force = false): Promise<void> {
+    if (this.inFlight) return this.running ?? Promise.resolve();
+    this.running = this.run(force);
+    return this.running;
+  }
+
+  /**
+   * Saves what is typed and waits until the server holds it, then gives the revision to publish. A page opened and not
+   * changed has no draft yet: it is created here, from the text as it is, so that publishing it can say "no change".
+   */
+  async whenSaved(): Promise<number> {
+    this.clear();
+    for (let round = 0; round < 4; round += 1) {
+      await this.save(this.revision === null);
+      if (this.inFlight) await this.running;
+      if ((this.text === this.savedText && this.revision !== null) || this.status === "failed" || this.status === "locked") break;
+    }
+    if (this.revision === null || this.text !== this.savedText) throw new Error(this.message ?? "The draft could not be saved.");
+    return this.revision;
+  }
+
+  private async run(force: boolean): Promise<void> {
+    if (this.inFlight || this.status === "locked" || (this.text === this.savedText && !force)) return;
     if (textProblem(this.text) !== undefined) return;
     this.inFlight = true;
     this.status = "saving";
@@ -347,4 +370,191 @@ function defaultFailure(error: unknown): SaveFailure {
     message: error instanceof Error ? error.message : "The draft could not be saved.",
     details: shape.body?.details,
   };
+}
+
+// ---- Resolving a conflict ----------------------------------------------------------------------------------------
+// When the page changed in the repository while it was being edited, the API answers with three texts: the one both
+// started from (base), the person's (ours) and the repository's (theirs). The person resolves it in a box that starts as
+// a Git merge result: what only one side changed is taken, and each place both sides changed differently is written
+// between `<<<<<<<`, `=======` and `>>>>>>>` lines, to be settled by hand. Lines keep their own endings.
+
+/** The lines of a text, each with its line ending, so that joining them gives the text back byte for byte. */
+export const linesOf = (text: string): string[] => (text === "" ? [] : (text.match(/[^\n]*\n|[^\n]+$/g) ?? []));
+
+/** For each line of `a`, the index of the line of `b` it is matched with in a longest common subsequence, or -1. */
+function matchLines(a: readonly string[], b: readonly string[]): number[] {
+  const rows = a.length;
+  const cols = b.length;
+  const table = Array.from({ length: rows + 1 }, () => new Uint32Array(cols + 1));
+  for (let i = rows - 1; i >= 0; i -= 1) {
+    const row = table[i] as Uint32Array;
+    const below = table[i + 1] as Uint32Array;
+    for (let j = cols - 1; j >= 0; j -= 1) row[j] = a[i] === b[j] ? (below[j + 1] as number) + 1 : Math.max(below[j] as number, row[j + 1] as number);
+  }
+  const matched = new Array<number>(rows).fill(-1);
+  let i = 0;
+  let j = 0;
+  while (i < rows && j < cols) {
+    if (a[i] === b[j]) {
+      matched[i] = j;
+      i += 1;
+      j += 1;
+    } else if (((table[i + 1] as Uint32Array)[j] as number) >= ((table[i] as Uint32Array)[j + 1] as number)) i += 1;
+    else j += 1;
+  }
+  return matched;
+}
+
+/** Texts longer than this many lines (on either side) are not compared line by line: the whole page is one conflict. */
+export const MERGE_MAX_LINES = 4000;
+
+export interface MarkedMerge {
+  text: string;
+  /** How many places both sides changed differently. */
+  conflicts: number;
+}
+
+const ending = (text: string): string => (text.includes("\r\n") ? "\r\n" : "\n");
+const closed = (lines: readonly string[], eol: string): string => {
+  const joined = lines.join("");
+  return joined === "" || joined.endsWith("\n") ? joined : joined + eol;
+};
+
+/**
+ * The three texts as a Git merge result with conflict markers (diff3 over whole lines): a place only one side changed takes
+ * that side, a place both changed the same way is taken once, and a place both changed differently is a conflict written as
+ * `<<<<<<< yours` / `=======` / `>>>>>>> theirs`. Neighbouring changes of the two sides are one conflict.
+ */
+export function withConflictMarkers(base: string, ours: string, theirs: string): MarkedMerge {
+  const a = linesOf(base);
+  const o = linesOf(ours);
+  const t = linesOf(theirs);
+  const eol = ending(ours + theirs + base);
+  if (a.length > MERGE_MAX_LINES || o.length > MERGE_MAX_LINES || t.length > MERGE_MAX_LINES) {
+    return ours === theirs ? { text: ours, conflicts: 0 } : { text: `<<<<<<< yours\n${closed(o, eol)}=======\n${closed(t, eol)}>>>>>>> theirs\n`, conflicts: 1 };
+  }
+  const withOurs = matchLines(a, o);
+  const withTheirs = matchLines(a, t);
+  const out: string[] = [];
+  let conflicts = 0;
+  let baseAt = 0;
+  let oursAt = 0;
+  let theirsAt = 0;
+
+  const chunk = (baseTo: number, oursTo: number, theirsTo: number): void => {
+    const b = a.slice(baseAt, baseTo);
+    const mine = o.slice(oursAt, oursTo);
+    const other = t.slice(theirsAt, theirsTo);
+    const same = (x: readonly string[], y: readonly string[]): boolean => x.length === y.length && x.every((line, index) => line === y[index]);
+    if (same(mine, b)) out.push(...other);
+    else if (same(other, b) || same(mine, other)) out.push(...mine);
+    else {
+      conflicts += 1;
+      out.push("<<<<<<< yours\n", closed(mine, eol), "=======\n", closed(other, eol), ">>>>>>> theirs\n");
+    }
+    baseAt = baseTo;
+    oursAt = oursTo;
+    theirsAt = theirsTo;
+  };
+
+  // A base line both sides kept is a place where the three texts agree again: the stretches between them are the chunks.
+  for (let index = 0; index < a.length; index += 1) {
+    const mine = withOurs[index] as number;
+    const other = withTheirs[index] as number;
+    if (mine < 0 || other < 0 || mine < oursAt || other < theirsAt) continue;
+    chunk(index, mine, other);
+    out.push(a[index] as string);
+    baseAt = index + 1;
+    oursAt = mine + 1;
+    theirsAt = other + 1;
+  }
+  chunk(a.length, o.length, t.length);
+  return { text: out.join(""), conflicts };
+}
+
+/** A line without its ending, for showing it. */
+export const withoutEnding = (line: string): string => line.replace(/\r?\n$/, "");
+
+/** Whether a text still has a conflict marker line (`<<<<<<<` or `>>>>>>>` at the start of a line). */
+export const hasConflictMarkers = (text: string): boolean => /^(<<<<<<<|>>>>>>>)/m.test(text);
+
+/** One line of a comparison of two texts. */
+export interface DiffLine {
+  type: "context" | "add" | "del";
+  text: string;
+}
+
+/** The lines that differ between two texts (`from` to `to`), with the unchanged ones between them; for showing a merge result. */
+export function lineDiff(from: string, to: string): DiffLine[] {
+  const a = linesOf(from);
+  const b = linesOf(to);
+  if (a.length > MERGE_MAX_LINES || b.length > MERGE_MAX_LINES) {
+    return from === to ? a.map((text) => ({ type: "context" as const, text })) : [...a.map((text) => ({ type: "del" as const, text })), ...b.map((text) => ({ type: "add" as const, text }))];
+  }
+  const matched = matchLines(a, b);
+  const out: DiffLine[] = [];
+  let at = 0;
+  for (let index = 0; index <= a.length; index += 1) {
+    const hit = index < a.length ? (matched[index] as number) : b.length;
+    if (index < a.length && hit < 0) {
+      out.push({ type: "del", text: a[index] as string });
+      continue;
+    }
+    for (; at < hit; at += 1) out.push({ type: "add", text: b[at] as string });
+    if (index < a.length) {
+      out.push({ type: "context", text: a[index] as string });
+      at = hit + 1;
+    }
+  }
+  return out;
+}
+
+// ---- Publishing --------------------------------------------------------------------------------------------------
+
+/** The longest message of a publish (the first line becomes the title of the pull request). */
+export const PUBLISH_MESSAGE_MAX = 200;
+
+/** The message a publish starts with: `Update <title>`. */
+export const defaultPublishMessage = (title: string): string => `Update ${title}`.slice(0, PUBLISH_MESSAGE_MAX);
+
+/** Why a message cannot be sent, in a person's words; undefined when it can. */
+export function messageProblem(message: string): string | undefined {
+  const text = message.trim();
+  if (text === "") return "Write a short message that says what changed.";
+  if (text.length > PUBLISH_MESSAGE_MAX) return `Keep the message to ${PUBLISH_MESSAGE_MAX} characters or fewer.`;
+  return undefined;
+}
+
+/** What the result of a publish will be, said before it is made. */
+export const publishModeLine = (direct: boolean): string =>
+  direct ? "This will commit straight to the default branch: no review." : "This will open a pull request for review: the page changes once it is merged.";
+
+/** What a refused publish is, for the screen that follows it. */
+export type PublishFailure =
+  | { kind: "conflict"; body: ConflictBody }
+  | { kind: "open-write"; author: string; prUrl: string | null; message: string }
+  | { kind: "draft-revision"; message: string }
+  | { kind: "message"; status: number | undefined; message: string };
+
+/** The structured detail of a failed request: the `details` of the API's error body, or the body itself. */
+function detailOf(error: unknown): Record<string, unknown> {
+  const body = (error as { body?: { details?: Record<string, unknown> } & Record<string, unknown> }).body;
+  return body?.details ?? body ?? {};
+}
+
+/**
+ * Sorts a failed publish: a conflict (the three texts to settle), a write of the page that is open (who and where),
+ * a draft that moved on, and any other refusal, which is shown with the API's own words.
+ */
+export function classifyPublishFailure(error: unknown): PublishFailure {
+  const message = error instanceof Error ? error.message : "The page could not be published.";
+  const status = (error as { status?: unknown }).status;
+  const detail = detailOf(error);
+  if (status === 409 && detail["code"] === "conflict") return { kind: "conflict", body: detail as unknown as ConflictBody };
+  if (status === 409 && detail["code"] === "open-write") {
+    const write = (detail["write"] ?? {}) as { author?: unknown; prUrl?: unknown };
+    return { kind: "open-write", author: typeof write.author === "string" ? write.author : "Someone else", prUrl: typeof write.prUrl === "string" ? write.prUrl : null, message };
+  }
+  if (status === 409 && detail["code"] === "draft-revision") return { kind: "draft-revision", message };
+  return { kind: "message", status: typeof status === "number" ? status : undefined, message };
 }

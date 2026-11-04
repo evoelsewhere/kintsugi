@@ -8,7 +8,16 @@ import {
   type DraftSaveBody,
   DraftSaver,
   type DraftView,
+  classifyPublishFailure,
+  defaultPublishMessage,
+  hasConflictMarkers,
+  messageProblem,
+  PUBLISH_MESSAGE_MAX,
+  publishModeLine,
+  lineDiff,
   lineSeparatorOf,
+  MERGE_MAX_LINES,
+  withConflictMarkers,
   MAX_DRAFT_BYTES,
   type SaverState,
   textBytes,
@@ -326,5 +335,163 @@ describe("opening a page in the editor and publishing it without a change", () =
 
   it("would change the text without the separator: the reason the editor is told which one to use", () => {
     expect(EditorState.create({ doc: "a\r\nb\r\n" }).doc.toString()).toBe("a\nb\n");
+  });
+});
+
+describe("settling a conflict: the three texts as a Git merge result", () => {
+  const base = "# Title\n\nfirst paragraph\n\nsecond paragraph\n\nthird paragraph\n";
+
+  it("combines what only one side changed and takes a change both made once", () => {
+    const ours = base.replace("first paragraph", "first, edited by me");
+    const theirs = base.replace("third paragraph", "third, edited by them");
+    expect(withConflictMarkers(base, ours, theirs)).toEqual({ text: "# Title\n\nfirst, edited by me\n\nsecond paragraph\n\nthird, edited by them\n", conflicts: 0 });
+    expect(withConflictMarkers(base, ours, ours)).toEqual({ text: ours, conflicts: 0 });
+    expect(withConflictMarkers(base, base, theirs).text).toBe(theirs);
+  });
+
+  it("writes a place both changed differently between the three markers, Git style", () => {
+    const ours = base.replace("second paragraph", "second, mine");
+    const theirs = base.replace("second paragraph", "second, theirs");
+    const merged = withConflictMarkers(base, ours, theirs);
+    expect(merged.conflicts).toBe(1);
+    expect(merged.text).toBe("# Title\n\nfirst paragraph\n\n<<<<<<< yours\nsecond, mine\n=======\nsecond, theirs\n>>>>>>> theirs\n\nthird paragraph\n");
+  });
+
+  it("marks each of several regions, the clean changes between them taken", () => {
+    const ours = base.replace("first paragraph", "first, mine").replace("third paragraph", "third, mine");
+    const theirs = base.replace("first paragraph", "first, theirs").replace("second paragraph", "second, theirs only").replace("third paragraph", "third, theirs");
+    const merged = withConflictMarkers(base, ours, theirs);
+    expect(merged.conflicts).toBe(2);
+    expect(merged.text).toContain("<<<<<<< yours\nfirst, mine\n=======\nfirst, theirs\n>>>>>>> theirs\n");
+    expect(merged.text).toContain("second, theirs only\n");
+    expect(merged.text).toContain("<<<<<<< yours\nthird, mine\n=======\nthird, theirs\n>>>>>>> theirs\n");
+  });
+
+  it("handles the edges: a conflict on the first line, on the last line, and where one side deleted what the other edited", () => {
+    const first = withConflictMarkers("a\nb\nc\n", "A1\nb\nc\n", "A2\nb\nc\n");
+    expect(first.text).toBe("<<<<<<< yours\nA1\n=======\nA2\n>>>>>>> theirs\nb\nc\n");
+    const last = withConflictMarkers("a\nb\nc\n", "a\nb\nC1\n", "a\nb\nC2\n");
+    expect(last.text).toBe("a\nb\n<<<<<<< yours\nC1\n=======\nC2\n>>>>>>> theirs\n");
+    const gone = withConflictMarkers("a\nb\nc\n", "a\nc\n", "a\nB\nc\n");
+    expect(gone).toEqual({ text: "a\n<<<<<<< yours\n=======\nB\n>>>>>>> theirs\nc\n", conflicts: 1 });
+  });
+
+  it("keeps CRLF line endings, a missing final newline and front matter as plain text", () => {
+    const crlf = withConflictMarkers("a\r\nb\r\nc\r\n", "a\r\nB1\r\nc\r\n", "a\r\nB2\r\nc\r\n");
+    expect(crlf.text).toBe("a\r\n<<<<<<< yours\nB1\r\n=======\nB2\r\n>>>>>>> theirs\nc\r\n");
+    const noFinal = withConflictMarkers("a\nb", "a\nB1", "a\nB2");
+    expect(noFinal.text).toBe("a\n<<<<<<< yours\nB1\n=======\nB2\n>>>>>>> theirs\n");
+    const front = withConflictMarkers("---\ntitle: A\n---\ntext\n", "---\ntitle: A\n---\ntext mine\n", "---\ntitle: B\n---\ntext\n");
+    expect(front).toEqual({ text: "---\ntitle: B\n---\ntext mine\n", conflicts: 0 });
+  });
+
+  it("is one conflict for a page of both sides added (no base), none when they are equal", () => {
+    expect(withConflictMarkers("", "mine\n", "theirs\n")).toEqual({ text: "<<<<<<< yours\nmine\n=======\ntheirs\n>>>>>>> theirs\n", conflicts: 1 });
+    expect(withConflictMarkers("", "same\n", "same\n")).toEqual({ text: "same\n", conflicts: 0 });
+  });
+
+  it("gives back the text when nothing changed anywhere", () => {
+    expect(withConflictMarkers(base, base, base)).toEqual({ text: base, conflicts: 0 });
+    expect(withConflictMarkers("", "", "")).toEqual({ text: "", conflicts: 0 });
+  });
+
+  it("does not compare a very long page line by line: the whole page is the conflict", () => {
+    const long = "line\n".repeat(MERGE_MAX_LINES + 1);
+    const merged = withConflictMarkers(long, `${long}mine\n`, `${long}theirs\n`);
+    expect(merged.conflicts).toBe(1);
+    expect(merged.text.startsWith("<<<<<<< yours\n")).toBe(true);
+  });
+
+  it("blocks publishing while a marker line is left, and lets go of it once they are gone", () => {
+    expect(hasConflictMarkers("a\n<<<<<<< yours\nb\n")).toBe(true);
+    expect(hasConflictMarkers("a\nb\n>>>>>>> theirs\n")).toBe(true);
+    expect(hasConflictMarkers("text with <<<<<<< inside a line\n")).toBe(false);
+    expect(hasConflictMarkers("a\n=======\nb\n")).toBe(false);
+    expect(hasConflictMarkers("settled\n")).toBe(false);
+  });
+});
+
+describe("the lines a merge result changed", () => {
+  it("shows what was removed and what was added between two texts, the rest as context", () => {
+    expect(lineDiff("a\nb\nc\n", "a\nB\nc\nd\n")).toEqual([
+      { type: "context", text: "a\n" },
+      { type: "del", text: "b\n" },
+      { type: "add", text: "B\n" },
+      { type: "context", text: "c\n" },
+      { type: "add", text: "d\n" },
+    ]);
+    expect(lineDiff("same\n", "same\n")).toEqual([{ type: "context", text: "same\n" }]);
+    expect(lineDiff("", "new\n")).toEqual([{ type: "add", text: "new\n" }]);
+    expect(lineDiff("old\n", "")).toEqual([{ type: "del", text: "old\n" }]);
+  });
+
+  it("gives back both texts from its lines", () => {
+    const from = "x\ny\nz\n";
+    const to = "x\nY\nz\nw\n";
+    const diff = lineDiff(from, to);
+    expect(diff.filter((line) => line.type !== "add").map((line) => line.text).join("")).toBe(from);
+    expect(diff.filter((line) => line.type !== "del").map((line) => line.text).join("")).toBe(to);
+  });
+});
+
+describe("publishing", () => {
+  it("starts with Update <title> and checks the message is 1 to 200 characters", () => {
+    expect(defaultPublishMessage("Database failover")).toBe("Update Database failover");
+    expect(defaultPublishMessage("x".repeat(500))).toHaveLength(PUBLISH_MESSAGE_MAX);
+    expect(messageProblem("")).toMatch(/message/);
+    expect(messageProblem("   ")).toMatch(/message/);
+    expect(messageProblem("Fix the steps")).toBeUndefined();
+    expect(messageProblem("x".repeat(PUBLISH_MESSAGE_MAX))).toBeUndefined();
+    expect(messageProblem("x".repeat(PUBLISH_MESSAGE_MAX + 1))).toMatch(/200/);
+  });
+
+  it("says whether the result is a pull request or a direct commit before it is made", () => {
+    expect(publishModeLine(false)).toMatch(/pull request/);
+    expect(publishModeLine(true)).toMatch(/straight to the default branch/);
+  });
+
+  const refused = (status: number, details: Record<string, unknown>, message = "refused"): Error => Object.assign(new Error(message), { status, body: { details } });
+
+  it("sorts a refused publish: conflict, open write, a draft that moved, anything else verbatim", () => {
+    const body = { code: "conflict", base: "b", ours: "o", theirs: "t", head: { commit: "c", hash: "h" }, regions: [{ baseStart: 1, baseEnd: 2 }] };
+    expect(classifyPublishFailure(refused(409, body))).toEqual({ kind: "conflict", body });
+    expect(classifyPublishFailure(refused(409, { code: "open-write", write: { id: "w", author: "Kim", prUrl: "https://git.example/pr/3" } }, "Another pull request is open"))).toEqual({
+      kind: "open-write",
+      author: "Kim",
+      prUrl: "https://git.example/pr/3",
+      message: "Another pull request is open",
+    });
+    expect(classifyPublishFailure(refused(409, { code: "open-write", write: {} })).kind).toBe("open-write");
+    expect(classifyPublishFailure(refused(409, { code: "draft-revision", revision: 3 }, "The draft changed"))).toEqual({ kind: "draft-revision", message: "The draft changed" });
+    expect(classifyPublishFailure(refused(403, {}, "Publishing is restricted to the docs team"))).toEqual({ kind: "message", status: 403, message: "Publishing is restricted to the docs team" });
+    expect(classifyPublishFailure(refused(400, {}, "Not an editable path"))).toEqual({ kind: "message", status: 400, message: "Not an editable path" });
+    expect(classifyPublishFailure(new Error("boom"))).toEqual({ kind: "message", status: undefined, message: "boom" });
+  });
+});
+
+describe("saving before publishing", () => {
+  it("creates the draft of a page that was opened and not changed, so that publishing it can answer 'no change'", async () => {
+    const { saver, calls } = harness({ startCommit: "a".repeat(40) });
+    await expect(saver.whenSaved()).resolves.toBe(1);
+    expect(calls).toEqual([{ path: "a/page.md", text: "start", baseRevision: null, baseCommit: "a".repeat(40) }]);
+  });
+
+  it("waits for a save that is out and for the text typed since, and gives the last revision", async () => {
+    const { saver, calls } = harness({ draft: draft({ revision: 3 }) });
+    saver.change("typed");
+    await expect(saver.whenSaved()).resolves.toBe(1);
+    expect(calls[0]).toMatchObject({ text: "typed", baseRevision: 3 });
+  });
+
+  it("fails, keeping the text, when the draft cannot be saved", async () => {
+    const { saver } = harness({
+      draft: draft(),
+      answer: async () => {
+        throw Object.assign(new Error("The API did not answer"), { status: 502 });
+      },
+    });
+    saver.change("typed");
+    await expect(saver.whenSaved()).rejects.toThrow("The API did not answer");
+    expect(saver.current.text).toBe("typed");
   });
 });
