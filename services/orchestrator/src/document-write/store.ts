@@ -116,13 +116,29 @@ export class DocumentWriteStore {
     }));
   }
 
-  /** Records how a review ended; false when the write was not waiting any more (another pass was first). */
-  async markReviewOutcome(id: string, outcome: "merged" | "closed"): Promise<boolean> {
+  /**
+   * Records how a review ended; false when the write was not waiting any more (another pass was first). `mergeCommit` is
+   * the commit that brought the branch into the default branch, when it is known (ADR-0096 decision 5).
+   */
+  async markReviewOutcome(id: string, outcome: "merged" | "closed", mergeCommit?: string): Promise<boolean> {
     const result = await this.pool.query(
-      "update workflow.document_write set status = $2, updated_at = now() where id = $1 and branch is not null and status in ('committed', 'pr-opened')",
-      [id, outcome],
+      `update workflow.document_write set status = $2, merge_commit = coalesce($3, merge_commit), updated_at = now()
+        where id = $1 and branch is not null and status in ('committed', 'pr-opened')`,
+      [id, outcome, mergeCommit ?? null],
     );
     return (result.rowCount ?? 0) > 0;
+  }
+
+  /** The pull request of an open review branch of the project (a write on it waits for its outcome); undefined when none does. */
+  async openBranch(projectId: string, branch: string): Promise<{ prUrl?: string } | undefined> {
+    const result = await this.pool.query<{ pr_url: string | null }>(
+      `select pr_url from workflow.document_write
+        where project_id = $1 and branch = $2 and status in ('committed', 'pr-opened')
+        order by (pr_url is null), created_at limit 1`,
+      [projectId, branch],
+    );
+    const row = result.rows[0];
+    return row === undefined ? undefined : row.pr_url === null ? {} : { prUrl: row.pr_url };
   }
 
   /** Records a failure; `message` must already be redacted. */

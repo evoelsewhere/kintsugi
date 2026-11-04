@@ -6,10 +6,11 @@
 // set in the portal, read per write — with trailers.
 
 import { join } from "node:path";
-import { DEFAULT_AUTO_COMMIT_PATHS, repositoryPath } from "@kintsugi/domain";
+import { DEFAULT_AUTO_COMMIT_PATHS, isDirectPublishable, isWikiEditablePath, repositoryPath } from "@kintsugi/domain";
 import {
   CheckoutStorage,
-  type FileWrite,
+  type FileChange,
+  GitError,
   PullRequestsUnsupportedError,
   type PullRequestServerKind,
   type RemoteOptions,
@@ -17,6 +18,8 @@ import {
   WRITER_BRANCH_PREFIX,
   fetchMirror,
   findPageIdOwners,
+  hasBranch,
+  isAncestor,
   pullRequestProvider,
   resolveCommit,
   runGit,
@@ -27,7 +30,7 @@ import { MANIFEST_FILE, parseKintsugiYaml } from "@kintsugi/manifest";
 import type { RepositoryStore } from "../git-sync/repositories.js";
 import { EmptyRepositoryError, remoteOptions, syncRepository, withMirrorLock } from "../git-sync/sync.js";
 import type { DocumentWriteRequest } from "../queues.js";
-import { OutputRuleError, decodeFiles, readOutputDir, splitByAutoCommit, validateOutputs } from "./outputs.js";
+import { OutputRuleError, decodeFiles, isDeleteEntry, isRenameEntry, pathsOfEntry, readOutputDir, splitByAutoCommit, validateOutputs } from "./outputs.js";
 import { assertNoDuplicatePageIds } from "./page-ids.js";
 import type { DocumentWriteOutcome, DocumentWriteStore } from "./store.js";
 
@@ -68,6 +71,9 @@ export function writerTrailers(request: DocumentWriteRequest): Trailer[] {
   if (request.agent !== undefined) trailers.push({ key: "Kintsugi-Agent", value: request.agent });
   if (request.actor !== undefined) trailers.push({ key: "Kintsugi-Actor", value: request.actor });
   if (request.unit !== undefined) trailers.push({ key: "Kintsugi-Unit", value: request.unit });
+  // A page write names its page and says when the change is minor, which the history of the page reads back.
+  if (request.kind === "page" && request.page?.id != null) trailers.push({ key: "Kintsugi-Page", value: request.page.id });
+  if (request.kind === "page" && request.page?.minor === true) trailers.push({ key: "Kintsugi-Minor", value: "true" });
   return trailers;
 }
 
@@ -85,9 +91,9 @@ export async function mirrorDefaultBranch(mirror: string): Promise<string> {
  * The files of a write without the create-only ones the default branch already has: the starter
  * structure fills in what is missing and never replaces a document a person wrote.
  */
-async function withoutExisting(mirror: string, commit: string, files: readonly FileWrite[], createOnly: ReadonlySet<string>): Promise<FileWrite[]> {
+async function withoutExisting(mirror: string, commit: string, files: readonly FileChange[], createOnly: ReadonlySet<string>): Promise<FileChange[]> {
   if (createOnly.size === 0) return [...files];
-  const kept: FileWrite[] = [];
+  const kept: FileChange[] = [];
   for (const file of files) {
     const exists = createOnly.has(file.path) && (await runGit(["--git-dir", mirror, "cat-file", "-e", `${commit}:${file.path}`]).then(
       () => true,
@@ -98,20 +104,42 @@ async function withoutExisting(mirror: string, commit: string, files: readonly F
   return kept;
 }
 
-/** `autoCommitPaths` from kintsugi.yaml on the default branch; the defaults when it is missing or invalid. */
-async function autoCommitPaths(mirror: string, commit: string, options: RemoteOptions): Promise<readonly string[]> {
+/**
+ * `autoCommitPaths` and `directPublishPaths` from kintsugi.yaml on the default branch; the defaults (the starter's
+ * auto-commit paths, no direct publish) when the file is missing or invalid, so a broken manifest never widens what is
+ * written without review.
+ */
+async function manifestPaths(mirror: string, commit: string, options: RemoteOptions): Promise<{ autoCommit: readonly string[]; directPublish: readonly string[] }> {
+  const defaults = { autoCommit: DEFAULT_AUTO_COMMIT_PATHS, directPublish: [] as readonly string[] };
   const text = await runGit(["--git-dir", mirror, "show", `${commit}:${MANIFEST_FILE}`], options).then(
     (result) => result.stdout,
     () => undefined,
   );
-  if (text === undefined) return DEFAULT_AUTO_COMMIT_PATHS;
+  if (text === undefined) return defaults;
   const parsed = parseKintsugiYaml(text);
-  return parsed.ok ? parsed.manifest.autoCommitPaths : DEFAULT_AUTO_COMMIT_PATHS;
+  return parsed.ok ? { autoCommit: parsed.manifest.autoCommitPaths, directPublish: parsed.manifest.directPublishPaths } : defaults;
 }
 
-function pullRequestBody(request: DocumentWriteRequest, files: readonly FileWrite[]): string {
+/** What the writer refuses of a page write whatever the API checked: paths the wiki may not write, and removals or moves without a hash. */
+function assertPageWrite(files: readonly FileChange[], request: DocumentWriteRequest): void {
+  for (const file of files) {
+    for (const path of pathsOfEntry(file)) {
+      if (!isWikiEditablePath(path)) throw new OutputRuleError(`"${path}" is not a path the wiki may write`);
+    }
+    if ((isDeleteEntry(file) || isRenameEntry(file)) && !/^[0-9a-f]{64}$/.test(file.expectedHash)) throw new OutputRuleError(`"${file.path}" needs the SHA-256 of the file as it was read`);
+  }
+  if (request.page !== undefined && !isWikiEditablePath(request.page.path)) throw new OutputRuleError(`"${request.page.path}" is not a path the wiki may write`);
+}
+
+function describeEntry(file: FileChange): string {
+  if (isDeleteEntry(file)) return `- \`${file.path}\` (deleted)`;
+  if (isRenameEntry(file)) return `- \`${file.path}\` (moved from \`${file.renameFrom}\`)`;
+  return `- \`${file.path}\``;
+}
+
+function pullRequestBody(request: DocumentWriteRequest, files: readonly FileChange[]): string {
   const description = request.description?.trim();
-  const lines = [request.message.trim(), "", ...(description === undefined || description === "" ? [] : [description, ""]), "Files:", ...files.map((file) => `- \`${file.path}\``), "", "Opened by kintsugi-bot (ADR-0019)."];
+  const lines = [request.message.trim(), "", ...(description === undefined || description === "" ? [] : [description, ""]), "Files:", ...files.map(describeEntry), "", "Opened by kintsugi-bot (ADR-0019)."];
   for (const trailer of writerTrailers(request)) lines.push(`${trailer.key}: ${trailer.value}`);
   return lines.join("\n");
 }
@@ -121,11 +149,36 @@ function pullRequestBody(request: DocumentWriteRequest, files: readonly FileWrit
  * (bad paths, sizes, no document repo) are recorded and returned as `failed` without a
  * retry; other failures are recorded and rethrown so the queue retries them.
  */
+/**
+ * A refusal of the Git core that no retry can change: a file that changed since the person read it, a move onto another
+ * file, a commit with too many entries. The write is recorded as failed and the queue does not try it again.
+ */
+function isContentConflict(error: unknown): boolean {
+  return error instanceof GitError && /changed since it was read|a different document is already there|appears twice|removed twice|onto itself|another entry writes|at most \d+/.test(error.message);
+}
+
 /** The first commit of an empty document repository: the rest of the starter arrives through the pull request. */
 const SEED_README = `# Document repository
 
 The project's documents for Kintsugi: everything except code. Kintsugi proposes its changes through pull requests.
 `;
+
+/**
+ * The branch a page write continues: an open `kintsugi/*` branch of this repository (it exists in the mirror, a write of
+ * this project is waiting for its review and its tip is not on the default branch yet), with the pull request opened
+ * for it. Anything else is refused (ADR-0098 decision 3).
+ */
+async function continuedBranch(deps: WriterDeps, mirror: string, defaultBranch: string, projectId: string, branch: string): Promise<{ branch: string; prUrl?: string }> {
+  const refuse = (): never => {
+    throw new OutputRuleError(`"${branch}" is not an open ${WRITER_BRANCH_PREFIX}* branch of this repository`);
+  };
+  if (!branch.startsWith(WRITER_BRANCH_PREFIX) || !/^[A-Za-z0-9._/-]+$/.test(branch) || !(await hasBranch(mirror, branch))) return refuse();
+  const open = await deps.writes.openBranch(projectId, branch);
+  if (open === undefined) return refuse();
+  const tip = await resolveCommit(mirror, `refs/heads/${branch}`);
+  if (await isAncestor(mirror, tip, `refs/heads/${defaultBranch}`)) return refuse();
+  return { branch, ...(open.prUrl === undefined ? {} : { prUrl: open.prUrl }) };
+}
 
 export async function writeDocument(deps: WriterDeps, request: DocumentWriteRequest): Promise<DocumentWriteOutcome | { status: "failed"; error: string }> {
   await deps.writes.ensure(request);
@@ -144,6 +197,12 @@ export async function writeDocument(deps: WriterDeps, request: DocumentWriteRequ
     const files = validateOutputs(
       request.files !== undefined ? decodeFiles(request.files) : request.outputOfJob !== undefined ? await readOutputDir(deps.storage.job(request.outputOfJob).out) : [],
     );
+    // Only a page write (the wiki's publish, ADR-0098) may remove or move a file, publish directly or continue a branch.
+    const isPageWrite = request.kind === "page";
+    if (!isPageWrite && (files.some((file) => isDeleteEntry(file) || isRenameEntry(file)) || request.directPublish !== undefined || request.continues !== undefined)) {
+      throw new OutputRuleError(`A write of kind "${request.kind}" cannot delete or move a file, publish directly or continue a branch`);
+    }
+    if (isPageWrite) assertPageWrite(files, request);
 
     // Fetch (or first clone) the mirror; this also refreshes the repository's sync status. A repository with no commit
     // (the guide's "create an empty repository") first gets a README on its default branch, so the write has a base.
@@ -170,7 +229,18 @@ export async function writeDocument(deps: WriterDeps, request: DocumentWriteRequ
     // Two pages never share an id: the writer is the last to check (ADR-0096 decision 4).
     await assertNoDuplicatePageIds(files, (id) => findPageIdOwners(mirror, head, id));
     const toWrite = await withoutExisting(mirror, head, files, new Set((request.files ?? []).filter((file) => file.createOnly === true).map((file) => file.path)));
-    const { autoCommit, review } = request.reviewAll === true ? { autoCommit: [], review: toWrite } : splitByAutoCommit(toWrite, await autoCommitPaths(mirror, head, options));
+    const paths = await manifestPaths(mirror, head, options);
+    // A page write never uses autoCommitPaths: it goes to a pull request unless it asks to be published directly and
+    // every path it touches is in directPublishPaths of the manifest at the head of the default branch (ADR-0098 decision 4).
+    const direct = isPageWrite && request.directPublish === true && request.continues === undefined && toWrite.every((file) => pathsOfEntry(file).every((path) => isDirectPublishable(path, paths.directPublish)));
+    const { autoCommit, review } = isPageWrite
+      ? direct
+        ? { autoCommit: toWrite, review: [] }
+        : { autoCommit: [], review: toWrite }
+      : request.reviewAll === true
+        ? { autoCommit: [], review: toWrite }
+        : splitByAutoCommit(toWrite, paths.autoCommit);
+    const continued = request.continues === undefined ? undefined : await continuedBranch(deps, mirror, defaultBranch, request.projectId, request.continues);
 
     const common = {
       url: repository.url,
@@ -194,12 +264,21 @@ export async function writeDocument(deps: WriterDeps, request: DocumentWriteRequ
     }
 
     if (review.length > 0) {
-      const branch = writerBranch(request);
+      const branch = continued?.branch ?? writerBranch(request);
       const result = await writeFiles({ ...common, branch, files: review }, options);
       if (result.changed || result.branch === branch) {
         outcome.status = "committed";
         outcome.branch = branch;
         outcome.branchCommit = result.commit;
+        // A write that continues a branch updates the pull request that is open on it: no second one is opened.
+        if (continued !== undefined) {
+          if (continued.prUrl !== undefined) {
+            outcome.status = "pr-opened";
+            outcome.prUrl = continued.prUrl;
+          }
+          await deps.writes.markDone(request.writeId, outcome);
+          return outcome;
+        }
         const provider = pullRequestProvider(target.serverKind as PullRequestServerKind, deps.fetch);
         // plain-git has no pull requests, SSH-only servers have no API token, and some kinds
         // have no adapter yet: the pushed branch stays for a human to propose (ADR-0019).
@@ -231,7 +310,7 @@ export async function writeDocument(deps: WriterDeps, request: DocumentWriteRequ
   } catch (error) {
     const message = redact(error instanceof Error ? error.message : String(error), secrets);
     await deps.writes.markFailed(request.writeId, message);
-    if (error instanceof OutputRuleError) return { status: "failed", error: message };
+    if (error instanceof OutputRuleError || isContentConflict(error)) return { status: "failed", error: message };
     // The redacted message only: pg-boss stores the error, and the original could carry a secret.
     // eslint-disable-next-line preserve-caught-error
     throw new Error(message);
