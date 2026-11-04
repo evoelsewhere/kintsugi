@@ -4,7 +4,16 @@
 // and higher is better; a cost is a count and lower is better. The recorded baseline (`wiki-baseline.json`) is what a
 // later builder must not fall below.
 
-import { BRAIN_BUILDER_VERSION, BRAIN_ROOT_ID, type BrainNode, type BrainSourceDocument, type BrainTree, buildBrainTree, isBrainIndexedPath } from "@kintsugi/domain";
+import {
+  BRAIN_BUILDER_VERSION,
+  BRAIN_ROOT_ID,
+  type BrainNode,
+  type BrainSourceDocument,
+  type BrainTree,
+  brainLabels,
+  buildBrainTree,
+  isBrainIndexedPath,
+} from "@kintsugi/domain";
 
 /** `brain_grep` returns at most this many lines (the API's GREP_LIMIT). */
 export const GREP_LIMIT = 50;
@@ -127,6 +136,21 @@ function brokenLinks(tree: BrainTree): Array<{ from: string; target: string }> {
   return broken ?? [];
 }
 
+/**
+ * The pages a `label:<name>` or `space:<KEY>` lookup of the API returns (ADR-0097 decision 8): a label is cleaned the way
+ * the builder cleans the labels of a page, a space key is read in upper case, and only documents are listed.
+ */
+export function lookupPaths(tree: BrainTree, query: string): Set<string> {
+  const match = /^(label|space):(.*)$/i.exec(query.trim());
+  const value = (match?.[2] ?? "").trim();
+  if (match === null || value === "") return new Set();
+  if (match[1]?.toLowerCase() === "label") {
+    const label = brainLabels([value])[0];
+    return asSet(documentsOf(tree).filter((node) => label !== undefined && node.labels.includes(label)).map((node) => node.path));
+  }
+  return asSet(documentsOf(tree).filter((node) => node.space === value.toUpperCase()).map((node) => node.path));
+}
+
 const summary = (node: BrainNode | undefined): string => node?.summary ?? "";
 
 function answer(question: WikiQuestion, tree: BrainTree, sources: readonly BrainSourceDocument[]): Omit<WikiResult, "citations"> {
@@ -149,6 +173,13 @@ function answer(question: WikiQuestion, tree: BrainTree, sources: readonly Brain
       const a = overlap(attribute, expected);
       const p = overlap(under(tree, String(question.folder)), expected);
       return { ...base, scores: { attributeRecall: a.recall, attributePrecision: a.precision, pathRecall: p.recall, pathPrecision: p.precision }, costs: {} };
+    }
+    case "lookup": {
+      // The question names a `label:` or `space:` query; the expected pages are listed, or are the pages under a folder.
+      const expected = question.folder === undefined ? expect : under(tree, String(question.folder));
+      const found = lookupPaths(tree, String(question.query));
+      const o = overlap(found, expected);
+      return { ...base, scores: { recall: o.recall, precision: o.precision }, costs: { matches: found.size } };
     }
     case "order": {
       const first = question.first as string[];

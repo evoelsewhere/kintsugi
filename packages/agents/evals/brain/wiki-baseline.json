@@ -1,6 +1,6 @@
 {
   "builderVersion": 6,
-  "recorded": "kcp-integration e1c07606 + P2-012",
+  "recorded": "kwp2-integration b86ce6d9 + P2-021 (lookup questions W25-W28)",
   "report": {
     "builderVersion": 6,
     "stats": {
@@ -368,6 +368,68 @@
         "citations": [
           "20-spaces/hr/2019-expenses.md:1-10",
           "20-spaces/ops/services/billing.md:1-11"
+        ]
+      },
+      {
+        "id": "W25",
+        "kind": "lookup",
+        "scores": {
+          "recall": 1,
+          "precision": 1,
+          "evidenceInNode": 1
+        },
+        "costs": {
+          "matches": 2
+        },
+        "citations": [
+          "20-spaces/eng/runbooks/db-failover.md:1-9",
+          "20-spaces/eng/runbooks/payment-outage.md:1-9"
+        ]
+      },
+      {
+        "id": "W26",
+        "kind": "lookup",
+        "scores": {
+          "recall": 1,
+          "precision": 1,
+          "evidenceInNode": 1
+        },
+        "costs": {
+          "matches": 2
+        },
+        "citations": [
+          "20-spaces/hr/2019-expenses.md:1-10",
+          "20-spaces/ops/services/billing.md:1-11"
+        ]
+      },
+      {
+        "id": "W27",
+        "kind": "lookup",
+        "scores": {
+          "recall": 1,
+          "precision": 1,
+          "evidenceInNode": 1
+        },
+        "costs": {
+          "matches": 22
+        },
+        "citations": [
+          "20-spaces/eng/README.md:1-11"
+        ]
+      },
+      {
+        "id": "W28",
+        "kind": "lookup",
+        "scores": {
+          "recall": 1,
+          "precision": 1,
+          "evidenceInNode": 1
+        },
+        "costs": {
+          "matches": 6
+        },
+        "citations": [
+          "20-spaces/hr/README.md:1-10"
         ]
       }
     ]
