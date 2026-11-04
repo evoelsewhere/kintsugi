@@ -1,7 +1,7 @@
 import type { BrainNode } from "@kintsugi/domain";
 import { describe, expect, it } from "vitest";
 import { resolveDocumentLink } from "./document-links";
-import { attachmentUrl, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiIsOff, wikiLink, wikiRead } from "./wiki";
+import { attachmentUrl, imageSource, comparePair, compareSummary, readPageMode, togglePicked, wikiPageLink, foldersAbove, headingIdOfHash, isAttachmentPath, wikiLinkAction, homeOf, isHiddenPage, isPagePath, nameOf, pageEntries, parentPath, pathOfSplat, pathTrail, treeRows, type TreeLevel, WIKI_NO_ACCESS, wikiIsOff, wikiLink, wikiRead } from "./wiki";
 
 const node = (over: Partial<BrainNode> & Pick<BrainNode, "id" | "kind" | "path">): BrainNode => ({
   parentId: null,
@@ -236,5 +236,38 @@ describe("the versions of a page", () => {
     expect(compareSummary({ status: "modified", added: 1, removed: 2 })).toBe("1 line added, 2 removed");
     expect(compareSummary({ status: "added", added: 5, removed: 0 })).toBe("The page was added: 5 lines");
     expect(compareSummary({ status: "deleted", added: 0, removed: 1 })).toBe("The page was deleted: 1 line");
+  });
+});
+
+describe("the images of a page", () => {
+  const from = "20-spaces/eng/runbooks/db-failover.md";
+
+  it("serves an image of an _attachments folder through the attachment route, resolved against the page", () => {
+    expect(imageSource("../_attachments/diagram.png", from)).toEqual({ kind: "attachment", path: "20-spaces/eng/_attachments/diagram.png" });
+    expect(imageSource("_attachments/a%20b.JPG", "readme.md")).toEqual({ kind: "attachment", path: "_attachments/a b.JPG" });
+    for (const type of ["jpeg", "jpg", "gif", "webp"]) expect(imageSource(`../_attachments/x.${type}`, from).kind).toBe("attachment");
+  });
+
+  it("shows no image for a file outside an _attachments folder or of another type, not even a broken one", () => {
+    expect(imageSource("../diagram.png", from)).toEqual({ kind: "none" });
+    expect(imageSource("../_attachments/diagram.svg", from)).toEqual({ kind: "none" });
+    expect(imageSource("../_attachments/spec.pdf", from)).toEqual({ kind: "none" });
+    expect(imageSource("../_attachments/notes.md", from)).toEqual({ kind: "none" });
+    expect(imageSource("../../../../../x.png", from)).toEqual({ kind: "none" });
+    expect(imageSource("../../restricted/_attachments/x.png", "a/b/c.md")).toEqual({ kind: "none" });
+  });
+
+  it("never loads an image of the web: it is only a link", () => {
+    expect(imageSource("https://example.com/pixel.png", from)).toEqual({ kind: "external", href: "https://example.com/pixel.png" });
+    expect(imageSource("http://example.com/a.png", from).kind).toBe("external");
+  });
+
+  it("renders nothing for a data URL, any other scheme or an empty source", () => {
+    expect(imageSource("data:image/png;base64,AAAA", from)).toEqual({ kind: "none" });
+    expect(imageSource("javascript:alert(1)", from)).toEqual({ kind: "none" });
+    expect(imageSource("file:///etc/passwd", from)).toEqual({ kind: "none" });
+    expect(imageSource("//example.com/a.png", from)).toEqual({ kind: "none" });
+    expect(imageSource("", from)).toEqual({ kind: "none" });
+    expect(imageSource(undefined, from)).toEqual({ kind: "none" });
   });
 });

@@ -9,6 +9,7 @@ import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Loaded } from "@/components/loaded";
 import { ProjectNotFound, ProjectSelector } from "@/components/project-selector";
 import { DocumentLinksProvider } from "@/components/results/document-links";
+import { MarkdownImagesContext } from "@/components/results/use-markdown-images";
 import { StickyHeader } from "@/components/sticky-header";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -137,6 +138,8 @@ function WikiProject({ projectId, projectName, path }: { projectId: string; proj
 }
 
 function WikiReader({ projectId, commit, path }: { projectId: string; commit: string; path: string }): React.JSX.Element {
+  // Where the attachments of the pages are served from (the commit the Brain indexed).
+  const images = useMemo(() => ({ projectId, commit }), [projectId, commit]);
   // The page changes with the address: a key resets what the view of the previous page held.
   const view = useMemo(
     () =>
@@ -158,9 +161,11 @@ function WikiReader({ projectId, commit, path }: { projectId: string; commit: st
         </div>
       </aside>
       <section className="min-h-0 min-w-0 flex-1 overflow-auto p-4 md:p-6" aria-label="Page">
-        <DocumentLinksProvider projectId={projectId} commit={commit}>
-          {view}
-        </DocumentLinksProvider>
+        <MarkdownImagesContext.Provider value={images}>
+          <DocumentLinksProvider projectId={projectId} commit={commit}>
+            {view}
+          </DocumentLinksProvider>
+        </MarkdownImagesContext.Provider>
       </section>
     </div>
   );
