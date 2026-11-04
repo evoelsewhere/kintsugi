@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { brainApi } from "@/lib/api/brain";
 import { useLoader } from "@/lib/use-loader";
 import { spacePages, spaceHomePath, wikiLink, wikiRead } from "@/lib/wiki";
+import { PlaceWatchButton } from "./watch-button";
 import { WikiPageView } from "./wiki-page-view";
 
 export interface WikiSpaceHomeProps {
@@ -25,7 +26,16 @@ export function WikiSpaceHome({ projectId, commit, space }: WikiSpaceHomeProps):
     <Loaded loader={found} rows={4}>
       {(view) => {
         const home = spaceHomePath(view.matches, key);
-        if (home !== undefined) return <WikiPageView projectId={projectId} commit={commit} path={home} />;
+        if (home !== undefined) {
+          return (
+            <div className="flex flex-col gap-3">
+              <div className="flex justify-end">
+                <PlaceWatchButton projectId={projectId} scope="space" target={key} />
+              </div>
+              <WikiPageView projectId={projectId} commit={commit} path={home} />
+            </div>
+          );
+        }
         const pages = spacePages(view.matches);
         return (
           <section aria-label={`Space ${key}`} className="flex flex-col gap-3">

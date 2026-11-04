@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { brainApi } from "@/lib/api/brain";
 import { useLoader } from "@/lib/use-loader";
 import { homeOf, nameOf, pageEntries, wikiLink, wikiRead } from "@/lib/wiki";
+import { PlaceWatchButton } from "./watch-button";
 import { NewPageButton } from "./wiki-new-page";
 import { PageTrail, WikiPageView } from "./wiki-page-view";
 
@@ -26,6 +27,7 @@ export function WikiFolderView({ projectId, commit, path }: WikiFolderViewProps)
     <div className="flex flex-col gap-4">
       {path === "" ? null : (
         <div className="flex flex-wrap items-center justify-end gap-2">
+          <PlaceWatchButton projectId={projectId} scope="folder" target={path} />
           <NewPageButton projectId={projectId} folder={path} />
         </div>
       )}
