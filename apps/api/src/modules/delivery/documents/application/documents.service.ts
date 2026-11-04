@@ -182,8 +182,8 @@ export class DocumentsService {
     return read.status === "ok" ? read.content : undefined;
   }
 
-  /** Lines of the Markdown files at a commit that contain every one of `terms`, never under `restricted/`. */
-  async grep(context: DocumentContext, commit: string, terms: readonly string[], options: { ignoreCase: boolean; under?: string; limit: number }): Promise<{ matches: GrepLine[]; truncated: boolean }> {
+  /** Lines of the Markdown files at a commit that contain every one of `terms`, never under `restricted/`; `only` keeps the lines of those files before `limit` applies. */
+  async grep(context: DocumentContext, commit: string, terms: readonly string[], options: { ignoreCase: boolean; under?: string; only?: ReadonlySet<string>; limit: number }): Promise<{ matches: GrepLine[]; truncated: boolean }> {
     const under = options.under === undefined || options.under === "" ? undefined : servablePath(options.under, false);
     const found = await this.reader.grep(context.repo, commit, terms, { ...options, ...(under === undefined ? {} : { under }) });
     return { matches: found.matches.filter((match) => isServable(match.path)), truncated: found.truncated };

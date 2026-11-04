@@ -1,3 +1,4 @@
+import { brainLabels } from "@kintsugi/domain";
 import { z } from "zod";
 
 /** A node id: `/`, a folder path ending in `/`, a document path, or `path#anchor`. */
@@ -38,6 +39,17 @@ export const brainGrepQuerySchema = z.object({
   text: z.string().min(2).max(200),
   under: brainNodeIdSchema.optional(),
   ignoreCase: ignoreCaseQuery,
+  /** A space key (ADR-0096), in any case. */
+  space: z.string().trim().regex(/^[A-Za-z][A-Za-z0-9]{1,9}$/, "must be a space key: a letter, then letters or digits, 2 to 10 characters").optional(),
+  /** One label, cleaned as the Brain stores it (lowercase, letters, digits and hyphens). */
+  label: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .transform((value) => brainLabels([value])[0] ?? "")
+    .refine((value) => value !== "", "a label holds letters, digits and hyphens")
+    .optional(),
 });
 export type BrainGrepQueryDto = z.infer<typeof brainGrepQuerySchema>;
 

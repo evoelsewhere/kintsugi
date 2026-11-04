@@ -1079,6 +1079,9 @@ export interface BrainGrepView {
   commit: string;
   text: string;
   under: string | null;
+  /** The space key (upper case) and the label the search was limited to, when it was. */
+  space: string | null;
+  label: string | null;
   matches: BrainGrepMatch[];
   /** More lines matched than were returned. */
   truncated: boolean;

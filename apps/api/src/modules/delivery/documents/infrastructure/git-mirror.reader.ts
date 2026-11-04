@@ -110,7 +110,7 @@ export class GitMirrorDocumentReader extends DocumentRepoReader {
     return this.git(repo, ["-c", "core.quotePath=false", "--literal-pathspecs", "diff", "--unified=3", "--no-color", "--no-ext-diff", "--no-textconv", "--no-renames", from, to, "--", path]);
   }
 
-  async grep(repo: DocumentRepo, commit: string, terms: readonly string[], options: { ignoreCase: boolean; under?: string; limit: number }): Promise<{ matches: GrepLine[]; truncated: boolean }> {
+  async grep(repo: DocumentRepo, commit: string, terms: readonly string[], options: { ignoreCase: boolean; under?: string; only?: ReadonlySet<string>; limit: number }): Promise<{ matches: GrepLine[]; truncated: boolean }> {
     // Fixed strings over the Markdown files only: their blobs are in the mirror, and a pattern cannot backtrack.
     // Several terms must all be on the same line.
     const patterns = terms.flatMap((term, index) => [...(index === 0 ? [] : ["--and"]), "-e", term]);
@@ -126,11 +126,14 @@ export class GitMirrorDocumentReader extends DocumentRepoReader {
       if (record === "") continue;
       const [location, line, ...rest] = record.split("\0");
       if (location === undefined || line === undefined) continue;
+      const path = location.slice(commit.length + 1);
+      // Only the files the caller asked for count toward the limit, so a filter never loses a page to other pages' lines.
+      if (options.only !== undefined && !options.only.has(path)) continue;
       if (matches.length === options.limit) {
         truncated = true;
         break;
       }
-      matches.push({ path: location.slice(commit.length + 1), line: Number(line), text: rest.join("\0") });
+      matches.push({ path, line: Number(line), text: rest.join("\0") });
     }
     return { matches, truncated };
   }

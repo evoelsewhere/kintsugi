@@ -167,6 +167,23 @@ describe.skipIf(!hasDatabase)("brain (integration)", () => {
     ]);
     const scoped = (await admin.get<BrainGrepView>(`/projects/shop/brain/grep?text=round&under=${encodeURIComponent("01-standards/")}`)).body.data!;
     expect(scoped.matches).toEqual([]);
+    // A space or a label limits the search to those pages (both: the pages with both), in any case.
+    const grepOf = async (query: string) => (await admin.get<BrainGrepView>(`/projects/shop/brain/grep?${query}`)).body.data!;
+    const inSpace = await grepOf("text=the&space=Team");
+    expect(inSpace).toMatchObject({ space: "TEAM", label: null });
+    expect(inSpace.matches.map((match) => match.node.path)).toEqual(["20-spaces/team/README.md", "20-spaces/team/cache.md", "20-spaces/team/db.md"]);
+    expect((await grepOf("text=the")).matches.length).toBeGreaterThan(inSpace.matches.length);
+    const labelled = await grepOf("text=the&label=Runbook");
+    expect(labelled).toMatchObject({ space: null, label: "runbook" });
+    expect(labelled.matches.map((match) => match.node.path)).toEqual(["20-spaces/team/cache.md", "20-spaces/team/db.md"]);
+    expect((await grepOf("text=the&space=team&label=sev1")).matches.map((match) => match.node.path)).toEqual(["20-spaces/team/db.md"]);
+    expect((await grepOf("text=the&space=nothing&label=sev1")).matches).toEqual([]);
+    expect((await grepOf("text=the&label=nothing")).matches).toEqual([]);
+    expect((await admin.get("/projects/shop/brain/grep?text=the&label=!!")).status).toBe(400);
+    expect((await admin.get("/projects/shop/brain/grep?text=the&space=E")).status).toBe(400);
+    expect((await admin.get("/projects/shop/brain/grep?text=the&space=ENG-1")).status).toBe(400);
+    const { client: stranger } = await memberClient(app, admin, "stranger", ["user"], []);
+    expect((await stranger.get("/projects/shop/brain/grep?text=the&space=team")).status).toBe(403);
     const caseSensitive = (await admin.get<BrainGrepView>("/projects/shop/brain/grep?text=late%20FEE&ignoreCase=false")).body.data!;
     expect(caseSensitive.matches).toEqual([]);
     // Every word on one line, in any order; a quoted text is one exact phrase.
